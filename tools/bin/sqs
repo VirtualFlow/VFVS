@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+# Variables
+if [ -f ../workflow/control/all.ctrl ]; then
+    controlfile="../workflow/control/all.ctrl"
+else
+    echo -e " * The controlfile ../workflow/control/all.ctrl does not exist, but it is required. Exiting... \n\n"
+    exit 1
+fi
+
+line=$(grep -m 1 "^batchsystem" ../workflow/control/all.ctrl)
+batchsystem="${line/batchsystem=}"
+
+if [ "${batchsystem}" == "SLURM" ]; then
+    squeue -l | grep ${USER:0:8}
+elif [ "${batchsystem}" == "MTP" ]; then
+    qstat | grep ${USER:0:8}
+elif [ "${batchsystem}" == "LSF" ]; then
+    bjobs | grep ${USER:0:8}
+elif [ "${batchsystem}" == "SGE" ]; then
+    qstat | grep ${USER:0:8}
+else
+    echo -e " * Unsupported batchsystem (${batchsystem}) specified in the file ../workflow/control/all.ctrl. Exiting... \n\n"
+    exit 1
+fi
