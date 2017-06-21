@@ -35,7 +35,7 @@ trap 'error_response_nonstd $LINENO' ERR
 
 # Clean up
 clean_up() {
-    rm -r /tmp/${USER:0:8}/report/ 2>/dev/null || true
+    rm -r ${tmp_dir}/ 2>/dev/null || true
 }
 trap 'clean_up' EXIT
 
@@ -67,6 +67,7 @@ export LANG=C
 line=$(cat ${controlfile} | grep "^docking_type_names=")
 docking_type_names=${line/"docking_type_names="}
 IFS=':' read -a docking_type_names <<< "$docking_type_names"
+tmp_dir=/tmp/vfvs_report_$(date | tr " " "_")
 
 # Treating the input arguments
 category_flag="false"
@@ -516,24 +517,24 @@ if [[ "${category}" = "vs" ]]; then
     # Preparing the summary files and folders
     summary_folders=""        
     # Complete collections
-    rm -r /tmp/${USER:0:8}/report/ 2>/dev/null || true
+    rm -r ${tmp_dir}/${USER:0:8}/report/ 2>/dev/null || true
     folder=../output-files/complete/${docking_type_name}
     summary_flag="false"
-    summary_folders="/tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses"
-    mkdir -p /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses
+    summary_folders="${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses"
+    mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses
     if [ -d ${folder}/summaries/first-poses/ ]; then 
         if [ -n "$(ls -A ${folder}/summaries/first-poses/)" ]; then
             summary_flag="true"
             for file in $(ls ${folder}/summaries/first-poses/  2>/dev/null || true); do
-                tar -xf ${folder}/summaries/first-poses/${file} -C /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/
+                tar -xf ${folder}/summaries/first-poses/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/
             done
-            for folder in $(ls /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/  2>/dev/null || true); do
+            for folder in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/  2>/dev/null || true); do
                 folder=$(basename ${folder})    
-                for file in $(ls /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder} 2>/dev/null || true); do
+                for file in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder} 2>/dev/null || true); do
                     file=$(basename ${file})
-                    zcat /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}/${file} > /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}_${file/.gz} || true
+                    zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}/${file} > ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}_${file/.gz} || true
                 done
-                rm -r /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}
+                rm -r ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}
             done
         fi
     fi
@@ -542,14 +543,14 @@ if [[ "${category}" = "vs" ]]; then
     folder=../output-files/incomplete/${docking_type_name}
     if [ -d ${folder}/summaries/first-poses/ ]; then
         for collection_file in $(ls -A ${folder}/summaries/first-poses/); do  
-            cp ${folder}/summaries/first-poses/${collection_file} /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/ 2>/dev/null || true
+            cp ${folder}/summaries/first-poses/${collection_file} ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/ 2>/dev/null || true
             summary_flag="true"
         done
     fi
     
     # Checking if data already available
     if [[ "${summary_flag}" == "false" ]]; then
-        echo -e "\nNo data yet available (probably all data still on /tmp). Try again later.\n\n\n"
+        echo -e "\nNo data yet available (probably all data still on ${tmp_dir}). Try again later.\n\n\n"
         exit 0
     fi
     
@@ -682,7 +683,7 @@ if [[ "${category}" = "vs" ]]; then
         echo "                          Binding affinity - highest scoring compounds    "
         echo "................................................................................................"
         echo
-        ( echo -e "\n      Rank       Ligand           Collection       Score\n" & (zgrep -Hv "average-score" /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $10, $9, $12}' ) | column -t -o "        " | sed "s/^/       /g" | sed "s/Score$/Score\n/g"
+        ( echo -e "\n      Rank       Ligand           Collection       Score\n" & (zgrep -Hv "average-score" ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $10, $9, $12}' ) | column -t -o "        " | sed "s/^/       /g" | sed "s/Score$/Score\n/g"
     fi
 fi
 
