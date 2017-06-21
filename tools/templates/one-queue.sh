@@ -130,7 +130,7 @@ update_summary() {
         score_average=$(echo "${scores_all[@]}" | tr -s " " "\n" | awk '{ sum += $1 } END { if (NR > 0) print sum / NR }')
         
         # Computing the new maximum value
-        score_maximum=$(echo "${scores_all[@]}" | awk -v max=0 '{if($1<max){max=$1}}END{print max}')
+        score_maximum=$(echo "${scores_all[@]}" | awk '{m=$1;for(i=1;i<=NF;i++)if($i>m)m=$i;print m}')
         
         # Upating the line
         scores_all_expaned="${scores_all[@]}"
