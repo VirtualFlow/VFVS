@@ -67,7 +67,7 @@ export LANG=C
 line=$(cat ${controlfile} | grep "^docking_type_names=")
 docking_type_names=${line/"docking_type_names="}
 IFS=':' read -a docking_type_names <<< "$docking_type_names"
-tmp_dir=/tmp/vfvs_report_$(date | tr " " "_")
+tmp_dir=/tmp/vfvs_report_$(date | tr " :" "_")
 
 # Folders
 mkdir -p tmp
@@ -686,7 +686,7 @@ if [[ "${category}" = "vs" ]]; then
         echo "                          Binding affinity - highest scoring compounds    "
         echo "................................................................................................"
         echo
-        ( echo -e "\n      Rank       Ligand           Collection       Score\n" & (zgrep -Hv "average-score" ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $10, $9, $12}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g"
+        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -Hv "average-score" ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $11, $10, $13}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
     fi
 fi
 
