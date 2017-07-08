@@ -354,7 +354,7 @@ if [[ "${category}" = "workflow" ]]; then
     for folder in $(ls ../workflow/ligand-collections/ligand-lists/); do
         echo -ne " Number of ligands with at least one docking run successfully completed: ${ligands_success} (counting tranch ${iteration}/${totalNo})\\r"        
         for file in $(ls ../workflow/ligand-collections/ligand-lists/${folder}/ 2>/dev/null); do
-            noToAdd="$(grep -h "success" ../workflow/ligand-collections/ligand-lists/${folder}/${file} | awk -F ' ' '{print $1}' 2>/dev/null | uniq | wc -l || true)"
+            noToAdd="$(grep -h "success" ../workflow/ligand-collections/ligand-lists/${folder}/${file} 2>/dev/null | awk -F ' ' '{print $1}' 2>/dev/null | uniq | wc -l || true)"
             if [[ -z "${noToAdd// }" ]]; then 
                 noToAdd=0
             fi            
@@ -371,7 +371,7 @@ if [[ "${category}" = "workflow" ]]; then
     for folder in $(ls ../workflow/ligand-collections/ligand-lists/); do
         echo -ne " Number of ligands processing: ${ligands_processing} (counting tranch ${iteration}/${totalNo}) \\r"        
         for file in $(ls ../workflow/ligand-collections/ligand-lists/${folder}/ 2>/dev/null); do
-            noToAdd="$(grep -h "processing" ../workflow/ligand-collections/ligand-lists/${folder}/${file} | awk -F ' ' '{print $1}' 2>/dev/null | uniq | wc -l || true)"
+            noToAdd="$(grep -h "processing" ../workflow/ligand-collections/ligand-lists/${folder}/${file} 2>/dev/null | awk -F ' ' '{print $1}' 2>/dev/null | uniq | wc -l || true)"
             if [[ -z "${noToAdd// }" ]]; then 
                 noToAdd=0
             fi            
@@ -388,7 +388,7 @@ if [[ "${category}" = "workflow" ]]; then
     for folder in $(ls ../workflow/ligand-collections/ligand-lists/); do
         echo -ne " Number of ligands in which at least one docking run failed: ${ligands_failed} (counting tranch ${iteration}/${totalNo}) \\r"    
         for file in $(ls ../workflow/ligand-collections/ligand-lists/${folder}/ 2>/dev/null); do
-            noToAdd="$(grep -h "failed" ../workflow/ligand-collections/ligand-lists/${folder}/${file} | awk -F ' ' '{print $1}' 2>/dev/null | uniq | wc -l  || true)"
+            noToAdd="$(grep -h "failed" ../workflow/ligand-collections/ligand-lists/${folder}/${file} 2>/dev/null | awk -F ' ' '{print $1}' 2>/dev/null | uniq | wc -l  || true)"
             if [[ -z "${noToAdd// }" ]]; then 
                 noToAdd=0
             fi            
@@ -412,7 +412,7 @@ if [[ "${category}" = "workflow" ]]; then
         for i in $(cat ../workflow/ligand-collections/var/todo.original); do
             echo -ne " Total number of dockings to be carried out in the entire workflow: ${docking_runs_total} (counting collection ${iteration}/${totalNo})\\r"
             queue_collection_basename=${i/.pdbqt.gz.tar}
-            noToAdd=$(grep "${queue_collection_basename} " ${collection_folder}.length.all 2>/dev/null  | awk '{print $2}')
+            noToAdd=$(grep "${queue_collection_basename} " ${collection_folder}.length.all 2>/dev/null | awk '{print $2}')
             if [[ -z "${noToAdd// }" ]]; then   
                 noToAdd=0
             fi
