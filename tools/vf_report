@@ -68,6 +68,10 @@ line=$(cat ${controlfile} | grep "^docking_type_names=")
 docking_type_names=${line/"docking_type_names="}
 IFS=':' read -a docking_type_names <<< "$docking_type_names"
 
+# Folders
+mkdir -p tmp
+
+
 # Treating the input arguments
 category_flag="false"
 verbosity_flag="false"
