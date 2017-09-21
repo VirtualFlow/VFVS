@@ -686,7 +686,7 @@ if [[ "${category}" = "vs" ]]; then
         echo "                          Binding affinity - highest scoring compounds    "
         echo "................................................................................................"
         echo
-        ( echo -e "\n      Rank       Ligand           Collection       Score\n" & (zgrep -Hv "average-score" /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $10, $9, $12}' ) | column -t -o "        " | sed "s/^/       /g" | sed "s/Score$/Score\n/g"
+        ( echo -e "\n      Rank       Ligand           Collection       Score\n" & (zgrep -Hv "average-score" /tmp/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $10, $9, $12}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g"
     fi
 fi
 
