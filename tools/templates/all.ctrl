@@ -1,0 +1,133 @@
+#################################
+### Batchsystem Configuration ###
+#################################
+
+job_letter=a
+# One alphabetic character (i.e. a letter from a-z or A-Z) 
+# Should not be changed during runtime, and be the same for all joblines
+# Required when running VF several times on the same cluster to distinguish the jobs in the bathchsystem 
+
+batchsystem=SLURM
+# Possible values: SLURM, MTP (for MOAB/TORQUE/PBS), LSF 
+
+partition=serial_requeue
+# also called queue
+
+timelimit=07-00:0:00
+# format for slurm: dd-hh:mm:ss
+# format for MTP: hh:mm:ss
+# format for SGE: hh:mm:ss
+# format for LSF: hh:mm
+# for all: always fill up with two digits per field (used be the job scripts)
+
+nodes_per_job=1
+# equals steps per job bacause we start one step per node
+# not yet available for LSF and SGE (is always set to  1)
+# Should not be changed during runtime, and be the same for all joblines
+
+cpus_per_step=6
+# sets the slurm cpus-per-task variable (task = step) in SLURM
+# in LSF this corresponds to the number of slots per node
+# Should not be changed during runtime, and be the same for all joblines
+# Not yet available for SGE (always set to 1)
+
+queues_per_step=6
+# sets the number of queues/processes per step
+# Should not be changed during runtime, and be the same for all joblines
+# Not yet available for SGE (always set to 1)
+
+cpus_per_queue=1
+# Should equal the number: cpus-per-step/queues-per-step
+# Should not be changed during runtime, and be the same for all joblines
+# Not yet available for SGE (always set to 1)
+
+
+#########################
+### Workflow Options ####
+#########################
+
+ligands_per_queue=1000000
+# used as a limit of ligands per running queue (small values only useful for testing)
+
+ligands_todo_per_queue=50
+# used as a limit of ligands for the to-do lists
+# this value should be divisible by the next setting "ligands_todo_per_refilling_step"
+
+ligands_per_refilling_step=30
+# fill the to-do files of the queues with this number of ligands per refill step
+# a number roughly equal to the average of number of ligands per collection is recommended
+
+collection_folder=../../../../collections/collections.5fnq.pdbqt
+# slash at the end is not required (optional)
+# relative pathname is required w.r.t. the folder tools/
+
+verbosity=normal
+# Verbosity level in the log files
+# Possible values: normal, debug
+
+error_sensitivity=normal
+# Possible values: normal, high
+# high sets the shell options "-uo pipefail". Not recommended for production runs, useful mainly for debugging. Pipefails often occur with tar combined with head/tail in pipes, which are not an actual problem. 
+# The u-option will always lead to a direct exit of the shell script when an unset variable is going to be used. 
+
+error_response=fail
+# Affects most errors, but not all (e.g. not the u-option of the shell)
+# Possible values:
+#     ignore    : ignore error and continue
+#     next_job  : end this job and start new job
+#     fail      : exit workflow with failure (exit code 1)
+
+minimum_time_remaining=60
+# In minutes
+# A new job if the time left until the end of the walltime is smaller than the timelimit
+# This is checked before each ligand is screened
+# Thus the timelimit should be larger than the maximum time which is needed to screen a ligand (for one entire docking scenario)
+
+dispersion_time_min=10
+# One positive integer, resembling the time in seconds
+dispersion_time_max=40
+# One positive integer, resembling the time in seconds
+# The dispersion time is used when jobs try to access the central task list.
+# Each job has to wait a random amount of time in the dispersion interval.
+# The effect of this is that when two jobs arrive at the same time at the central task list, the random waiting time will disperse their access on the central task list in time
+
+#################################
+### Virtual Screenign Options ###
+#################################
+
+docking_type_names=smina_flex_receptor1:vina_flex_receptor1
+# Values have to be separated by colons ":" and without spaces, e.g: docking_type_names=vina-rigid:smina-rigid
+# Used for instance for the folder names in which the output files are stored
+# Should not be changed during runtime, and be the same for all joblines
+
+docking_type_programs=smina_flexible:vina
+# Possible values: qvina02, vina, smina_rigid, smina_flexible, adfr
+# Values have to be separated by colons ":" and without spaces, e.g: docking_type_programs=vina:smina
+# The same programs can be used multiple times
+# Should not be changed during runtime, and be the same for all joblines
+
+docking_type_replicas=2:2
+# Series of integers separated by colons ":"
+# The number of values has to equal the number of docking programs specified in the variable "docking_programs"
+# The values are in the same order as the docking programs specified in the variable "docking_type_programs
+# e.g.: docking_type_replicas=1:1
+# possible range: 1-99999 per field/docking program
+# The docking scenario is comprised of all the docking types and their replicas
+# Should not be changed during runtime, and be the same for all joblines
+
+docking_type_inputfolders=../input-files/smina_flex_receptor1:../input-files/vina_flex_receptor1
+# Relative path wrt to the tools folders
+# In each inputfolder must be the file config.txt which is used by the docking program to specify its options
+# If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder
+# Should not be changed during runtime, and be the same for all joblines
+
+
+#############################
+### Terminating Variables ###
+#############################
+
+stop_after_ligand=no
+
+stop_after_collection=no
+
+stop_after_job=no
