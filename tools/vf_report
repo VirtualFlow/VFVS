@@ -280,13 +280,13 @@ if [[ "${category}" = "workflow" ]]; then
     echo
     echo " Total number of ligand collections: $(grep -c "" ../workflow/ligand-collections/var/todo.original 2>/dev/null || true )"
     
-    ligand_collections_completed="$(grep -ch "" ../workflow/ligand-collections/done/* 2>/dev/null | paste -sd+ | bc )"
+    ligand_collections_completed="$(grep -ch "" ../workflow/ligand-collections/done/* 2>/dev/null | paste -sd+ 2>/dev/null | bc )"
     if [ -z ${ligand_collections_completed} ]; then 
         ligand_collections_completed=0
     fi
     echo " Number of ligand collections completed: ${ligand_collections_completed}"
     
-    ligand_collections_processing=$(grep -ch "" ../workflow/ligand-collections/current/* 2>/dev/null | paste -sd+ | bc )
+    ligand_collections_processing=$(grep -ch "" ../workflow/ligand-collections/current/* 2>/dev/null | paste -sd+ 2>/dev/null | bc )
     if [ -z ${ligand_collections_processing} ]; then 
         ligand_collections_processing=0
     fi
@@ -297,7 +297,7 @@ if [[ "${category}" = "workflow" ]]; then
     total_no="$(ls ../workflow/ligand-collections/todo/ | grep -c "" 2>/dev/null || true)"
     for file in $(ls ../workflow/ligand-collections/todo/); do
         echo -ne " Number of ligand collections not yet started: ${counter_temp} (counting file ${iteration}/${total_no})                                  \\r"
-        number_to_add=$(grep -hc "" ../workflow/ligand-collections/todo/${file/.*}* 2>/dev/null | paste -sd+ | bc 2>/dev/null)
+        number_to_add=$(grep -hc "" ../workflow/ligand-collections/todo/${file/.*}* 2>/dev/null | paste -sd+ 2>/dev/null | bc 2>/dev/null)
         if [ ! "${number_to_add}" -eq "${number_to_add}" ]; then
             number_to_add=0
         fi
