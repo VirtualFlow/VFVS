@@ -326,21 +326,27 @@ clean_collection_files_tmp() {
                 rm -r ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename} &>/dev/null || true
                 rm -r ../output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}* &>/dev/null || true
             else
-                # Checking if all the folders required are there
-                if [ ! -d "../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/" ]; then
-                    mkdir  -p ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/
-                fi
-                if [ ! -d "../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/" ]; then
-                    mkdir -p ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/
-                fi
-                if [ ! -d "../output-files/incomplete/${docking_type_name}/summaries/first-poses/" ]; then
-                    mkdir -p ../output-files/incomplete/${docking_type_name}/summaries/first-poses/
-                fi
-
                 # Copying the files which should be kept in the permanent storage location
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt ../output-files/incomplete/${docking_type_name}/summaries/first-poses/
+                if [ -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar ]; then 
+                    # Checking if the required folder exists
+                    if [ ! -d "../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/" ]; then
+                        mkdir  -p ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/
+                    fi 
+                    cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/
+                fi
+                if [ -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar ]; then
+                    # Checking if the required folder exists
+                    if [ ! -d "../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/" ]; then
+                        mkdir -p ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/
+                    fi
+                    cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/
+                fi
+                if [ -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt ]; then
+                    if [ ! -d "../output-files/incomplete/${docking_type_name}/summaries/first-poses/" ]; then
+                        mkdir -p ../output-files/incomplete/${docking_type_name}/summaries/first-poses/
+                    fi
+                    cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt ../output-files/incomplete/${docking_type_name}/summaries/first-poses/
+                fi
             fi
         done
 
