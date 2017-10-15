@@ -126,11 +126,11 @@ check_queue_end1() {
 
 
     # Checking if the queue should be stopped
-    line="$(cat ${controlfile} | grep "stop_after_ligand=")"
-    stop_after_ligand=${line/"stop_after_ligand="}
-    if [ "${stop_after_ligand}" = "yes" ]; then
+    line="$(cat ${controlfile} | grep "stop_after_current_docking=")"
+    stop_after_current_docking=${line/"stop_after_current_docking="}
+    if [ "${stop_after_current_docking}" = "yes" ]; then
         echo
-        echo "This job line was stopped by the stop_after_ligand flag in the controlfile ${controlfile}."
+        echo "This job line was stopped by the stop_after_current_docking flag in the controlfile ${controlfile}."
         echo
         print_job_infos_end
         exit 0

@@ -537,7 +537,7 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
                 next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_sub2} | head -n 1 | awk -F '.' '{print $1}')
 
             else
-                last_ligand_entry=$(head -n 1 ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_sub2_basename}.status 2>/dev/null || true)
+                last_ligand_entry=$(tail -n 1 ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_sub2_basename}.status 2>/dev/null || true)
                 last_ligand=$(echo ${last_ligand_entry} | awk -F ' ' '{print $1}')
                 docking_type_index_start=$(echo ${last_ligand_entry} | awk -F ' ' '{print $2}')
                 docking_replica_index_start=$(echo ${last_ligand_entry} | awk -F ' ' '{print $3}')
@@ -637,11 +637,11 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
             fi
           
             # Checking if this queue line should be stopped immediately
-            line=$(cat ${controlfile} | grep "^stop_after_ligand=")
-            stop_after_ligand=${line/"stop_after_ligand="}
-            if [ "${stop_after_ligand}" = "yes" ]; then
+            line=$(cat ${controlfile} | grep "^stop_after_current_docking=")
+            stop_after_current_docking=${line/"stop_after_current_docking="}
+            if [ "${stop_after_current_docking}" = "yes" ]; then
                 echo
-                echo "This queue was stopped by the stop_after_ligand flag in the controlfile ${controlfile}."
+                echo "This queue was stopped by the stop_after_current_docking flag in the controlfile ${controlfile}."
                 echo
                 end_queue 0
             fi
