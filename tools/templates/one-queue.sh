@@ -309,15 +309,15 @@ clean_collection_files_tmp() {
                 fi
                 # Copying the files which should be kept in the permanent storage location
                 mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar
+                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar || true
                 tar -rf ../output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results ${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar || true
 
                 mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar
+                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar || true
                 tar -rf ../output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/ ${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar || true
 
                 mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.txt
+                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.txt || true
                 gzip -f /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.txt || true
                 tar -rf ../output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/ ${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.txt.gz || true
 
