@@ -20,13 +20,14 @@
 #SBATCH --mail-user=cgorgulla@crystal.harvard.edu
 #SBATCH --mail-type=fail
 #SBATCH --time=00-01:00:00
-#SBATCH --mem-per-cpu=2000
+#SBATCH --mem-per-cpu=500
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=main
 #SBATCH --output=../workflow/output-files/jobs/job-1.1_%j.out           # File to which standard out will be written
 #SBATCH --error=../workflow/output-files/jobs/job-1.1_%j.out            # File to which standard err will be written
 #SBATCH --signal=10@300 
+#SBATCH --constraint="holyib"
 ##SBATCH --constraint="scratch2"
 
 # Job Information
