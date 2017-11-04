@@ -2,7 +2,7 @@
 ### Batchsystem Configuration ###
 #################################
 
-job_letter=a
+job_letter=r
 # One alphabetic character (i.e. a letter from a-z or A-Z) 
 # Should not be changed during runtime, and be the same for all joblines
 # Required when running VF several times on the same cluster to distinguish the jobs in the bathchsystem 
@@ -10,10 +10,10 @@ job_letter=a
 batchsystem=SLURM
 # Possible values: SLURM, MTP (for MOAB/TORQUE/PBS), LSF 
 
-partition=priority
+partition=serial_requeue
 # also called queue
 
-timelimit=02-00:00:00
+timelimit=07-00:00:00
 # format for slurm: dd-hh:mm:ss
 # format for MTP: hh:mm:ss
 # format for SGE: hh:mm:ss
@@ -25,13 +25,13 @@ nodes_per_job=1
 # not yet available for LSF and SGE (is always set to  1)
 # Should not be changed during runtime, and be the same for all joblines
 
-cpus_per_step=13
+cpus_per_step=6
 # sets the slurm cpus-per-task variable (task = step) in SLURM
 # in LSF this corresponds to the number of slots per node
 # Should not be changed during runtime, and be the same for all joblines
 # Not yet available for SGE (always set to 1)
 
-queues_per_step=13
+queues_per_step=6
 # sets the number of queues/processes per step
 # Should not be changed during runtime, and be the same for all joblines
 # Not yet available for SGE (always set to 1)
@@ -46,22 +46,22 @@ cpus_per_queue=1
 ### Workflow Options ####
 #########################
 
-ligands_per_queue=1000000
+ligands_per_queue=1000000000
 # used as a limit of ligands per running queue (small values only useful for testing)
 
-ligands_todo_per_queue=1
+ligands_todo_per_queue=80
 # used as a limit of ligands for the to-do lists
 # this value should be divisible by the next setting "ligands_todo_per_refilling_step"
 
-ligands_per_refilling_step=1
+ligands_per_refilling_step=20
 # fill the to-do files of the queues with this number of ligands per refill step
 # a number roughly equal to the average of number of ligands per collection is recommended
 
-collection_folder=../input-files/ligand_collections/
+collection_folder=../../../../collections/eIF4E_DS-s1_vs1.first-1000000.ps-50
 # slash at the end is not required (optional)
 # relative pathname is required w.r.t. the folder tools/
 
-verbosity=debug
+verbosity=normal
 # Verbosity level in the log files
 # Possible values: normal, debug
 
@@ -96,18 +96,18 @@ dispersion_time_max=40
 ### Virtual Screenign Options ###
 #################################
 
-docking_type_names=smina_vinardo_rigid_receptor1:smina_vinardo_rigid_receptor2:smina_vinardo_rigid_receptor3:smina_vinardo_rigid_receptor4:smina_vinardo_rigid_receptor5:smina_vinardo_rigid_receptor6:smina_vinardo_rigid_receptor7:smina_vinardo_rigid_receptor8:smina_vinardo_rigid_receptor9:smina_vinardo_rigid_receptor10:smina_vinardo_rigid_receptor11:smina_vinardo_rigid_receptor12:smina_vinardo_rigid_receptor100:smina_vinardo_rigid_receptor200:vina_rigid_receptor1:vina_rigid_receptor2:vina_rigid_receptor3:vina_rigid_receptor4:vina_rigid_receptor5:vina_rigid_receptor6:vina_rigid_receptor7:vina_rigid_receptor8:vina_rigid_receptor9:vina_rigid_receptor10:vina_rigid_receptor11:vina_rigid_receptor12:vina_rigid_receptor100:vina_rigid_receptor200:smina_vinardo_flexible_receptor1:smina_vinardo_flexible_receptor2:smina_vinardo_flexible_receptor3:smina_vinardo_flexible_receptor4:smina_vinardo_flexible_receptor5:smina_vinardo_flexible_receptor6:smina_vinardo_flexible_receptor7:smina_vinardo_flexible_receptor8:smina_vinardo_flexible_receptor9:smina_vinardo_flexible_receptor10:smina_vinardo_flexible_receptor11:smina_vinardo_flexible_receptor12:smina_vinardo_flexible_receptor100:smina_vinardo_flexible_receptor200:vina_flexible_receptor1:vina_flexible_receptor2:vina_flexible_receptor3:vina_flexible_receptor4:vina_flexible_receptor5:vina_flexible_receptor6:vina_flexible_receptor7:vina_flexible_receptor8:vina_flexible_receptor9:vina_flexible_receptor10:vina_flexible_receptor11:vina_flexible_receptor12:vina_flexible_receptor100:vina_flexible_receptor200
+docking_type_names=smina_vinardo_flexible_receptor1:smina_vinardo_flexible_receptor2:vina_flexible_receptor1:vina_flexible_receptor2
 # Values have to be separated by colons ":" and without spaces, e.g: docking_type_names=vina-rigid:smina-rigid
 # Used for instance for the folder names in which the output files are stored
 # Should not be changed during runtime, and be the same for all joblines
 
-docking_type_programs=smina_rigid:smina_rigid:smina_rigids:smina_rigids:smina_rigids:smina_rigids:smina_rigids:smina_rigids:smina_rigids:smina_rigids:smina_rigids:smina_rigids:smina_rigid:smina_rigid:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:qvina02:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:smina_flexible:vina:vina:vina:vina:vina:vina:vina:vina:vina:vina:vina:vina:vina:vina
+docking_type_programs=smina_flexible:smina_flexible:vina:vina
 # Possible values: qvina02, vina, smina_rigid, smina_flexible, adfr
 # Values have to be separated by colons ":" and without spaces, e.g: docking_type_programs=vina:smina
 # The same programs can be used multiple times
 # Should not be changed during runtime, and be the same for all joblines
 
-docking_type_replicas=10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5:5
+docking_type_replicas=1:1:1:1
 # Series of integers separated by colons ":"
 # The number of values has to equal the number of docking programs specified in the variable "docking_programs"
 # The values are in the same order as the docking programs specified in the variable "docking_type_programs
@@ -116,7 +116,7 @@ docking_type_replicas=10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:10:1
 # The docking scenario is comprised of all the docking types and their replicas
 # Should not be changed during runtime, and be the same for all joblines
 
-docking_type_inputfolders=../input-files/smina_vinardo_rigid_receptor1:../input-files/smina_vinardo_rigid_receptor2:../input-files/smina_vinardo_rigid_receptor3:../input-files/smina_vinardo_rigid_receptor4:../input-files/smina_vinardo_rigid_receptor5:../input-files/smina_vinardo_rigid_receptor6:../input-files/smina_vinardo_rigid_receptor7:../input-files/smina_vinardo_rigid_receptor8:../input-files/smina_vinardo_rigid_receptor9:../input-files/smina_vinardo_rigid_receptor10:../input-files/smina_vinardo_rigid_receptor11:../input-files/smina_vinardo_rigid_receptor12:../input-files/smina_vinardo_rigid_receptor100:../input-files/vina_rigid_receptor200/:../input-files/vina_rigid_receptor1:../input-files/vina_rigid_receptor2:../input-files/vina_rigid_receptor3:../input-files/vina_rigid_receptor4:../input-files/vina_rigid_receptor5:../input-files/vina_rigid_receptor6:../input-files/vina_rigid_receptor7:../input-files/vina_rigid_receptor8:../input-files/vina_rigid_receptor9:../input-files/vina_rigid_receptor10:../input-files/vina_rigid_receptor11:../input-files/vina_rigid_receptor12:../input-files/vina_rigid_receptor100:../input-files/vina_rigid_receptor200:../input-files/smina_vinardo_flexible_receptor1:../input-files/smina_vinardo_flexible_receptor2:../input-files/smina_vinardo_flexible_receptor3:../input-files/smina_vinardo_flexible_receptor4:../input-files/smina_vinardo_flexible_receptor5:../input-files/smina_vinardo_flexible_receptor6:../input-files/smina_vinardo_flexible_receptor7:../input-files/smina_vinardo_flexible_receptor8:../input-files/smina_vinardo_flexible_receptor9:../input-files/smina_vinardo_flexible_receptor10:../input-files/smina_vinardo_flexible_receptor11:../input-files/smina_vinardo_flexible_receptor12:../input-files/smina_vinardo_flexible_receptor100:../input-files/vina_flexible_receptor200/:../input-files/vina_flexible_receptor1:../input-files/vina_flexible_receptor2:../input-files/vina_flexible_receptor3:../input-files/vina_flexible_receptor4:../input-files/vina_flexible_receptor5:../input-files/vina_flexible_receptor6:../input-files/vina_flexible_receptor7:../input-files/vina_flexible_receptor8:../input-files/vina_flexible_receptor9:../input-files/vina_flexible_receptor10:../input-files/vina_flexible_receptor11:../input-files/vina_flexible_receptor12:../input-files/vina_flexible_receptor100:../input-files/vina_flexible_receptor200
+docking_type_inputfolders=../input-files/smina_vinardo_flexible_receptor1:../input-files/smina_vinardo_flexible_receptor2:../input-files/vina_flexible_receptor1:../input-files/vina_flexible_receptor2
 # Relative path wrt to the tools folders
 # In each inputfolder must be the file config.txt which is used by the docking program to specify its options
 # If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder

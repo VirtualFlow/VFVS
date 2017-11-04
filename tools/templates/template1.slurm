@@ -20,7 +20,7 @@
 #SBATCH --mail-user=cgorgulla@crystal.harvard.edu
 #SBATCH --mail-type=fail
 #SBATCH --time=00-01:00:00
-#SBATCH --mem-per-cpu=1000
+#SBATCH --mem-per-cpu=2000
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=main
