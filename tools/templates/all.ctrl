@@ -1,14 +1,14 @@
 *****************************************************************************************************************************************************************
-*****************************************************************   Batchsystem Configuration    ****************************************************************
+***************************************************************    Job Resource Configuration    ****************************************************************
 *****************************************************************************************************************************************************************
 
 job_letter=r
 # One alphabetic character (i.e. a letter from a-z or A-Z) 
 # Should not be changed during runtime, and be the same for all joblines
-# Required when running VF several times on the same cluster to distinguish the jobs in the bathchsystem 
+# Required when running VF several times on the same cluster to distinguish the jobs in the batchsystem
 
 batchsystem=SLURM
-# Possible values: SLURM, MTP (for MOAB/TORQUE/PBS), LSF 
+# Possible values: SLURM, MTP (for MOAB/TORQUE/PBS), LSF, SGE
 
 partition=serial_requeue
 # also called queue
@@ -21,8 +21,7 @@ timelimit=07-00:00:00
 # for all: always fill up with two digits per field (used be the job scripts)
 
 nodes_per_job=1
-# equals steps per job bacause we start one step per node
-# not yet available for LSF and SGE (is always set to  1)
+# Not (yet) available for LSF and SGE (is always set to 1)
 # Should not be changed during runtime, and be the same for all joblines
 
 cpus_per_step=6
@@ -43,7 +42,7 @@ cpus_per_queue=1
 
 
 *****************************************************************************************************************************************************************
-**********************************************************************   Workflow Options    ********************************************************************
+*********************************************************************    Workflow Options    ********************************************************************
 *****************************************************************************************************************************************************************
 
 ligands_per_queue=200000
@@ -93,7 +92,7 @@ dispersion_time_max=40
 
 
 *****************************************************************************************************************************************************************
-******************************************************************   Virtual Screenign Options    ***************************************************************
+*****************************************************************    Virtual Screenign Options    ***************************************************************
 *****************************************************************************************************************************************************************
 
 docking_type_names=smina_vinardo_flexible_receptor1:smina_vinardo_flexible_receptor2:vina_flexible_receptor1:vina_flexible_receptor2
@@ -118,13 +117,13 @@ docking_type_replicas=1:1:1:1
 
 docking_type_inputfolders=../input-files/smina_vinardo_flexible_receptor1:../input-files/smina_vinardo_flexible_receptor2:../input-files/vina_flexible_receptor1:../input-files/vina_flexible_receptor2
 # Relative path wrt to the tools folders
-# In each inputfolder must be the file config.txt which is used by the docking program to specify its options
+# In each input folder must be the file config.txt which is used by the docking program to specify its options
 # If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder
 # Should not be changed during runtime, and be the same for all joblines
 
 
 *****************************************************************************************************************************************************************
-********************************************************************   Terminating Variables    *****************************************************************
+*******************************************************************    Terminating Variables    *****************************************************************
 *****************************************************************************************************************************************************************
 
 stop_after_current_docking=no

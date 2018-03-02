@@ -156,7 +156,7 @@ while [[ "${status}" = "false" ]]; do
         fi
     else
 
-        echo "The ligand-collections/todo/todo.all (if existent) did not meet the requirements for continuing(trial ${k})."
+        echo "The ligand-collections/todo/todo.all (if existent) did not meet the requirements for continuation (trial ${k})."
         sleep "$(shuf -i 10-30 -n1).$(shuf -i 0-9 -n1)"
         if [ -f ../../workflow/ligand-collections/todo/todo.all.locked ]; then
             # Checking the locked file
