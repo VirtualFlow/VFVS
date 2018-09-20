@@ -6,7 +6,7 @@
 # Description: Submits a new job.
 #
 # Option: quiet (optional)
-#    Possible values: 
+#    Possible values:
 #        quiet: No information is displayed on the screen.
 #
 # Revision history
@@ -22,14 +22,14 @@
 usage="# Usage: . submit jobfile [quiet]"
 if [ "${1}" == "-h" ]; then
    echo -e "\n${usage}\n\n"
-   return 0 
+   return 0
 fi
 if [[ "$#" -ne "1" && "$#" -ne "2" ]]; then
    echo -e "\nWrong number of arguments. Exiting."
    echo -e "\n${usage}\n\n"
    return 1
 fi
-# Standard error response 
+# Standard error response
 error_response_nonstd() {
     echo "Error was trapped which is a nonstandard error."
     echo "Error in bash script $(basename ${BASH_SOURCE[0]})"
@@ -38,18 +38,17 @@ error_response_nonstd() {
 }
 trap 'error_response_nonstd $LINENO' ERR
 
-# Variables 
+# Variables
 # Getting the batchsystem type
-line=$(grep -m 1 batchsystem ../../workflow/control/all.ctrl)
-batchsystem="${line/batchsystem=}"
 jobfile=${1}
+batchsystem="$(grep -m 1 "^batchsystem=" ../${jobfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 jobline=$(echo ${jobfile} | awk -F '[./]' '{print $(NF-1)}')
 
 # Submitting the job
 cd ../
 if [ "${batchsystem}" == "SLURM" ]; then
     sbatch ${jobfile}
-elif [ "${batchsystem}" == "MTP" ]; then
+elif [[ "${batchsystem}" = "TORQUE" ]] || [[ "${batchsystem}" = "PBS" ]]; then
     msub ${jobfile}
 elif [ "${batchsystem}" == "SGE" ]; then
     qsub ${jobfile}
