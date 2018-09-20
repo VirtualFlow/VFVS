@@ -24,6 +24,8 @@ fi
 # Functions
 # Standard error response 
 error_response_std() {
+
+    # Printing some information
     echo "Error was trapped" 1>&2
     echo "Error in bash script $(basename ${BASH_SOURCE[0]})" 1>&2
     echo "Error on line $1" 1>&2
@@ -47,6 +49,13 @@ time_near_limit() {
     end_queue 0
 }
 trap 'time_near_limit' 1 2 3 9 10 12 15
+
+# Cleaning the queue folders
+clean_queue_files_tmp() {
+    cp /tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.* ../workflow/output-files/queues/ || true
+    rm -r /tmp/${USER}/${queue_no}/ || true
+}
+trap 'clean_queue_files_tmp' EXIT RETURN
 
 # Functions
 # Error reponse ligand elements
@@ -81,7 +90,7 @@ error_response_docking_program() {
 
 # Writing the ID of the next ligand to the current ligand list
 update_ligand_list_start() {
-    echo "${next_ligand} ${docking_type_index} ${docking_replica_index} processing" >> ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status.tmp
+    echo "${next_ligand} ${docking_type_index} ${docking_replica_index} processing" >> ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp
 }
 
 # Updating the current ligand list
@@ -89,7 +98,7 @@ update_ligand_list_end_fail() {
     trap 'error_response_std $LINENO' ERR
 
     # Updating the ligand-list file
-    perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing/${next_ligand} ${docking_type_index} ${docking_replica_index} failed (${fail_reason})/g" ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status.tmp
+    perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing/${next_ligand} ${docking_type_index} ${docking_replica_index} failed (${fail_reason})/g" ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp
     
     # Printing some information
     echo "Ligand ${next_ligand} failed on on $(date)."
@@ -102,7 +111,7 @@ update_ligand_list_end_success() {
     trap 'error_response_std $LINENO' ERR
 
     # Updating the ligand-list file
-    perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing/${next_ligand} ${docking_type_index} ${docking_replica_index} successs /g" ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status.tmp
+    perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing/${next_ligand} ${docking_type_index} ${docking_replica_index} successs /g" ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp
     # Printing some information
     echo
     echo "The docking run for ligand ${next_ligand} was completed successfully on $(date)."
@@ -134,7 +143,7 @@ update_summary() {
         
         # Upating the line
         scores_all_expaned="${scores_all[@]}"
-        perl -pi -e "s/${next_ligand}.*/${next_ligand} ${score_average} ${score_maximum} ${docking_replica_index} ${scores_all_expaned}/g" /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
+        perl -pi -e "s/${next_ligand}\b.*/${next_ligand} ${score_average} ${score_maximum} ${docking_replica_index} ${scores_all_expaned}/g" /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
     fi
     column -t /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt > /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt.tmp
     mv /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt.tmp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
@@ -179,20 +188,20 @@ next_ligand_collection() {
         # Setting some variables
         next_ligand_collection=$(head -n 1 ../workflow/ligand-collections/todo/${queue_no})
         next_ligand_collection_basename=${next_ligand_collection/.*}
-        next_ligand_collection_sub2_basename="${next_ligand_collection_basename/*_}"
-        next_ligand_collection_sub2="${next_ligand_collection/*_}"
+        next_ligand_collection_no_basename="${next_ligand_collection_basename/*_}"
+        next_ligand_collection_no="${next_ligand_collection/*_}"
         next_ligand_collection_sub1="${next_ligand_collection/_*}"
-        if grep "${next_ligand_collection}" ../workflow/ligand-collections/done/* &>/dev/null; then
+        if grep -w "${next_ligand_collection}" ../workflow/ligand-collections/done/* &>/dev/null; then
             echo "This ligand collection was already finished. Skipping this ligand collection."
-        elif grep "${next_ligand_collection}" ../workflow/ligand-collections/current/* &>/dev/null; then
+        elif grep -w "${next_ligand_collection}" ../workflow/ligand-collections/current/* &>/dev/null; then
             echo "On this ligand collection already another queue is working. Skipping this ligand collection."
-        elif grep ${next_ligand_collection} $(ls ../workflow/ligand-collections/todo/* | grep -v "${queue_no}" &>/dev/null); then
+        elif grep -w ${next_ligand_collection} $(ls ../workflow/ligand-collections/todo/* | grep -v "${queue_no}" &>/dev/null); then
             echo "This ligand collection is in one of the other todo-lists. Skipping this ligand collection."
         else 
             new_collection="true"
         fi
         # Removing the new collection from the ligand-collections-todo file
-        perl -ni -e "print unless /${next_ligand_collection}/" ../workflow/ligand-collections/todo/${queue_no}
+        perl -ni -e "print unless /${next_ligand_collection}\b/" ../workflow/ligand-collections/todo/${queue_no}
     done   
                 
     # Updating the ligand-collection files       
@@ -207,7 +216,7 @@ next_ligand_collection() {
         echo -e "***************** INFO END ******************\n"
     fi
 
-# Creating the subfolder in the ligand-lists folder
+    # Creating the subfolder in the ligand-lists folder
     mkdir -p ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/
     
     # Printing some information
@@ -253,10 +262,8 @@ prepare_collection_files_tmp() {
     done
         
     # Extracting the required files
-    # 2015: tar -xf ${collection_folder}/${next_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/ ${next_ligand_collection_sub1}/${next_ligand_collection_sub2}
-    # 2016 Version has different tar archive structure... (not in subfolder)
     mkdir -p /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/
-    tar -xf ${collection_folder}/${next_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/ ${next_ligand_collection_sub2}
+    tar -xf ${collection_folder}/${next_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/ ${next_ligand_collection_no}
 
     # Copying the required old output files if continuing old collection
     for docking_type_name in ${docking_type_names[@]}; do
@@ -271,8 +278,8 @@ prepare_collection_files_tmp() {
                 cp ../output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/
             fi
         fi
-        if [[ -f  ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status ]]; then
-            mv ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status.tmp
+        if [[ -f  ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status ]]; then
+            mv ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp
         fi
     done
 }
@@ -292,8 +299,8 @@ clean_collection_files_tmp() {
         local_ligand_collection=${1}
         local_ligand_collection_basename=${local_ligand_collection/.*}
         local_ligand_collection_sub1="${local_ligand_collection_basename/_*}"
-        local_ligand_collection_sub2="${local_ligand_collection/*_}"
-        local_ligand_collection_sub2_basename="${local_ligand_collection_basename/*_}"
+        local_ligand_collection_no="${local_ligand_collection/*_}"
+        local_ligand_collection_no_basename="${local_ligand_collection_basename/*_}"
 
         for docking_type_name in ${docking_type_names[@]}; do
             if [ "${collection_complete}" = "true" ]; then
@@ -309,17 +316,17 @@ clean_collection_files_tmp() {
                 fi
                 # Copying the files which should be kept in the permanent storage location
                 mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar || true
-                tar -rf ../output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results ${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar || true
+                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.gz.tar || true
+                tar -rf ../output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results ${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.gz.tar || true
 
                 mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar || true
-                tar -rf ../output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/ ${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.gz.tar || true
+                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.gz.tar || true
+                tar -rf ../output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/ ${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.gz.tar || true
 
                 mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.txt || true
-                gzip -f /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.txt || true
-                tar -rf ../output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/ ${local_ligand_collection_sub1}/${local_ligand_collection_sub2_basename}.txt.gz || true
+                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.txt || true
+                gzip -f /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.txt || true
+                tar -rf ../output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/ ${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.txt.gz || true
 
                 # Cleaning up
                 rm -r ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename} &>/dev/null || true
@@ -351,19 +358,13 @@ clean_collection_files_tmp() {
         done
 
         # Moving the ligand list status tmp file
-        if [ -f ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status.tmp ]; then
-            mv ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status.tmp ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_sub2_basename}.status
+        if [ -f ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp ]; then
+            mv ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status
         fi
     fi
     needs_cleaning=false
 }
 
-# Cleaning the queue folders
-clean_queue_files_tmp() {
-    cp /tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.* ../workflow/output-files/queues/ || true
-    rm -r /tmp/${USER}/${queue_no}/ || true
-}
-trap 'clean_queue_files_tmp' EXIT RETURN
 
 # Function for end of the queue
 end_queue() {
@@ -395,7 +396,7 @@ echo
 
 
 # Variables
-supported_docking_programs="vina, qvina02, smina, adfr"
+supported_docking_programs="vina, qvina02, qvina_w, smina, adfr"
 needs_cleaning=false
 
 # Setting the number of ligands to screen in this job
@@ -508,7 +509,7 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
             echo -e "***************** INFO END ******************\n"
         fi
         # Getting the name of the first ligand of the first collection
-        next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_sub2} | head -n 1 | awk -F '.' '{print $1}')
+        next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_no} | head -n 1 | awk -F '.' '{print $1}')
 
     # Using the old collection
     else
@@ -516,28 +517,28 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
         last_ligand_collection=$(cat ../workflow/ligand-collections/current/${queue_no})
         last_ligand_collection_basename=${last_ligand_collection/.*}        
         last_ligand_collection_sub1="${last_ligand_collection_basename/_*}"
-        last_ligand_collection_sub2="${last_ligand_collection/*_}"
-        last_ligand_collection_sub2_basename="${last_ligand_collection_basename/*_}"
+        last_ligand_collection_no="${last_ligand_collection/*_}"
+        last_ligand_collection_no_basename="${last_ligand_collection_basename/*_}"
         
         # Checking if this is the first ligand of this queue
         if [ "${ligand_index}" = "1" ]; then
             # Extracting the last ligand collection
             mkdir -p /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/
-            # 2015: tar -xf ${collection_folder}/${last_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/ ${last_ligand_collection_sub1}/${last_ligand_collection_sub2} || true
-            tar -xf ${collection_folder}/${last_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/ ${last_ligand_collection_sub2} || true
+            # 2015: tar -xf ${collection_folder}/${last_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/ ${last_ligand_collection_sub1}/${last_ligand_collection_no} || true
+            tar -xf ${collection_folder}/${last_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/ ${last_ligand_collection_no} || true
 
             # Checking if the collection.status.tmp file exists due to abnormal abortion of job/queue
             # Removing old status.tmp file if existent
-            if [[ -f "../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_sub2_basename}.status.tmp" ]]; then
+            if [[ -f "../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_no_basename}.status.tmp" ]]; then
                 echo "The file ${last_ligand_collection_basename}.status.tmp exists already."
                 echo "This collection will be restarted."
-                rm ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_sub2_basename}.status.tmp
+                rm ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_no_basename}.status.tmp
                 
                 # Getting the name of the first ligand of the first collection
-                next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_sub2} | head -n 1 | awk -F '.' '{print $1}')
+                next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_no} | head -n 1 | awk -F '.' '{print $1}')
 
             else
-                last_ligand_entry=$(tail -n 1 ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_sub2_basename}.status 2>/dev/null || true)
+                last_ligand_entry=$(tail -n 1 ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_no_basename}.status 2>/dev/null || true)
                 last_ligand=$(echo ${last_ligand_entry} | awk -F ' ' '{print $1}')
                 docking_type_index_start=$(echo ${last_ligand_entry} | awk -F ' ' '{print $2}')
                 docking_replica_index_start=$(echo ${last_ligand_entry} | awk -F ' ' '{print $3}')
@@ -557,13 +558,13 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
                     # Need to use new ligand
                     docking_replica_index_start=1
                     docking_type_index_start=1
-                    next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_sub2} | grep -A 1 "${last_ligand}" | grep -v ${last_ligand} | awk -F '.' '{print $1}')
+                    next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_no} | grep -A 1 "${last_ligand}" | grep -v ${last_ligand} | awk -F '.' '{print $1}')
                 fi
             fi
         # Not first ligand of this queue
         else
-            last_ligand=$(tail -n 1 ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_sub2_basename}.status.tmp 2>/dev/null | awk -F ' ' '{print $1}' || true)
-            next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_sub2} | grep -A 1 "${last_ligand}" | grep -v ${last_ligand} | awk -F '.' '{print $1}')
+            last_ligand=$(tail -n 1 ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_no_basename}.status.tmp 2>/dev/null | awk -F '[:. ]' '{print $1}' || true)
+            next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_no} | grep -A 1 "${last_ligand}" | grep -v ${last_ligand} | awk -F '.' '{print $1}')
         fi
         
         # Check if we can use the old collection
@@ -571,8 +572,8 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
             # We can continue to use the old ligand collection
             next_ligand_collection=${last_ligand_collection}
             next_ligand_collection_basename=${last_ligand_collection_basename}
-            next_ligand_collection_sub2_basename="${next_ligand_collection_basename/*_}"
-            next_ligand_collection_sub2="${next_ligand_collection/*_}"
+            next_ligand_collection_no_basename="${next_ligand_collection_basename/*_}"
+            next_ligand_collection_no="${next_ligand_collection/*_}"
             next_ligand_collection_sub1="${next_ligand_collection/_*}"
             # Preparing the collection folders only if ligand_index=1 
             if [ "${ligand_index}" = "1" ]; then
@@ -592,7 +593,7 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
             next_ligand_collection
             prepare_collection_files_tmp
             # Getting the first ligand of the new collection
-            next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_sub2} | head -n 1 | awk -F '.' '{print $1}')
+            next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_no} | head -n 1 | awk -F '.' '{print $1}')
             docking_type_index_start=1
             docking_replica_index_start=1
         fi
@@ -672,7 +673,7 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
             echo
         
             # Extracting the next ligand
-            tar -xOf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_sub2} ${next_ligand}.pdbqt.gz | zcat  > /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt
+            tar -xOf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_no} ${next_ligand}.pdbqt.gz | zcat  > /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt
         
             # Checking if ligand contains B, Si, Sn
             if grep -q " B " /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt; then
@@ -692,12 +693,14 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
             case $docking_type_program in 
                 qvina02)
                     bin/time_bin -a -o "/tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/qvina02 --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt --out /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt > /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}
-                    trap 'error_response_std $LINENO' ERR
                     score_value=$(grep " 1 " /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
-                    ;;       
+                    ;;
+                qvina_w)
+                    bin/time_bin -a -o "/tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/qvina_w --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt --out /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt > /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}
+                    score_value=$(grep " 1 " /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
+                    ;;
                 vina)
                     bin/time_bin -a -o "/tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/vina --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt --out /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt > /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}
-                    trap 'error_response_std $LINENO' ERR
                     score_value=$(grep " 1 " /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
                     ;;   
                 smina*)
@@ -718,7 +721,7 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
 
             # Archiving the files and results
             case $docking_type_program in 
-                qvina02 | vina | smina* | adfr)
+                qvina02 | qvina_w | vina | smina* | adfr)
                     
                     # Updating the summary file
                     update_summary 

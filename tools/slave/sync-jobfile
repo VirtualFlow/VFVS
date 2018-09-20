@@ -135,7 +135,7 @@ job_letter_new=${line/"job_letter="}
 if [ "${batchsystem}" = "SLURM" ]; then
     sed -i "s/^#SBATCH --job-name=[a-zA-Z]/#SBATCH --job-name=${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
 elif [ "${batchsystem}" = "MTP" ]; then
-    sed -i "s/^#PBS -N [a-zA-Z]/#PBS -N ${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job{jobline_no}.job
+    sed -i "s/^#PBS -N [a-zA-Z]/#PBS -N ${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
 elif [ "${batchsystem}" = "SGE" ]; then
     sed -i "s/^#\\$ -N [a-zA-Z]/#\$ -N ${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
 elif [ "${batchsystem}" = "LSF" ]; then

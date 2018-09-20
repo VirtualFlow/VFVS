@@ -139,6 +139,7 @@ dispersion_time_max=${line/"dispersion_time_max="}
 modification_time_treshhold=$(shuf -i ${dispersion_time_min}-${dispersion_time_max} -n1)
 modification_time_treshhold_lockedfile="3600"              # one hour
 
+# Loop for hiding the todo.all file
 while [[ "${status}" = "false" ]]; do
     modification_time=$(stat -c %Y ../../workflow/ligand-collections/todo/todo.all || true)
     if [ "${modification_time}" -eq "${modification_time}" ]; then
@@ -195,7 +196,6 @@ fi
 grep '[^[:blank:]]' < ${todo_file_temp} > ${todo_file_temp}.tmp || true
 mv ${todo_file_temp}.tmp ${todo_file_temp}    
 
-
 # Variables
 line=$(cat ../${controlfile} | grep "collection_folder=" | sed 's/\/$//g')
 collection_folder=${line/"collection_folder="}
@@ -245,9 +245,9 @@ for queue_no_2 in $(seq 1 ${nodes_per_job}); do
                 ligands_todo[${queue_no_2}0000${queue_no_3}]=$((ligands_todo[${queue_no_2}0000${queue_no_3}] + ${no_to_add} ))
                 queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$((queue_collection_numbers[${queue_no_2}0000${queue_no_3}] + 1 ))
             done
-        else             
-            # If no local to-do list exists create one
-            touch ../../workflow/ligand-collections/todo/${queue_no}
+        else
+        # If no local to-do list exists create one
+        touch ../../workflow/ligand-collections/todo/${queue_no}
         fi
         if [ -f "../../workflow/ligand-collections/current/${queue_no}" ]; then
             for queue_collection in $(cat ../../workflow/ligand-collections/current/${queue_no}); do

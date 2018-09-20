@@ -101,7 +101,7 @@ docking_type_names=smina_vinardo_flexible_receptor1:smina_vinardo_flexible_recep
 # Should not be changed during runtime, and be the same for all joblines
 
 docking_type_programs=smina_flexible:smina_flexible:vina:vina
-# Possible values: qvina02, vina, smina_rigid, smina_flexible, adfr
+# Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, adfr
 # Values have to be separated by colons ":" and without spaces, e.g: docking_type_programs=vina:smina
 # The same programs can be used multiple times
 # Should not be changed during runtime, and be the same for all joblines
