@@ -39,8 +39,7 @@ trap 'error_response_nonstd $LINENO' ERR
 jobline_no=${1}
 
 # Getting the batchsystem type
-line=$(grep -m 1 "^batchsystem" ../../workflow/control/all.ctrl)
-batchsystem="${line/batchsystem=}"
+batchsystem="$(grep -m 1 "^batchsystem=" ../../workflow/control/all.ctrl | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Determining the controlfile to use for this jobline
 controlfile=""

@@ -41,8 +41,7 @@ trap 'error_response_nonstd $LINENO' ERR
 
 # Variables
 # Getting the batchsystem type
-line=$(grep -m 1 batchsystem ../../workflow/control/all.ctrl)
-batchsystem="${line/batchsystem=}"
+batchsystem="$(grep -m 1 "^batchsystem=" ../../workflow/control/all.ctrl | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 sync_mode=${2}
 
 # Getting the jobline number and the old job number
