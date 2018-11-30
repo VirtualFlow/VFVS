@@ -1,7 +1,7 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-#
-# Usage: . copy-templates templates [quiet]
+##
+# Usage: . copy-templates.sh templates [quiet]
 #
 # Description: Copies the template-files from the ../templates folder to the proper places in the ../../workflow folder. 
 #
@@ -9,7 +9,7 @@
 #    Possible values: 
 #        subjobfiles: ../templates/one-step.sh and ../templates/one-queue.sh are copied to ../../worflow/job-files/sub/
 #        todofiles: ../templates/todo.all is copied to ../../workflow/ligand-collections/todo/todo.all and ../../workflow/ligand-collections/var/todo.original
-#        control: ../templates/all.ctrl is copied to ../../workflow/control/
+#        controlfiles: ../templates/all.ctrl is copied to ../../workflow/control/
 #        all: all of the above templates
 #
 # Option: quiet (optional)
@@ -17,7 +17,9 @@
 #        quiet: No information is displayed on the screen.
 #
 # Revision history:
-# 2015-12-28  Import of file from JANINA version 2.2 and adaption to HONEY version 6.1
+# 2015-12-12  Created (version 1.10)
+# 2015-12-16  Adaption to version 2.1
+# 2016-03-06  Small improvements (version 2.3)
 # 2016-07-16  Various improvements
 #
 # ---------------------------------------------------------------------------
@@ -29,7 +31,7 @@ if [ "${1}" = "-h" ]; then
     return
 fi
 
-# Standard error response 
+# Standard error response
 error_response_nonstd() {
     echo "Error was trapped which is a nonstandard error."
     echo "Error in bash script $(basename ${BASH_SOURCE[0]})"
@@ -38,6 +40,15 @@ error_response_nonstd() {
 }
 trap 'error_response_nonstd $LINENO' ERR
 
+# Variables
+if [ -f ../../workflow/control/all.ctrl ]; then
+    controlfile="../../workflow/control/all.ctrl"
+else
+    controlfile="../templates/all.ctrl"
+fi
+central_todo_list_splitting_size="$(grep -m 1 "^central_todo_list_splitting_size=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+
+
 # Copying the template files
 if [[ "${1}" = "subjobfiles" || "${1}" = "all" ]]; then
     cp ../templates/one-step.sh ../../workflow/job-files/sub/
@@ -45,11 +56,13 @@ if [[ "${1}" = "subjobfiles" || "${1}" = "all" ]]; then
     chmod u+x ../../workflow/job-files/sub/one-step.sh
 fi
 if [[ "${1}" = "todofiles" || "${1}" = "all" ]]; then
-    cp -i ../templates/todo.all ../../workflow/ligand-collections/todo/
-    cp -i ../templates/todo.all ../../workflow/ligand-collections/var/todo.original
+    split -a 4 -d -l ${central_todo_list_splitting_size} ../templates/todo.all ../../workflow/ligand-collections/todo/todo.all.
+    cp ../../workflow/ligand-collections/todo/todo.all.[0-9]* ../../workflow/ligand-collections/var/
+    cp ../templates/todo.all ../../workflow/ligand-collections/var/todo.original
+    ln -s todo.all.0000 ../../workflow/ligand-collections/todo/todo.all
 fi
 if [[ "${1}" = "controlfiles" || "${1}" = "all" ]]; then
-    cp -i ../templates/all.ctrl ../../workflow/control/
+    cp ../templates/all.ctrl ../../workflow/control/
 fi
 
 # Displaying some information

@@ -1,7 +1,7 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
 #
-# Description: Moab/TORQUE/PBS job file. 
+# Description: Torque job file.
 #
 # Revision history:
 # 2015-12-05  Created (version 1.2)
@@ -27,7 +27,7 @@
 #PBS -q mpp2testq
 #PBS -m a
 #PBS -M silmaril@zedat.fu-berlin.de
-#PBS -l signal=10@300 
+#PBS -l signal=10@300
 
 # Job Information
 ##################################################################################
@@ -35,7 +35,7 @@
 echo
 echo "                    *** Job Information ***                    "
 echo "==============================================================="
-echo 
+echo
 echo "Environment variables"
 echo "------------------------"
 env
@@ -54,21 +54,30 @@ echo "==========================================================="
 echo
 
 # Functions
-# Standard error response 
+# Standard error response
 error_response_std() {
+
+    # Printing some informatoin
     echo "Error was trapped" 1>&2
     echo "Error in bash script $0" 1>&2
     echo "Error on line $1" 1>&2
-    echo "Environment variables" 1>&2 
+    echo "Environment variables" 1>&2
     echo "----------------------------------" 1>&2
     env 1>&2
-    if [[ "${error_response}" == "ignore" ]]; then
-        echo -e "\n Ignoring error. Trying to continue..."
-    elif [[ "${error_response}" == "next_job" ]]; then
-        echo -e "\n Ignoring error. Trying to continue and start next job..."
-    elif [[ "${error_response}" == "fail" ]]; then
-        echo -e "\n Stopping jobline."
+
+    # Checking error response type
+    if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]] || [[ "${VF_ERROR_RESPONSE}" == "next_job" ]]; then
+
+        # Printing some information
+        echo -e "\n * Trying to continue..."
+
+    elif [[ "${VF_ERROR_RESPONSE}" == "fail" ]]; then
+
+        # Printing some information
+        echo -e "\n * Trying to stop this queue and causing the jobline to fail..."
         print_job_infos_end
+
+        # Exiting
         exit 1
     fi
 }
@@ -82,11 +91,11 @@ trap 'time_near_limit' 10
 
 termination_signal() {
     echo "The script ${BASH_SOURCE[0]} caught a termination signal. Stopping jobline."
-    if [[ "${error_response}" == "ignore" ]]; then
+    if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]]; then
         echo -e "\n Ignoring error. Trying to continue..."
-    elif [[ "${error_response}" == "next_job" ]]; then
+    elif [[ "${VF_ERROR_RESPONSE}" == "next_job" ]]; then
         echo -e "\n Ignoring error. Trying to continue and start next job..."
-    elif [[ "${error_response}" == "fail" ]]; then
+    elif [[ "${VF_ERROR_RESPONSE}" == "fail" ]]; then
         echo -e "\n Stopping the jobline."
         print_job_infos_end
         exit 1
@@ -101,7 +110,7 @@ print_job_infos_end() {
     echo "                     *** Final Job Information ***                    "
     echo "======================================================================"
     echo
-    echo "Starting time:" $STARTINGTIME
+    echo "Starting time:" $VF_STARTINGTIME
     echo "Ending time:  " $(date)
     echo
 }
@@ -109,39 +118,39 @@ print_job_infos_end() {
 # Checking if the queue should be stopped
 check_queue_end1() {
 
-    # Determining the controlfile to use for this jobline
-    controlfile=""
-    for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do 
+    # Determining the VF_CONTROLFILE to use for this jobline
+    VF_CONTROLFILE=""
+    for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do
         file_basename=$(basename $file)
         jobline_range=${file_basename/.*}
-        jobline_no_start=${jobline_range/-*}
-        jobline_no_end=${jobline_range/*-}
-        if [[ "${jobline_no_start}" -le "${jobline_no}" && "${jobline_no}" -le "${jobline_no_end}" ]]; then
-            export controlfile="${file}"
+        VF_JOBLINE_NO_START=${jobline_range/-*}
+        VF_JOBLINE_NO_END=${jobline_range/*-}
+        if [[ "${VF_JOBLINE_NO_START}" -le "${VF_JOBLINE_NO}" && "${VF_JOBLINE_NO}" -le "${VF_JOBLINE_NO_END}" ]]; then
+            export VF_CONTROLFILE="${file}"
             break
         fi
     done
-    if [ -z "${controlfile}" ]; then
-        export controlfile="../workflow/control/all.ctrl"
+    if [ -z "${VF_CONTROLFILE}" ]; then
+        export VF_CONTROLFILE="../workflow/control/all.ctrl"
     fi
 
     # Checking if the queue should be stopped
-    line="$(cat ${controlfile} | grep "stop_after_current_docking=")"
-    stop_after_current_docking=${line/"stop_after_current_docking="}
-    if [[ "${stop_after_current_docking}" == "yes" ]]; then
+    line="$(cat ${VF_CONTROLFILE} | grep "stop_after_next_check_interval=")"
+    stop_after_next_check_interval=${line/"stop_after_next_check_interval="}
+    if [[ "${stop_after_next_check_interval}" == "true" ]]; then
         echo
-        echo "This job line was stopped by the stop_after_current_docking flag in the controlfile ${controlfile}."
+        echo "This job line was stopped by the stop_after_next_check_interval flag in the VF_CONTROLFILE ${VF_CONTROLFILE}."
         echo
         print_job_infos_end
         exit 0
     fi
 
-    # Checking if there are still ligand collections todo  
+    # Checking if there are still ligand collections todo
     no_collections_incomplete="0"
     i=0
     # Using a loop to try several times if there are no ligand collections left - maybe the files where just shortly inaccessible
-    while [ "${no_collections_incomplete}" == "0" ]; do    
-        no_collections_incomplete="$(cat ../workflow/ligand-collections/todo/todo.all* ../workflow/ligand-collections/todo/${jobline_no}-* ../workflow/ligand-collections/current/${jobline_no}-* 2>/dev/null | grep -c "[^[:blank:]]" || true)"
+    while [ "${no_collections_incomplete}" == "0" ]; do
+        no_collections_incomplete="$(cat ../workflow/ligand-collections/todo/todo.all* ../workflow/ligand-collections/todo/${VF_JOBLINE_NO}-* ../workflow/ligand-collections/current/${VF_JOBLINE_NO}-* 2>/dev/null | grep -c "[^[:blank:]]" || true)"
         i="$((i + 1))"
         if [ "${i}" == "5" ]; then
             break
@@ -159,98 +168,100 @@ check_queue_end1() {
 
 check_queue_end2() {
     check_queue_end1
-    line=$(cat ${controlfile} | grep "stop_after_job=")
+    line=$(cat ${VF_CONTROLFILE} | grep "stop_after_job=")
     stop_after_job=${line/"stop_after_job="}
-    if [ "${stop_after_job}" = "yes" ]; then
+    if [ "${stop_after_job}" = "true" ]; then
         echo
-        echo "This job line was stopped by the stop_after_job flag in the controlfile ${controlfile}."
+        echo "This job line was stopped by the stop_after_job flag in the VF_CONTROLFILE ${VF_CONTROLFILE}."
         echo
         print_job_infos_end
         exit 0
     fi
 }
 
-# Creating the /tmp/${USER} folder if not present
-if [ ! -d "/tmp/${USER}" ]; then
-    mkdir -p /tmp/${USER}
-fi
 
 # Setting important variables
-export nodes_per_job=${PBS_NUM_NODES}
-export old_job_no=${PBS_JOBNAME:2}
-export old_job_no_2=${old_job_no/*.}
-export queue_no_1=${old_job_no/.*}
-export jobline_no=${queue_no_1}
-export batch_system="MTP"
-export sleep_time_1="1"
-STARTINGTIME=`date`
-export start_time_seconds="$(date +%s)"
+export VF_NODES_PER_JOB=${PBS_NUM_NODES}
+export VF_OLD_JOB_NO=${PBS_JOBNAME:2}
+export VF_VF_OLD_JOB_NO_2=${VF_OLD_JOB_NO/*.}
+export VF_QUEUE_NO_1=${VF_OLD_JOB_NO/.*}
+export VF_JOBLINE_NO=${VF_QUEUE_NO_1}
+export VF_BATCHSYSTEM="TORQUE"
+export VF_SLEEP_TIME_1="1"
+export VF_STARTINGTIME=`date`
+export VF_START_TIME_SECONDS="$(date +%s)"
 export LC_ALL=C
 
-
-# Determining the controlfile to use for this jobline
-controlfile=""
-for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do 
+# Determining the VF_CONTROLFILE to use for this jobline
+VF_CONTROLFILE=""
+for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do
     file_basename=$(basename $file)
     jobline_range=${file_basename/.*}
-    jobline_no_start=${jobline_range/-*}
-    jobline_no_end=${jobline_range/*-}
-    if [[ "${jobline_no_start}" -le "${jobline_no}" && "${jobline_no}" -le "${jobline_no_end}" ]]; then
-        export controlfile="${file}"
+    VF_JOBLINE_NO_START=${jobline_range/-*}
+    VF_JOBLINE_NO_END=${jobline_range/*-}
+    if [[ "${VF_JOBLINE_NO_START}" -le "${VF_JOBLINE_NO}" && "${VF_JOBLINE_NO}" -le "${VF_JOBLINE_NO_END}" ]]; then
+        export VF_CONTROLFILE="${file}"
         break
     fi
 done
-if [ -z "${controlfile}" ]; then
-    export controlfile="../workflow/control/all.ctrl"
+if [ -z "${VF_CONTROLFILE}" ]; then
+    export VF_CONTROLFILE="../workflow/control/all.ctrl"
 fi
 
-# Setting the job letter1
-line=$(cat ${controlfile} | grep -m 1 "^job_letter=")
-export job_letter=${line/"job_letter="}
-
-# Setting the verbosity level
-line=$(cat ${controlfile} | grep -m 1 "^verbosity=")
-export verbosity=${line/"verbosity="}
-if [[ "${verbosity}" == "debug" ]]; then
+# Verbosity
+VF_VERBOSITY_LOGFILES="$(grep -m 1 "^verbosity_logfiles=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+export VF_VERBOSITY_LOGFILES
+if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
     set -x
 fi
 
-# Setting the error sensitivity 
-line=$(cat ${controlfile} | grep -m 1 "^error_sensitivity=")
-export error_sensitivity=${line/"error_sensitivity="}
-if [[ "${error_sensitivity}" == "high" ]]; then
-    set -uo pipefail
-    trap '' PIPE        # SIGPIPE = exit code 141, means broken pipe. Happens often, e.g. if head is listening and got all the lines it needs.         
+# VF_TMPDIR
+export VF_TMPDIR="$(grep -m 1 "^tempdir=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+# Creating the ${VF_TMPDIR}/${USER} folder if not present
+if [ ! -d "${VF_TMPDIR}/${USER}" ]; then
+    mkdir -p ${VF_TMPDIR}/${USER}
 fi
 
-# Setting the error response 
-line=$(cat ${controlfile} | grep -m 1 "^error_response=")
-export error_response=${line/"error_response="}
+# Setting the job letter1
+line=$(cat ${VF_CONTROLFILE} | grep -m 1 "^job_letter=")
+export VF_JOBLETTER=${line/"job_letter="}
+
+# Setting the error sensitivity
+line=$(cat ${VF_CONTROLFILE} | grep -m 1 "error_sensitivity=")
+export VF_ERROR_SENSITIVITY=${line/"error_sensitivity="}
+if [[ "${VF_ERROR_SENSITIVITY}" == "high" ]]; then
+    set -uo pipefail
+    trap '' PIPE        # SIGPIPE = exit code 141, means broken pipe. Happens often, e.g. if head is listening and got all the lines it needs.
+fi
+
+# Setting the error response
+line=$(cat ${VF_CONTROLFILE} | grep -m 1 "^error_response=")
+export VF_ERROR_RESPONSE=${line/"error_response="}
 
 # Checking if queue should be stopped
 check_queue_end1
 
 # Getting the available wallclock time
-job_line=$(grep -m 1 "walltime=" ../workflow/job-files/main/${jobline_no}.job)
+job_line=$(grep -m 1 "walltime=" ../workflow/job-files/main/${VF_JOBLINE_NO}.job)
 timelimit=${job_line/\#PBS -l walltime=}
-export timelimit_seconds="$(echo -n "${timelimit}" | awk -F ':' '{print $3 + $2 * 60 + $1 * 3600}')"
+export VF_TIMELIMIT_SECONDS="$(echo -n "${timelimit}" | awk -F ':' '{print $3 + $2 * 60 + $1 * 3600}')"
 
 # Getting the number of queues per step
-line=$(cat ${controlfile} | grep -m 1 "^queues_per_step=")
-export queues_per_step=${line/"queues_per_step="}
+line=$(cat ${VF_CONTROLFILE} | grep -m 1 "queues_per_step=")
+export VF_QUEUES_PER_STEP=${line/"queues_per_step="}
 
 # Preparing the todo lists for the queues
 cd slave
-bash prepare-todolists ${jobline_no} ${nodes_per_job} ${queues_per_step}
+bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
 cd ..
 
 # Starting the individual steps on different nodes
-for step_no in $(seq 1 ${nodes_per_job} ); do
-    export step_no
-    echo "Starting job step $step_no on host $(hostname)."
+for VF_STEP_NO in $(seq 1 ${VF_NODES_PER_JOB} ); do
+    export VF_STEP_NO
+    echo "Starting job step VF_STEP_NO on host $(hostname)."
     aprun -n 1 -cc none ../workflow/job-files/sub/one-step.sh &
-    pids[$(( step_no - 0 ))]=$!
-    sleep "${sleep_time_1}"
+    pids[$(( VF_STEP_NO - 0 ))]=$!
+    sleep "${VF_SLEEP_TIME_1}"
 done
 
 # Waiting for all steps to finish
@@ -276,22 +287,22 @@ echo
 # Checking if the queue should be stopped
 check_queue_end2
 
-# Syncing the new jobfile with the settings in the controlfile
+# Syncing the new jobfile with the settings in the VF_CONTROLFILE
 cd slave
-. sync-jobfile ${jobline_no}
+. sync-jobfile.sh ${VF_JOBLINE_NO}
 cd ..
 
 # Changing the job name
-new_job_no_2=$((old_job_no_2 + 1))
-new_job_no="${jobline_no}.${new_job_no_2}"
-sed -i "s/^#PBS -N ${job_letter}-.*/#PBS -N ${job_letter}-${new_job_no}/g" ../workflow/job-files/main/${jobline_no}.job
+new_job_no_2=$((VF_VF_OLD_JOB_NO_2 + 1))
+new_job_no="${VF_JOBLINE_NO}.${new_job_no_2}"
+sed -i "s/^#PBS -N ${VF_JOBLETTER}-.*/#PBS -N ${VF_JOBLETTER}-${new_job_no}/g" ../workflow/job-files/main/${VF_JOBLINE_NO}.job
 
 # Changing the output filenames
-sed -i "s|^#PBS -\([oe]\) .*|#PBS -\1 ../workflow/output-files/jobs/job-${new_job_no}_\${PBS_JOBID}.out|g" ../workflow/job-files/main/${jobline_no}.job
+sed -i "s|^#PBS -\([oe]\) .*|#PBS -\1 ../workflow/output-files/jobs/job-${new_job_no}_\${PBS_JOBID}.out|g" ../workflow/job-files/main/${VF_JOBLINE_NO}.job
 
 # Checking how much time has passed since the job has been started
 end_time_seconds="$(date +%s)"
-time_diff="$((end_time_seconds - start_time_seconds))"
+time_diff="$((end_time_seconds - VF_START_TIME_SECONDS))"
 treshhold=100
 if [ "${time_diff}" -le "${treshhold}" ]; then
     echo "Since the beginning of the job less than ${treshhold} seconds have passed."
@@ -302,7 +313,7 @@ fi
 
 # Submitting a new new job
 cd slave 
-. submit ../workflow/job-files/main/${jobline_no}.job
+. submit.sh ../workflow/job-files/main/${VF_JOBLINE_NO}.job
 cd ..
 
 

@@ -23,7 +23,7 @@ echo
 echo
 echo
 
-# Standard error response 
+# Standard error response
 error_response_nonstd() {
     echo "Error was trapped which is a nonstandard error."
     echo "Error in bash script $(basename ${BASH_SOURCE[0]})"
@@ -51,9 +51,9 @@ step_no=1
 echo -e " *** Starting to distribute the collections ***\n"
 sed -i "s/^$//g" ${input_collection_file}
 for i in $(seq 1 $collections_per_queue); do
-    for job_no in $(seq ${jobline_no_start} ${jobline_no_end}); do 
+    for job_no in $(seq ${jobline_no_start} ${jobline_no_end}); do
         for step_no in $(seq 1 ${steps_per_job}); do
-            for queue_no in $(seq 1 ${queues_per_step_new}); do 
+            for queue_no in $(seq 1 ${queues_per_step_new}); do
                 collection="$(head -n 1 ${input_collection_file})"
                 collection="$(echo ${collection} | tr -d '\040\011\012\015')"
                 if [[ ${collection} == *"_"* ]]; then

@@ -3,136 +3,165 @@
 #
 # Description: Bash script for virtual screening of ligands with AutoDock Vina.
 #
-# Revision history:
-# 2015-12-28  Import of file from JANINA version 2.2 and adaption to STELLAR version 6.1
-# 2016-07-16  Various improvements
-# 2016-07-26  Changing the name of the result files from all.result to all.result.pdbqt
-#
 # ---------------------------------------------------------------------------
 
 # Setting the verbosity level
-if [[ "${verbosity}" == "debug" ]]; then
+if [[ "${VF_VERBOSITY_LOGFILES}" == "debug" ]]; then
     set -x
 fi
 
-# Setting the error sensitivity 
-if [[ "${error_sensitivity}" == "high" ]]; then
+# Setting the error sensitivity
+if [[ "${VF_ERROR_SENSITIVITY}" == "high" ]]; then
     set -uo pipefail
-    trap '' PIPE        # SIGPIPE = exit code 141, means broken pipe. Happens often, e.g. if head is listening and got all the lines it needs.         
+    trap '' PIPE        # SIGPIPE = exit code 141, means broken pipe. Happens often, e.g. if head is listening and got all the lines it needs.
 fi
 
+# TODO: Different input file format
+# TODO: Test with storing logfile
+# TODO: Change ligand-lists/todo /current ... to subfolders
+# TODO: Add ligand info into each completed collection -> creating correct sums and faster
+# TODO: Refill during runtime
+
+
 # Functions
-# Standard error response 
+# Standard error response
 error_response_std() {
 
-    # Printing some information
+    # Printint some information
     echo "Error was trapped" 1>&2
     echo "Error in bash script $(basename ${BASH_SOURCE[0]})" 1>&2
     echo "Error on line $1" 1>&2
-    echo "Environment variables" 1>&2 
+    echo "Environment variables" 1>&2
     echo "----------------------------------" 1>&2
     env 1>&2
-    if [[ "${error_response}" == "ignore" ]]; then
+
+    # Checking error response
+    if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]]; then
+
+        # Printing some information
         echo -e "\n * Ignoring error. Trying to continue..."
-    elif [[ "${error_response}" == "next_job" ]]; then
-        echo -e "\n * Trying to stop this queue without stopping the joblfine/causing a failure..."
+
+    elif [[ "${VF_ERROR_RESPONSE}" == "next_job" ]]; then
+
+        # Cleaning up
+        clean_queue_files_tmp
+
+        # Printing some information
+        echo -e "\n * Trying to stop this queue and causing the jobline to fail..."
+
+        # Exiting
         exit 0
-    elif [[ "${error_response}" == "fail" ]]; then
+
+    elif [[ "${VF_ERROR_RESPONSE}" == "fail" ]]; then
+
+        # Cleaning up
+        clean_queue_files_tmp
+
+        # Printing some information
+        echo -e "\n * Trying to stop this queue and causing the jobline to fail..."
+
+        # Exiting
         exit 1
     fi
 }
 trap 'error_response_std $LINENO' ERR
 
+
+
+# Error reponse docking
+error_response_docking() {
+
+    # Printing some information
+    echo "An error occurred during the docking procedure (${docking_type_name})."
+    echo "Skipping this ligand and continuing with next one."
+
+    # Variables
+    ligand_list_entry="docking:failed"
+
+    # Updating the ligand list
+    update_ligand_list_end "false"
+    continue
+}
+
+# Error reponse docking program
+error_response_docking_program() {
+
+    # Printing some information
+    echo "An error occurred during the docking procedure (${docking_type_name})."
+    echo "An unsupported docking program ($1) has been specified."
+    echo "Supported docking programs are: ${supported_docking_programs}"
+    echo "Aborting the virtual screening procedure..."
+    fail_reason="unsported docking program specified ($1)"
+
+    # Updating the ligand list
+    update_ligand_list_end "true"
+    exit 1
+}
+
 # Time limit close
 time_near_limit() {
-    little_time="true";
+    VF_LITTLE_TIME="true";
     end_queue 0
 }
 trap 'time_near_limit' 1 2 3 9 10 12 15
 
 # Cleaning the queue folders
 clean_queue_files_tmp() {
-    cp /tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.* ../workflow/output-files/queues/ || true
-    rm -r /tmp/${USER}/${queue_no}/ || true
+    cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.* ../workflow/output-files/queues/
+    sleep 1
+    rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/
 }
 trap 'clean_queue_files_tmp' EXIT RETURN
 
-# Functions
-# Error reponse ligand elements
-error_response_ligand_elements() {
-    element=$1
-    echo "The ligand contains elements (${element}) which cannot be handled by quickvina."
-    echo "Skipping this ligand and continuing with next one."
-    fail_reason="ligand elements"
-    update_ligand_list_end_fail
-    continue
-}
-
-# Error reponse docking
-error_response_docking() {
-    echo "An error occured during the docking procedure (${docking_type_name})."
-    echo "Skipping this ligand and continuing with next one."
-    fail_reason="docking"
-    update_ligand_list_end_fail
-    continue
-}
-
-# Error reponse docking program
-error_response_docking_program() {
-    echo "An error occured during the docking procedure (${docking_type_name})."
-    echo "An unsupported docking program ($1) has been specified." 
-    echo "Supported docking programs are: ${supported_docking_programs}"
-    echo "Aborting the virtual screening procedure..."
-    fail_reason="unsported docking program specified ($1)"
-    update_ligand_list_end_fail
-    exit 1
-}
-
 # Writing the ID of the next ligand to the current ligand list
 update_ligand_list_start() {
-    echo "${next_ligand} ${docking_type_index} ${docking_replica_index} processing" >> ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp
-}
 
-# Updating the current ligand list
-update_ligand_list_end_fail() {
-    trap 'error_response_std $LINENO' ERR
+    # Variables
+    ligand_start_time_ms=$(($(date +'%s * 1000 + %-N / 1000000')))
+    ligand_list_entry=""
 
     # Updating the ligand-list file
-    perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing/${next_ligand} ${docking_type_index} ${docking_replica_index} failed (${fail_reason})/g" ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp
-    
-    # Printing some information
-    echo "Ligand ${next_ligand} failed on on $(date)."
-    echo "Total time for this ligand in ms: $(($(date +'%s * 1000 + %-N / 1000000') - ${start_time_ms}))"
-    echo
+    echo "${next_ligand} ${docking_type_index} ${docking_replica_index} processing" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
 }
 
-# Updating the current ligand list
-update_ligand_list_end_success() {
-    trap 'error_response_std $LINENO' ERR
+update_ligand_list_end() {
+
+    # Variables
+    success="${1}" # true or false
+    pipeline_part="${2}"
+    ligand_total_time_ms="$(($(date +'%s * 1000 + %-N / 1000000') - ${ligand_start_time_ms}))"
 
     # Updating the ligand-list file
-    perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing/${next_ligand} ${docking_type_index} ${docking_replica_index} successs /g" ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp
+    perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing.*/${next_ligand}  ${docking_type_index} ${docking_replica_index} ${ligand_list_entry} total-time:${ligand_total_time_ms}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
+
     # Printing some information
     echo
-    echo "The docking run for ligand ${next_ligand} was completed successfully on $(date)."
-    echo "Total time for this docking run was in ms: $(($(date +'%s * 1000 + %-N / 1000000') - ${start_time_ms}))"
+    if [ "${success}" == "true" ]; then
+        echo "Ligand ${next_ligand} completed ($2) on $(date)."
+    else
+        echo "Ligand ${next_ligand} failed ($2) on on $(date)."
+    fi
+    echo "Total time for this ligand (${next_ligand}) in ms: ${ligand_total_time_ms}"
     echo
+
+    # Variables
+    ligand_list_entry=""
 }
 
 update_summary() {
     trap 'error_response_std $LINENO' ERR
 
-    if [ ! -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt ]; then
-        printf "Compound   average-score   maximum-score   number-of-dockings" >> /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
+    if [ ! -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt ]; then
+        printf "Compound   average-score   maximum-score   number-of-dockings" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
         for k in $(seq 1 ${docking_replica_index_end}); do 
-            printf "   score-replica-$k" >>  /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
+            printf "   score-replica-$k" >>  ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
         done
-        printf "\n" >> /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
+        printf "\n" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
     fi
     if [ "${docking_replica_index}" -eq "1" ]; then
-        printf "${next_ligand} %3.1f %3.1f %5s %3.1f\n" "${score_value}" "${score_value}" "1" "${score_value}" >> /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
+        printf "${next_ligand} %3.1f %3.1f %5s %3.1f\n" "${score_value}" "${score_value}" "1" "${score_value}" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
     else
-        scores_previous=$(grep ${next_ligand} /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt | tr -s " " | cut -d " " -f 5-)
+        scores_previous=$(grep ${next_ligand} ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt | tr -s " " | cut -d " " -f 5-)
         read -a scores_all <<< "${scores_previous} ${score_value}"
         
         # Computing the new average value
@@ -143,476 +172,598 @@ update_summary() {
         
         # Upating the line
         scores_all_expaned="${scores_all[@]}"
-        perl -pi -e "s/${next_ligand}\b.*/${next_ligand} ${score_average} ${score_maximum} ${docking_replica_index} ${scores_all_expaned}/g" /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
+        perl -pi -e "s/${next_ligand}\b.*/${next_ligand} ${score_average} ${score_maximum} ${docking_replica_index} ${scores_all_expaned}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
     fi
-    column -t /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt > /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt.tmp
-    mv /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt.tmp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt
+    column -t ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt > ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt.tmp
+    mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt.tmp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
 }
 
 # Obtaining the next ligand collection.
 next_ligand_collection() {
     trap 'error_response_std $LINENO' ERR
-    needs_cleaning=false
-    
+    needs_cleaning="false"
+
     # Checking if this jobline should be stopped now
-    line=$(cat ${controlfile} | grep "^stop_after_collection=")
+    line=$(cat ${VF_CONTROLFILE} | grep "^stop_after_collection=")
     stop_after_collection=${line/"stop_after_collection="}
-    if [ "${stop_after_collection}" = "yes" ]; then   
+    if [ "${stop_after_collection}" = "true" ]; then
         echo
-        echo "This job line was stopped by the stop_after_collection flag in the controlfile ${controlfile}."
+        echo "This job line was stopped by the stop_after_collection flag in the VF_CONTROLFILE ${VF_CONTROLFILE}."
         echo
         end_queue 0
     fi
     echo
     echo "A new collection has to be used if there is one."
-    
+
     # Checking if there exists a todo file for this queue
-    if [ ! -f ../workflow/ligand-collections/todo/${queue_no} ]; then
+    if [ ! -f ../workflow/ligand-collections/todo/${VF_QUEUE_NO} ]; then
         echo
         echo "This queue is stopped because there exists no todo file for this queue."
         echo
         end_queue 0
     fi
-    
+
     # Loop for iterating through the remaining collections until we find one which is not already finished
     new_collection="false"
     while [ "${new_collection}" = "false" ]; do
-    
+
        # Checking if there is one more ligand collection to be done
-        no_collections_remaining="$(grep -cv '^\s*$' ../workflow/ligand-collections/todo/${queue_no} || true)" 
+        no_collections_remaining="$(grep -cv '^\s*$' ../workflow/ligand-collections/todo/${VF_QUEUE_NO} || true)"
         if [[ "${no_collections_remaining}" = "0" ]]; then
             # Renaming the todo file to its original name
             no_more_ligand_collection
         fi
-    
+
         # Setting some variables
-        next_ligand_collection=$(head -n 1 ../workflow/ligand-collections/todo/${queue_no})
-        next_ligand_collection_basename=${next_ligand_collection/.*}
-        next_ligand_collection_no_basename="${next_ligand_collection_basename/*_}"
-        next_ligand_collection_no="${next_ligand_collection/*_}"
-        next_ligand_collection_sub1="${next_ligand_collection/_*}"
+        next_ligand_collection=$(head -n 1 ../workflow/ligand-collections/todo/${VF_QUEUE_NO} | awk '{print $1}')
+        next_ligand_collection_ID="${next_ligand_collection/*_}"
+        next_ligand_collection_tranch="${next_ligand_collection/_*}"
+        next_ligand_collection_metatranch="${next_ligand_collection_tranch:0:2}"
+        next_ligand_collection_length=$(head -n 1 ../workflow/ligand-collections/todo/${VF_QUEUE_NO} | awk '{print $2}')
         if grep -w "${next_ligand_collection}" ../workflow/ligand-collections/done/* &>/dev/null; then
             echo "This ligand collection was already finished. Skipping this ligand collection."
         elif grep -w "${next_ligand_collection}" ../workflow/ligand-collections/current/* &>/dev/null; then
             echo "On this ligand collection already another queue is working. Skipping this ligand collection."
-        elif grep -w ${next_ligand_collection} $(ls ../workflow/ligand-collections/todo/* | grep -v "${queue_no}" &>/dev/null); then
+        elif grep -w ${next_ligand_collection} $(ls ../workflow/ligand-collections/todo/* &>/dev/null | grep -v "${VF_QUEUE_NO}" &>/dev/null); then
             echo "This ligand collection is in one of the other todo-lists. Skipping this ligand collection."
-        else 
+        else
             new_collection="true"
         fi
         # Removing the new collection from the ligand-collections-todo file
-        perl -ni -e "print unless /${next_ligand_collection}\b/" ../workflow/ligand-collections/todo/${queue_no}
-    done   
-                
-    # Updating the ligand-collection files       
-    echo "${next_ligand_collection}" > ../workflow/ligand-collections/current/${queue_no}
-    
-    if [ "${verbosity}" == "debug" ]; then 
-        echo -e "\n***************** INFO **********************" 
-        echo ${queue_no}
-        ls -lh ../workflow/ligand-collections/current/${queue_no} 2>/dev/null || true
-        cat ../workflow/ligand-collections/current/${queue_no} 2>/dev/null || true
-        cat ../workflow/ligand-collections/todo/${queue_no} 2>/dev/null || true
+        perl -ni -e "print unless /${next_ligand_collection}\b/" ../workflow/ligand-collections/todo/${VF_QUEUE_NO}
+    done
+
+    # Updating the ligand-collection files
+    echo "${next_ligand_collection} ${next_ligand_collection_length}" > ../workflow/ligand-collections/current/${VF_QUEUE_NO}
+
+    if [ "${VF_VERBOSITY_LOGFILES}" == "debug" ]; then
+        echo -e "\n***************** INFO **********************"
+        echo ${VF_QUEUE_NO}
+        ls -lh ../workflow/ligand-collections/current/${VF_QUEUE_NO} 2>/dev/null || true
+        cat ../workflow/ligand-collections/current/${VF_QUEUE_NO} 2>/dev/null || true
+        cat ../workflow/ligand-collections/todo/${VF_QUEUE_NO} 2>/dev/null || true
         echo -e "***************** INFO END ******************\n"
     fi
 
     # Creating the subfolder in the ligand-lists folder
-    mkdir -p ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/
-    
+    mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists
+
     # Printing some information
     echo "The new ligand collection is ${next_ligand_collection}."
 }
 
-# Preparing the folders and files in /tmp
+# Preparing the folders and files in ${VF_TMPDIR}
 prepare_collection_files_tmp() {
-    trap 'error_response_std $LINENO' ERR
 
     # Creating the required folders
-    if [ ! -d "/tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections" ]; then
-        mkdir -p /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections
-    elif [ "$(ls -A "/tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/")" ]; then
-        rm -r /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/*
-    fi
-    if [ ! -d "/tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual" ]; then
-        mkdir -p /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual
-    elif [ "$(ls -A "/tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/")" ]; then
-        rm -r /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/*
+    if [ ! -d "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}" ]; then
+        mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}
+    elif [ "$(ls -A "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}")" ]; then
+        rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/*
     fi
     for docking_type_name in ${docking_type_names[@]}; do
-        if [ ! -d "/tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}" ]; then
-            mkdir -p /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}
-        elif [ "$(ls -A "/tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/")" ]; then
-            rm -r /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/*
+        if [ ! -d "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}" ]; then
+            mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}
+        elif [ "$(ls -A "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/")" ]; then
+            rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/*
         fi
-        if [ ! -d "/tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}" ]; then
-            mkdir -p /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}
-        elif [ "$(ls -A "/tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/")" ]; then
-            rm -r /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/*
+        if [ ! -d "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}" ]; then
+            mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}
+        elif [ "$(ls -A "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/")" ]; then
+            rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/*
         fi
-        if [ ! -d "/tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/" ]; then
-            mkdir -p /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/
-        elif [ "$(ls -A "/tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/")" ]; then
-            rm -r /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/*
-        fi
-        if [ ! -d "/tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/other/" ]; then
-            mkdir -p /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/other/
-        elif [ "$(ls -A "/tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/other/")" ]; then
-            rm -r /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/other/*
+        if [ ! -d "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}" ]; then
+            mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}
+        elif [ "$(ls -A "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/")" ]; then
+            rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/*
         fi
     done
-        
+    if [ ! -d "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/" ]; then
+        mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/
+    elif [ "$(ls -A "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/")" ]; then
+        rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/*
+    fi
+
     # Extracting the required files
-    mkdir -p /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/
-    tar -xf ${collection_folder}/${next_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/ ${next_ligand_collection_no}
+    if [ -f ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]; then
+        tar -xf ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/ ${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
+        gunzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
+    else
+        # Raising an error
+        echo " * Error: The tranch archive file ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar does not exist..."
+        error_response_std $LINENO
+    fi
+
+    # Checking if the collection could be extracted
+    if [ ! -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar ]; then
+
+        # Raising an error
+        echo " * Error: The ligand collection ${next_ligand_collection_tranch}_${next_ligand_collection_ID} could not be prepared."
+        error_response_std $LINENO
+    fi
+
+    # Extracting all the PDBQT at the same time (faster than individual for each ligand separately)
+    tar -xf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}
 
     # Copying the required old output files if continuing old collection
     for docking_type_name in ${docking_type_names[@]}; do
         if [ "${new_collection}" = "false" ]; then
-            if [[ -f "../output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/all.tar" ]]; then
-                cp ../output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/
-            fi
-            if [[ -f "../output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/all.tar" ]]; then
-                cp ../output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/
-            fi
-            if [[ -f "../output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt" ]]; then
-                cp ../output-files/incomplete/${docking_type_name}/summaries/first-poses/${next_ligand_collection_basename}.txt /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/
-            fi
-        fi
-        if [[ -f  ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status ]]; then
-            mv ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp
+            tar -xzf ../output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/ || true
+            tar -xzf ../output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/ || true
+            tar -xzf ../output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/ || true
         fi
     done
+    if [[ -f  ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status ]]; then
+        cp ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/
+    fi
+
+    # Cleaning up
+    #rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar
+    # If we remove it here, then we need to make the next_ligand determination dependend on the extracted archive rather than the archive. Are we using the extracted archive? I think so, for using the PDBQT
 }
 
 # Stopping this queue because there is no more ligand collection to be screened
 no_more_ligand_collection() {
+
+    # Printing some information
     echo
     echo "This queue is stopped because there is no more ligand collection."
     echo
+
+    # Ending the queue
     end_queue 0
 }
 
-# Tidying up collection folders and files in /tmp
+# Tidying up collection folders and files in ${VF_TMPDIR}
 clean_collection_files_tmp() {
-    trap 'error_response_std $LINENO' ERR
-    if [ ${needs_cleaning} = "true" ]; then
+
+    # Checking if cleaning is needed at all
+    if [ "${needs_cleaning}" = "true" ]; then
         local_ligand_collection=${1}
-        local_ligand_collection_basename=${local_ligand_collection/.*}
-        local_ligand_collection_sub1="${local_ligand_collection_basename/_*}"
-        local_ligand_collection_no="${local_ligand_collection/*_}"
-        local_ligand_collection_no_basename="${local_ligand_collection_basename/*_}"
+        local_ligand_collection_tranch="${local_ligand_collection/_*}"
+        local_ligand_collection_metatranch="${local_ligand_collection_tranch:0:2}"
+        local_ligand_collection_ID="${local_ligand_collection/*_}"
 
-        for docking_type_name in ${docking_type_names[@]}; do
-            if [ "${collection_complete}" = "true" ]; then
-                # Checking if all the folders required are there
-                if [ ! -d "../output-files/complete/${docking_type_name}/results/" ]; then
-                    mkdir  -p ../output-files/complete/${docking_type_name}/results/
-                fi
-                if [ ! -d "../output-files/complete/${docking_type_name}/logfiles/" ]; then
-                    mkdir -p ../output-files/complete/${docking_type_name}/logfiles/
-                fi
-                if [ ! -d "../output-files/complete/${docking_type_name}/summaries/first-poses/" ]; then
-                    mkdir -p ../output-files/complete/${docking_type_name}/summaries/first-poses/
-                fi
-                # Copying the files which should be kept in the permanent storage location
-                mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.gz.tar || true
-                tar -rf ../output-files/complete/${docking_type_name}/results/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/results ${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.gz.tar || true
+        # Checking if all the folders required are there
+        if [ "${collection_complete}" = "true" ]; then
 
-                mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.gz.tar || true
-                tar -rf ../output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/logfiles/ ${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.gz.tar || true
+            # Printing some information
+            echo -e "\n * The collection ${local_ligand_collection} has been completed."
+            echo "    * Storing and cleaning corresponding files..."
 
-                mkdir -p /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}
-                cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.txt || true
-                gzip -f /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.txt || true
-                tar -rf ../output-files/complete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/output-files/complete/${docking_type_name}/summaries/first-poses/ ${local_ligand_collection_sub1}/${local_ligand_collection_no_basename}.txt.gz || true
+            # Loop for each docking type
+            for docking_type_name in ${docking_type_names[@]}; do
+
+                # Results
+                # Compressing the collection and saving in the complete folder
+                mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                tar -czf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/ ${local_ligand_collection_ID} || true
+
+                # Adding the completed collection archive to the tranch archive
+                mkdir  -p ../output-files/complete/${docking_type_name}/results/${local_ligand_collection_metatranch}
+                tar -rf ../output-files/complete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz || true
 
                 # Cleaning up
-                rm -r ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename} &>/dev/null || true
-                rm -r ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename} &>/dev/null || true
-                rm -r ../output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}* &>/dev/null || true
-            else
-                # Copying the files which should be kept in the permanent storage location
-                if [ -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar ]; then 
-                    # Checking if the required folder exists
-                    if [ ! -d "../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/" ]; then
-                        mkdir  -p ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/
-                    fi 
-                    cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/all.tar ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_basename}/
-                fi
-                if [ -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar ]; then
-                    # Checking if the required folder exists
-                    if [ ! -d "../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/" ]; then
-                        mkdir -p ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/
-                    fi
-                    cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/all.tar ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_basename}/
-                fi
-                if [ -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt ]; then
-                    if [ ! -d "../output-files/incomplete/${docking_type_name}/summaries/first-poses/" ]; then
-                        mkdir -p ../output-files/incomplete/${docking_type_name}/summaries/first-poses/
-                    fi
-                    cp /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/summaries/first-poses/${local_ligand_collection_basename}.txt ../output-files/incomplete/${docking_type_name}/summaries/first-poses/
-                fi
+                rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz &> /dev/null || true
+                rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
+
+                # Summaries
+                # Compressing the collection and saving in the complete folder
+                mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                tar -czf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/ ${local_ligand_collection_ID} || true
+
+                # Adding the completed collection archive to the tranch archive
+                mkdir  -p ../output-files/complete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}
+                tar -rf ../output-files/complete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/summaries/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz || true
+
+                # Cleaning up
+                rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz &> /dev/null || true
+                rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
+
+                # Logfiles
+                # Compressing the collection and saving in the complete folder
+                mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                tar -czf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/ ${local_ligand_collection_ID} || true
+
+                # Adding the completed collection archive to the tranch archive
+                mkdir  -p ../output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}
+                tar -rf ../output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz || true
+
+                # Cleaning up
+                rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz &> /dev/null || true
+                rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
+
+            done
+
+            # Checking if we should keep the ligand log summary files
+            if [ "${keep_ligand_summary_logs}" = "true" ]; then
+
+                # Directory preparation
+                mkdir  -p ../output-files/complete/ligand-lists/${local_ligand_collection_metatranch}
+                gzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status
+                tar -rf ../output-files/complete/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/ ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz || true
             fi
+
+            # Updating the ligand collection files
+            echo -n "" > ../workflow/ligand-collections/current/${VF_QUEUE_NO}
+            ligands_succeeded_tautomerization="$(zgrep "tautomerization([0-9]\+):success" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz | grep -c tautomerization)"
+            ligands_succeeded_targetformat="$(zgrep -c "targetformat-generation([A-Za-z]\+):success" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz)"
+            ligands_failed="$(zgrep -c "failed total" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz)"
+            ligands_started="$(zgrep -c "initial" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz)"
+            echo "${local_ligand_collection} was completed by queue ${VF_QUEUE_NO} on $(date). Ligands started:${ligands_started} succeeded(tautomerization):${ligands_succeeded_tautomerization} succeeded(target-format):${ligands_succeeded_targetformat} failed:${ligands_failed}" >> ../workflow/ligand-collections/done/${VF_QUEUE_NO}
+
+        else
+            # Loop for each target format
+            for docking_type_name in ${docking_type_names[@]}; do
+
+                # Results
+                # Compressing the collecion
+                tar -czf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/ ${local_ligand_collection_ID} || true
+
+                # Copying the files which should be kept in the permanent storage location
+                mkdir -p ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+
+                # Cleaning up
+                rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
+
+                # Summaries
+                # Compressing the collecion
+                tar -czf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/ ${local_ligand_collection_ID} || true
+
+                # Copying the files which should be kept in the permanent storage location
+                mkdir -p ../output-files/incomplete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/incomplete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+
+                # Cleaning up
+                rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
+
+                # Results
+                # Compressing the collecion
+                tar -czf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/ ${local_ligand_collection_ID} || true
+
+                # Copying the files which should be kept in the permanent storage location
+                mkdir -p ../output-files/incomplete/${docking_type_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+
+                # Cleaning up
+                rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
+
+            done
+
+            mkdir -p ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/
+            cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/ || true
+
+        fi
+
+        # Cleaning up
+        rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
+        rm  ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar &> /dev/null || true
+        rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.* &> /dev/null || true
+        rm ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status &> /dev/null || true
+
+        # Cleaning up
+        for targetformat in ${targetformats//:/ }; do
+            rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${targetformat}/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
         done
 
-        # Moving the ligand list status tmp file
-        if [ -f ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp ]; then
-            mv ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status.tmp ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_sub1}/${next_ligand_collection_no_basename}.status
-        fi
     fi
-    needs_cleaning=false
+    needs_cleaning="false"
 }
-
 
 # Function for end of the queue
 end_queue() {
-    if [[ "${ligand_index}" -gt "1" && "${new_collection}" == "false" ]] || [[ "${docking_counter_currentjob}" -gt "0" ]]; then
+
+    # Variables
+    exitcode=${1}
+
+    # Checking if cleaning up is needed
+    if [[ "${ligand_index}" -gt "1" && "${new_collection}" == "false" ]] ; then
         clean_collection_files_tmp ${next_ligand_collection}
     fi
-   
+
+    # Cleaning up the queue files
     clean_queue_files_tmp
-    exit ${1}
+
+    #  Exiting
+    exit ${exitcode}
 }
 
 
-# Saving some information about the controlfiles
-echo
-echo
-echo "*****************************************************************************************"
-echo "              Beginning of a new job (job ${old_job_no}) in queue ${queue_no}"
-echo "*****************************************************************************************"
-echo 
-echo "Control files in use"
-echo "-------------------------"
-echo "controlfile = ${controlfile}"
-echo
-echo "Contents of the controlfile ${controlfile}"
-echo "-----------------------------------------------"
-cat ${controlfile}
-echo
-echo
-
+# Verbosity
+if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
+    set -x
+fi
 
 # Variables
+targetformats="$(grep -m 1 "^targetformats=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+minimum_time_remaining="$(grep -m 1 "^minimum_time_remaining=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+obabel_version="$(obabel -V | awk '{print $3}')"
+if [ -z ${obabel_version} ]; then
+    echo " * Error: OpenBabel is not available..."
+    error_response_std $LINENO
+fi
+keep_ligand_summary_logs="$(grep -m 1 "^keep_ligand_summary_logs=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+ligand_check_interval="$(grep -m 1 "^ligand_check_interval=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+obabel_memory_limit="$(grep -m 1 "^obabel_memory_limit=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+obabel_time_limit="$(grep -m 1 "^obabel_time_limit=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+cpus_per_queue="$(grep -m 1 "^cpus_per_queue=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+
+# Docking
 supported_docking_programs="vina, qvina02, qvina_w, smina, adfr"
-needs_cleaning=false
-
-# Setting the number of ligands to screen in this job
-line=$(cat ${controlfile} | grep "^ligands_per_queue=")
-no_of_ligands=${line/"ligands_per_queue="}
-verbosity="false"
-
-# Getting the folder where the collections are
-line=$(cat ${controlfile} | grep "^collection_folder=" | sed 's/\/$//g')
-collection_folder=${line/"collection_folder="}
+needs_cleaning="false"
 
 # Determining the names of each docking type
-line=$(cat ${controlfile} | grep "^docking_type_names=")
-docking_type_names=${line/"docking_type_names="}
+docking_type_names="$(grep -m 1 "^docking_type_names=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_type_names <<< "$docking_type_names"
-docking_type_names_length=${#docking_type_names[@]}
 
 # Determining the number of docking types
 docking_type_index_end=${#docking_type_names[@]}
 
 # Determining the docking programs to use for each docking type
-line=$(cat ${controlfile} | grep "^docking_type_programs=")
-docking_type_programs=${line/"docking_type_programs="}
+docking_type_programs="$(grep -m 1 "^docking_type_programs=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_type_programs <<< "$docking_type_programs"
 docking_type_programs_length=${#docking_type_programs[@]}
 
 # Determining the docking type replicas
-line=$(cat ${controlfile} | grep "^docking_type_replicas=")
-docking_type_replicas_total=${line/"docking_type_replicas="}
+docking_type_replicas_total="$(grep -m 1 "^docking_type_replicas_total=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_type_replicas_total <<< "$docking_type_replicas_total"
 docking_type_replicas_total_length=${#docking_type_replicas_total[@]}
 
 # Determining the docking type input folders
-line=$(cat ${controlfile} | grep "^docking_type_inputfolders=")
-docking_type_inputfolders=${line/"docking_type_inputfolders="}
+docking_type_inputfolders="$(grep -m 1 "^docking_type_inputfolders=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_type_inputfolders <<< "$docking_type_inputfolders"
 docking_type_inputfolders_length=${#docking_type_inputfolders[@]}
 
 # Getting the value for the variable minimum_time_remaining
-line=$(cat ${controlfile} | grep "^minimum_time_remaining=" | sed 's/\/$//g')
+minimum_time_remaining="$(grep -m 1 "^minimum_time_remaining=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 minimum_time_remaining=$((${line/"minimum_time_remaining="} * 60)) # Conversion from minutes to seconds
 
 # Checking the variables for errors
-if ! [ "${docking_type_names_length}" -eq "${docking_type_programs_length}" ]; then
+if ! [ "${docking_type_index_end}" -eq "${docking_type_programs_length}" ]; then
     echo "ERROR:" 
-    echo " * Some variables specified in the controlfile ${controlfile} are not compatible."
-    echo " * The variable docking_type_names has ${docking_type_names_length} entries."
+    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE} are not compatible."
+    echo " * The variable docking_type_names has ${docking_type_index_end} entries."
     echo " * The variable docking_type_programs has ${docking_type_programs_length} entries."
     exit 1
-elif ! [ "${docking_type_names_length}" -eq "${docking_type_replicas_total_length}" ]; then
+elif ! [ "${docking_type_index_end}" -eq "${docking_type_replicas_total_length}" ]; then
     echo "ERROR:" 
-    echo " * Some variables specified in the controlfile ${controlfile} are not compatible."
-    echo " * The variable docking_type_names has ${docking_type_names_length} entries."
+    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE} are not compatible."
+    echo " * The variable docking_type_names has ${docking_type_index_end} entries."
     echo " * The variable docking_type_replicas has ${docking_type_replicas_total_length} entries."
     exit 1
-elif ! [ "${docking_type_names_length}" -eq "${docking_type_inputfolders_length}" ]; then
+elif ! [ "${docking_type_index_end}" -eq "${docking_type_inputfolders_length}" ]; then
     echo "ERROR:" 
-    echo " * Some variables specified in the controlfile ${controlfile} are not compatible."
-    echo " * The variable docking_type_names has ${docking_type_names_length} entries."
+    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE} are not compatible."
+    echo " * The variable docking_type_names has ${docking_type_index_end} entries."
     echo " * The variable docking_type_inputfolders has ${docking_type_inputfolders_length} entries."
     exit 1
 fi
 
+# Saving some information about the VF_CONTROLFILE
+echo
+echo
+echo "*****************************************************************************************"
+echo "              Beginning of a new job (job ${VF_OLD_JOB_NO}) in queue ${VF_QUEUE_NO}"
+echo "*****************************************************************************************"
+echo
+echo "Control files in use"
+echo "-------------------------"
+echo "Controlfile = ${VF_CONTROLFILE}"
+echo
+echo "Contents of the VF_CONTROLFILE ${VF_CONTROLFILE}"
+echo "-----------------------------------------------"
+cat ${VF_CONTROLFILE}
+echo
+echo
+
+# Getting the folder where the colections are
+collection_folder="$(grep -m 1 "^collection_folder=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Loop for each ligand
-for ligand_index in $(seq 1 ${no_of_ligands}); do
-    
+ligand_index=0
+docking_index=0
+while true; do
+
     # Variables
     new_collection="false"
-    collection_complete="false"  
+    collection_complete="false"
+    ligand_index=$((ligand_index+1))
     docking_type_index_start=1          # Will be overwritten if neccessary (if continuing collection in the middle of a ligand)
-    docking_replica_index_start=1       # Will be overwritten if neccessary (if continuing collection in the middle of a ligand)      
-    docking_counter_currentjob=0
+    docking_replica_index_start=1       # Will be overwritten if neccessary (if continuing collection in the middle of a ligand)
 
-    # Preparing the next ligand    
-    # Checking if this is the first ligand at all (beginning of first ligand collection)
-    if [[ ! -f  "../workflow/ligand-collections/current/${queue_no}" ]]; then
-        queue_collection_file_exists="false"
-    else 
-        queue_collection_file_exists="true"
-        perl -ni -e "print unless /^$/" ../workflow/ligand-collections/current/${queue_no}
-    fi
+    # Preparing the next ligand
     # Checking the conditions for using a new collection
-    if [[ "${queue_collection_file_exists}" = "false" ]] || [[ "${queue_collection_file_exists}" = "true" && ! $(cat ../workflow/ligand-collections/current/${queue_no} | tr -d '[:space:]') ]]; then
-        
-        if [ "${verbosity}" == "debug" ]; then 
-            echo -e "\n***************** INFO **********************" 
-            echo ${queue_no}
-            ls -lh ../workflow/ligand-collections/current/${queue_no} 2>/dev/null || true
-            cat ../workflow/ligand-collections/current/${queue_no} 2>/dev/null || true
-            cat ../workflow/ligand-collections/todo/${queue_no} 2>/dev/null || true
-            echo -e "***************** INFO END ******************\n"
+    if [[ "${ligand_index}" == "1" ]]; then
+
+        # Checking if there is no current ligand collection
+        if [[ ! -s ../workflow/ligand-collections/current/${VF_QUEUE_NO} ]]; then
+
+            # Preparing a new collection
+            next_ligand_collection
+            prepare_collection_files_tmp
+
+            # Getting the name of the first ligand of the first collection
+            next_ligand=$(tar -tf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar | head -n 2 | tail -n 1 | awk -F '[/.]' '{print $2}')
+
+
+        # Using the old collection
+        else
+            # Getting the name of the current ligand collection
+            next_ligand_collection=$(awk '{print $1}' ../workflow/ligand-collections/current/${VF_QUEUE_NO})
+            next_ligand_collection_ID="${next_ligand_collection/*_}"
+            next_ligand_collection_tranch="${next_ligand_collection/_*}"
+            next_ligand_collection_metatranch="${next_ligand_collection_tranch:0:2}"
+
+            # Extracting the last ligand collection
+            mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}
+            tar -xf ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/ ${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
+            gunzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
+            # Extracting all the PDBQT at the same time (faster)
+            mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}
+            tar -xf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}
+            mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/
+
+            # Copying the ligand-lists status file if it exists
+            if [[ -f  ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status ]]; then
+                cp ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/
+
+                # Variables
+                last_ligand_entry=$(tail -n 1 ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status 2>/dev/null || true)
+                last_ligand=$(echo ${last_ligand_entry} | awk -F ' ' '{print $1}')
+                last_ligand_status=$(echo ${last_ligand_entry} | awk -F ' ' '{print $4}')
+                docking_type_index_start=$(echo ${last_ligand_entry} | awk -F ' ' '{print $2}')
+                docking_replica_index_start=$(echo ${last_ligand_entry} | awk -F ' ' '{print $3}')
+
+                # Checking if the last ligand was in the status processing. In this case we will try to process the ligand again since the last process might have not have the chance to complete its tasks.
+                if [ "${last_ligand_status}" == "processing" ]; then
+                    perl -ni -e "/${last_ligand}:processing/d" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status # Might not work for VFVS due to multiple replicas
+                    next_ligand="${last_ligand}"
+
+                else
+
+                    # Incrementing the indices (replica, type)
+                    docking_replica_index_end=${docking_type_replicas_total[(($docking_type_index_start - 1))]}
+                    if [ "${docking_replica_index_start}" -lt "${docking_replica_index_end}" ]; then
+                        # Incrementing the replica index
+                        docking_replica_index_start=$((docking_replica_index_start + 1))
+                        next_ligand=${last_ligand}
+                    elif [ "${docking_type_index_start}" -lt "${docking_type_index_end}" ]; then
+                        # Incrementing the replica index
+                        docking_type_index_start=$((docking_type_index_start + 1))
+                        docking_replica_index_start=1
+                        next_ligand=${last_ligand}
+                    else
+                        # Need to use new ligand
+                        docking_replica_index_start=1
+                        docking_type_index_start=1
+                        next_ligand=$(tar -tf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar | grep -w -A 1 "${last_ligand}" | grep -v ${last_ligand} | awk -F '[/.]' '{print $2}')
+                    fi
+                fi
+
+            else
+                # Restarting the collection
+                next_ligand=$(tar -tf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar | head -n 2 | tail -n 1 | awk -F '[/.]' '{print $2}')
+            fi
         fi
-        next_ligand_collection
-        if [ "${verbosity}" == "debug" ]; then 
-            echo -e "\n***************** INFO **********************" 
-            echo ${queue_no}
-            ls -lh ../workflow/ligand-collections/current/${queue_no} 2>/dev/null || true
-            cat ../workflow/ligand-collections/current/${queue_no} 2>/dev/null || true
-            cat ../workflow/ligand-collections/todo/${queue_no} 2>/dev/null || true
-            echo -e "***************** INFO END ******************\n"
-        fi
-        prepare_collection_files_tmp
-        if [ "${verbosity}" == "debug" ]; then 
-            echo -e "\n***************** INFO **********************" 
-            echo ${queue_no}
-            ls -lh ../workflow/ligand-collections/current/${queue_no} 2>/dev/null || true
-            cat ../workflow/ligand-collections/current/${queue_no} 2>/dev/null || true
-            cat ../workflow/ligand-collections/todo/${queue_no} 2>/dev/null || true
-            echo -e "***************** INFO END ******************\n"
-        fi
-        # Getting the name of the first ligand of the first collection
-        next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_no} | head -n 1 | awk -F '.' '{print $1}')
 
     # Using the old collection
     else
-        # Getting the name of the current ligand collection
-        last_ligand_collection=$(cat ../workflow/ligand-collections/current/${queue_no})
-        last_ligand_collection_basename=${last_ligand_collection/.*}        
-        last_ligand_collection_sub1="${last_ligand_collection_basename/_*}"
-        last_ligand_collection_no="${last_ligand_collection/*_}"
-        last_ligand_collection_no_basename="${last_ligand_collection_basename/*_}"
-        
-        # Checking if this is the first ligand of this queue
-        if [ "${ligand_index}" = "1" ]; then
-            # Extracting the last ligand collection
-            mkdir -p /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/
-            # 2015: tar -xf ${collection_folder}/${last_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/ ${last_ligand_collection_sub1}/${last_ligand_collection_no} || true
-            tar -xf ${collection_folder}/${last_ligand_collection_sub1}.tar -C /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/ ${last_ligand_collection_no} || true
 
-            # Checking if the collection.status.tmp file exists due to abnormal abortion of job/queue
-            # Removing old status.tmp file if existent
-            if [[ -f "../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_no_basename}.status.tmp" ]]; then
-                echo "The file ${last_ligand_collection_basename}.status.tmp exists already."
-                echo "This collection will be restarted."
-                rm ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_no_basename}.status.tmp
-                
-                # Getting the name of the first ligand of the first collection
-                next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_no} | head -n 1 | awk -F '.' '{print $1}')
-
-            else
-                last_ligand_entry=$(tail -n 1 ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_no_basename}.status 2>/dev/null || true)
-                last_ligand=$(echo ${last_ligand_entry} | awk -F ' ' '{print $1}')
-                docking_type_index_start=$(echo ${last_ligand_entry} | awk -F ' ' '{print $2}')
-                docking_replica_index_start=$(echo ${last_ligand_entry} | awk -F ' ' '{print $3}')
-                
-                # Incrementing the indeces (replica, type)
-                docking_replica_index_end=${docking_type_replicas_total[(($docking_type_index_start - 1))]}
-                if [ "${docking_replica_index_start}" -lt "${docking_replica_index_end}" ]; then
-                    # then can increment the replica index
-                    docking_replica_index_start=$((docking_replica_index_start + 1))
-                    next_ligand=${last_ligand}
-                elif [ "${docking_type_index_start}" -lt "${docking_type_index_end}" ]; then
-                    # then can increment the type index
-                    docking_type_index_start=$((docking_type_index_start + 1))
-                    docking_replica_index_start=1
-                    next_ligand=${last_ligand}
-                else 
-                    # Need to use new ligand
-                    docking_replica_index_start=1
-                    docking_type_index_start=1
-                    next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_no} | grep -A 1 "${last_ligand}" | grep -v ${last_ligand} | awk -F '.' '{print $1}')
-                fi
-            fi
         # Not first ligand of this queue
-        else
-            last_ligand=$(tail -n 1 ../workflow/ligand-collections/ligand-lists/${last_ligand_collection_sub1}/${last_ligand_collection_no_basename}.status.tmp 2>/dev/null | awk -F '[:. ]' '{print $1}' || true)
-            next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${last_ligand_collection_sub1}/${last_ligand_collection_no} | grep -A 1 "${last_ligand}" | grep -v ${last_ligand} | awk -F '.' '{print $1}')
-        fi
-        
-        # Check if we can use the old collection
-        if [ -n "${next_ligand}" ]; then
-            # We can continue to use the old ligand collection
-            next_ligand_collection=${last_ligand_collection}
-            next_ligand_collection_basename=${last_ligand_collection_basename}
-            next_ligand_collection_no_basename="${next_ligand_collection_basename/*_}"
-            next_ligand_collection_no="${next_ligand_collection/*_}"
-            next_ligand_collection_sub1="${next_ligand_collection/_*}"
-            # Preparing the collection folders only if ligand_index=1 
-            if [ "${ligand_index}" = "1" ]; then
-                prepare_collection_files_tmp
-            fi
-        # Otherwise we have to use a new ligand collection
-        else
-            collection_complete="true"
-            # Cleaning up the files and folders of the old collection
-            if [ ! "${ligand_index}" = "1" ]; then
-               clean_collection_files_tmp ${last_ligand_collection}
-            fi
-            # Updating the ligand collection files       
-            echo -n "" > ../workflow/ligand-collections/current/${queue_no}
-            echo "${last_ligand_collection} was completed by queue ${queue_no} on $(date)" >> ../workflow/ligand-collections/done/${queue_no}
-            # Getting the next collection if there is one more
-            next_ligand_collection
-            prepare_collection_files_tmp
-            # Getting the first ligand of the new collection
-            next_ligand=$(tar -tf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_no} | head -n 1 | awk -F '.' '{print $1}')
-            docking_type_index_start=1
-            docking_replica_index_start=1
-        fi
+        last_ligand=$(tail -n 1 ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status 2>/dev/null | awk -F '[:. ]' '{print $1}' || true)
+        next_ligand=$(tar -tf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar | grep -w -A 1 "${last_ligand}" | grep -v ${last_ligand} | awk -F '[/.]' '{print $2}')
     fi
-    
+
+    # Checking if we can use the collection determined so far
+    if [ -n "${next_ligand}" ]; then
+
+        # Preparing the collection folders if this is the first ligand of this queue
+        if [[ "${ligand_index}" == "1" ]]; then
+            prepare_collection_files_tmp
+        fi
+
+    # Otherwise we have to use a new ligand collection
+    else
+        collection_complete="true"
+        # Cleaning up the files and folders of the old collection
+        if [ ! "${ligand_index}" = "1" ]; then
+            clean_collection_files_tmp ${next_ligand_collection}
+        fi
+        # Getting the next collection if there is one more
+        next_ligand_collection
+        prepare_collection_files_tmp
+        # Getting the first ligand of the new collection
+        next_ligand=$(tar -tf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/collections/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar | head -n 2 | tail -n 1 | awk -F '[/.]' '{print $2}')
+        docking_type_index_start=1
+        docking_replica_index_start=1
+    fi
+
     # Displaying the heading for the new ligand
     echo ""
-    echo "      Ligand ${ligand_index} of job ${old_job_no} belonging to collection ${next_ligand_collection_basename}: ${next_ligand}"
+    echo "      Ligand ${ligand_index} of job ${VF_OLD_JOB_NO} belonging to collection ${next_ligand_collection}: ${next_ligand}"
     echo "*****************************************************************************************"
-    echo ""
-        
+
+    # Setting up variables
+    # Checking if the current ligand index divides by ligand_check_interval
+    if [ "$((ligand_index % ligand_check_interval))" == "0" ]; then
+        # Determining the VF_CONTROLFILE to use for this jobline
+        VF_CONTROLFILE=""
+        for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do
+            file_basename=$(basename $file)
+            jobline_range=${file_basename/.*}
+            jobline_no_start=${jobline_range/-*}
+            jobline_no_end=${jobline_range/*-}
+            if [[ "${jobline_no_start}" -le "${VF_JOBLINE_NO}" && "${VF_JOBLINE_NO}" -le "${jobline_no_end}" ]]; then
+                export VF_CONTROLFILE="${file}"
+                break
+            fi
+        done
+        if [ -z "${VF_CONTROLFILE}" ]; then
+            VF_CONTROLFILE="../workflow/control/all.ctrl"
+        fi
+
+        # Checking if this queue line should be stopped immediately
+        line=$(cat ${VF_CONTROLFILE} | grep "^stop_after_next_check_interval=")
+        stop_after_next_check_interval=${line/"stop_after_next_check_interval="}
+        if [ "${stop_after_next_check_interval}" = "true" ]; then
+            echo
+            echo " * This queue will be stopped due to the stop_after_next_check_interval flag in the VF_CONTROLFILE ${VF_CONTROLFILE}."
+            echo
+            end_queue 0
+        fi
+    fi
+
+    # Checking if there is enough time left for a new ligand
+    if [[ "${VF_LITTLE_TIME}" = "true" ]]; then
+        echo
+        echo " * This queue will be ended because a signal was caught indicating this queue should stop now."
+        echo
+        end_queue 0
+    fi
+
+    if [[ "$((VF_TIMELIMIT_SECONDS - $(date +%s ) + VF_START_TIME_SECONDS )) " -lt "${minimum_time_remaining}" ]]; then
+        echo
+        echo " * This queue will be ended because there is less than the minimum time remaining (${minimum_time_remaining} s) for the job (by internal calculation)."
+        echo
+        end_queue 0
+    fi
+
+    # Updating the ligand-list files
+    update_ligand_list_start
+    
+    # Adjusting the ligand-list file
+    ligand_list_entry="${ligand_list_entry} entry-type:initial"
+    
     # Loop for each docking type
     for docking_type_index in $(seq ${docking_type_index_start} ${docking_type_index_end}); do
-    
+
+        # Variables
         docking_type_name=${docking_type_names[(($docking_type_index - 1))]}
         docking_type_program=${docking_type_programs[(($docking_type_index - 1))]}
         docking_type_inputfolder=${docking_type_inputfolders[(($docking_type_index - 1))]}
         docking_replica_index_end=${docking_type_replicas_total[(($docking_type_index - 1))]}
-                
+
         # Loop for each replica for the current docking type
         for docking_replica_index in $(seq ${docking_replica_index_start} ${docking_replica_index_end}); do
 
@@ -620,44 +771,18 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
             docking_replica_index_start=1 # Need to reset it in case a new job was started before and set the variable to a value greater than 1
             start_time_ms=$(($(date +'%s * 1000 + %-N / 1000000')))
             fail_reason=""
-                     
-            # Determining the controlfile to use for this jobline
-            controlfile=""
-            for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do 
-                file_basename=$(basename $file)
-                jobline_range=${file_basename/.*}
-                jobline_no_start=${jobline_range/-*}
-                jobline_no_end=${jobline_range/*-}
-                if [[ "${jobline_no_start}" -le "${jobline_no}" && "${jobline_no}" -le "${jobline_no_end}" ]]; then
-                    export controlfile="${file}"
-                    break
-                fi
-            done
-            if [ -z "${controlfile}" ]; then
-                controlfile="../workflow/control/all.ctrl"
-            fi
-          
-            # Checking if this queue line should be stopped immediately
-            line=$(cat ${controlfile} | grep "^stop_after_current_docking=")
-            stop_after_current_docking=${line/"stop_after_current_docking="}
-            if [ "${stop_after_current_docking}" = "yes" ]; then
-                echo
-                echo "This queue was stopped by the stop_after_current_docking flag in the controlfile ${controlfile}."
-                echo
-                end_queue 0
-            fi
-          
+
             # Checking if there is enough time left for a new ligand
-            if [[ "${little_time}" = "true" ]]; then
+            if [[ "${VF_LITTLE_TIME}" = "true" ]]; then
                 echo
                 echo "This queue was ended because a signal was caught indicating this queue should stop now."
                 echo
                 end_queue 0
             fi
-            echo $start_time_seconds
+            echo $VF_START_TIME_SECONDS
             echo $(date +%s)
-            echo $timelimit_seconds
-            if [[ "$((timelimit_seconds - $(date +%s ) + start_time_seconds )) " -lt "${minimum_time_remaining}" ]]; then
+            echo $VF_TIMELIMIT_SECONDS
+            if [[ "$((VF_TIMELIMIT_SECONDS - $(date +%s ) + VF_START_TIME_SECONDS )) " -lt "${minimum_time_remaining}" ]]; then
                 echo
                 echo "This queue was ended because there were less than the minimum time remaining (${minimum_time_remaining} s) for the job (by internal calculation)."
                 echo
@@ -666,118 +791,61 @@ for ligand_index in $(seq 1 ${no_of_ligands}); do
 
             # Updating the ligand-list files
             update_ligand_list_start
-           
-            # Displaying the heading for the new iteration 
+
+            # Displaying the heading for the new iteration
             echo
             echo "   ***   Starting new docking run: docking type ${docking_type_index}/${docking_type_index_end} (${docking_type_name}), replica ${docking_replica_index}/${docking_replica_index_end}   ***   "
             echo
-        
-            # Extracting the next ligand
-            tar -xOf /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/collections/${next_ligand_collection_sub1}/${next_ligand_collection_no} ${next_ligand}.pdbqt.gz | zcat  > /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt
-        
+
             # Checking if ligand contains B, Si, Sn
-            if grep -q " B " /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt; then
+            if grep -q " B " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
                 error_response_ligand_elements "B"
-            elif grep -i -q " Si " /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt; then 
+            elif grep -i -q " Si " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
                 error_response_ligand_elements "Si"
-            elif grep -i -q " Sn " /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt; then 
+            elif grep -i -q " Sn " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
                 error_response_ligand_elements "Sn"
-            fi       
-                
-            # Getting the number of cpus per queue
-            line="$(cat ${controlfile} | grep "^cpus_per_queue=")" 
-            cpus_per_queue=${line/"cpus_per_queue="}
-        
+            fi
+
             # Running the docking program
             trap 'error_response_docking' ERR
-            case $docking_type_program in 
+            case $docking_type_program in
                 qvina02)
-                    bin/time_bin -a -o "/tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/qvina02 --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt --out /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt > /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}
-                    score_value=$(grep " 1 " /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
+                    
+                    bin/time_bin -a -o "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/qvina02 --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt --out ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.pdbqt > ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}
+                    score_value=$(grep " 1 " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
                     ;;
                 qvina_w)
-                    bin/time_bin -a -o "/tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/qvina_w --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt --out /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt > /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}
-                    score_value=$(grep " 1 " /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
+                    bin/time_bin -a -o "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/qvina_w --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt --out ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.pdbqt > ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}
+                    score_value=$(grep " 1 " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
                     ;;
                 vina)
-                    bin/time_bin -a -o "/tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/vina --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt --out /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt > /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}
-                    score_value=$(grep " 1 " /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
-                    ;;   
+                    bin/time_bin -a -o "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/vina --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt --out ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.pdbqt > ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}
+                    score_value=$(grep " 1 " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index} | awk -F ' ' '{print $2}')
+                    ;;
                 smina*)
-                    bin/time_bin -a -o "/tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/smina --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt --out /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt --out_flex /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.flexres.pdb --log /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index} --atom_terms /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.atomterms
-                    score_value=$(tac /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index} | grep -m 1 "^1    " | awk '{print $2}')
-                    ;;  
+                    bin/time_bin -a -o "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/smina --cpu ${cpus_per_queue} --config ${docking_type_inputfolder}/config.txt --ligand ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt --out ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.pdbqt --out_flex ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.flexres.pdb --log ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index} --atom_terms ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.atomterms
+                    score_value=$(tac ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index} | grep -m 1 "^1    " | awk '{print $2}')
+                    ;;
                 adfr)
                     adfr_configfile_options=$(cat ${docking_type_inputfolder}/config.txt | tr -d "\n")
-                    bin/time_bin -a -o "/tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/adfr -l /tmp/${USER}/${queue_no}/input-files/ligands/pdbqt/individual/${next_ligand}.pdbqt --jobName adfr ${adfr_configfile_options}
-                    rename "_adfr_adfr.out" "" ${next_ligand}_replica-${docking_replica_index} /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}*
-                    score_value=$(grep -m 1 "FEB" /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt | awk -F ': ' '{print $(NF)}')
+                    bin/time_bin -a -o "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out" -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" bin/adfr -l ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt --jobName adfr ${adfr_configfile_options}
+                    rename "_adfr_adfr.out" "" ${next_ligand}_replica-${docking_replica_index} ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}*
+                    score_value=$(grep -m 1 "FEB" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.pdbqt | awk -F ': ' '{print $(NF)}')
                     ;;
                 *)
                     error_response_docking_program $docking_type_program
-            esac 
-            trap 'error_response_std $LINENO' ERR
-            
-
-            # Archiving the files and results
-            case $docking_type_program in 
-                qvina02 | qvina_w | vina | smina* | adfr)
-                    
-                    # Updating the summary file
-                    update_summary 
-                    
-                    # Compressing and archiving the pdbqt output file
-                    gzip /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.pdbqt
-                    tar -r -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/all.tar -C /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/ ${next_ligand}_replica-${docking_replica_index}.pdbqt.gz
-                
-                    # Compressing and archiving the screen/log output
-                    gzip /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}
-                    tar -r -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/all.tar -C /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/logfiles/${next_ligand_collection_basename}/ ${next_ligand}_replica-${docking_replica_index}.gz
-                    ;;
             esac
-            case $docking_type_program in
-                adfr)
-                    # Compressing and archiving the .dro (docking result object) output file
-                    gzip /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/dro/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.dro
-                    tar -r -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/all.tar -C /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/ ${next_ligand}_replica-${docking_replica_index}.dro.gz
-                    ;;
-                smina_rigid)
-                    # Compressing and archiving the atomterms output file
-                    gzip /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.atomterms
-                    tar -r -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/all.tar -C /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/ ${next_ligand}_replica-${docking_replica_index}.atomterms.gz
-                    ;;
-                smina_flexible)
-                    # Compressing and archiving the atomterms output file
-                    gzip /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.atomterms
-                    tar -r -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/all.tar -C /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/ ${next_ligand}_replica-${docking_replica_index}.atomterms.gz
-                    # Compressing and archiving the pdbqt flexres output file
-                    gzip /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/${next_ligand}_replica-${docking_replica_index}.flexres.pdb
-                    tar -r -f /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/all.tar -C /tmp/${USER}/${queue_no}/output-files/incomplete/${docking_type_name}/results/${next_ligand_collection_basename}/ ${next_ligand}_replica-${docking_replica_index}.flexres.pdb.gz
-                    ;;
-            esac 
-            
+            trap 'error_response_std $LINENO' ERR
+
+
+            # Updating the summary
+            update_summary
+
             # Updating the ligand list
-            update_ligand_list_end_success
-            docking_counter_currentjob=$((docking_counter_currentjob + 1))
-           
-            if [ "${verbosity}" == "debug" ]; then 
-                echo -e "\n***************** INFO **********************" 
-                echo ${queue_no}
-                ls -lh ../workflow/ligand-collections/current/${queue_no}  2>/dev/null || true
-                cat ../workflow/ligand-collections/current/${queue_no}  2>/dev/null || true
-                cat ../workflow/ligand-collections/current/${squeue_no}  2>/dev/null || true
-                echo -e "***************** INFO END ******************\n"
-            fi
-            needs_cleaning=true
+            update_ligand_list_end "true"
+
+            # Variables
+            needs_cleaning="true"
         done
     done
 done
-
-# Cleaning up everything
-clean_collection_files_tmp ${next_ligand_collection}
-clean_queue_files_tmp
-
-# Printing some final information
-echo
-echo "All ligands of this queue have been processed."
-echo

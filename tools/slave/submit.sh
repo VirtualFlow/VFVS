@@ -40,8 +40,9 @@ trap 'error_response_nonstd $LINENO' ERR
 
 # Variables
 # Getting the batchsystem type
+batchsystem="$(grep -m 1 "^batchsystem=" ../${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 jobfile=${1}
-batchsystem="$(grep -m 1 "^batchsystem=" ../../workflow/control/all.ctrl | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+jobline=$(echo ${jobfile} | awk -F '[./]' '{print $(NF-1)}')
 
 # Submitting the job
 cd ../

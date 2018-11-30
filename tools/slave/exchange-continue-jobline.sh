@@ -3,10 +3,10 @@
 #
 # Usage: . exchange-continue-jobline first_jobline_no last_jobline_no job_template [quiet]
 #
-# Description: Exchange jobfiles and continue a jobline which was already started. 
+# Description: Exchange jobfiles and continue a jobline which was already started.
 #
 # Option: quiet (optional)
-#    Possible values: 
+#    Possible values:
 #        quiet: No information is displayed on the screen.
 #
 # Revision history:
@@ -20,7 +20,7 @@
 usage="Usage: . exchange-continue-jobline first_jobline_no last_jobline_no job_template [quiet]"
 if [ "${1}" == "-h" ]; then
    echo -e "\n${usage}\n\n"
-   exit 0 
+   exit 0
 fi
 if [[ "$#" -ne "3" && "$#" -ne "4" ]]; then
    echo -e "\nWrong number of arguments. Exiting."
@@ -28,7 +28,7 @@ if [[ "$#" -ne "3" && "$#" -ne "4" ]]; then
    exit 1
 fi
 
-# Standard error response 
+# Standard error response
 error_response_nonstd() {
     echo "Error was trapped which is a nonstandard error."
     echo "Error in bash script $(basename ${BASH_SOURCE[0]})"
@@ -51,8 +51,8 @@ fi
 # Continuing the jobline
 for jobline_no in $(seq ${first_jobline_no} ${last_jobline_no}); do
     i=$(( i + 1 ))
-    . exchange-jobfile ${job_template} ${jobline_no} ${quiet_mode}
-    . continue-jobline ${jobline_no} "sync"
+    . exchange-jobfile.sh ${job_template} ${jobline_no} ${quiet_mode}
+    . continue-jobline.sh ${jobline_no} "sync"
 done
 
 # Displaying some information if no quiet option

@@ -4,93 +4,129 @@
 # Description: Subjobfile which runs on one node and belongs to one batch system step. 
 #
 # Revision history:
-# 2015-12-28  Import of file from JANINA version 2.2 and adaption to STELLAR version 6.1
+# 2015-12-05  Created (version 1.2)
+# 2015-12-07  Various improvemnts (version 1.3)
+# 2015-12-16  Adaption to version 2.1
 # 2016-07-16  Various improvements
 #
 # ---------------------------------------------------------------------------
 
-# Setting the verbosity level
-if [[ "${verbosity}" == "debug" ]]; then
-    set -x
-fi
-
-# Setting the error sensitivity 
-if [[ "${error_sensitivity}" == "high" ]]; then
-    set -uo pipefail
-    trap "" PIPE        # SIGPIPE = exit code 141, means broken pipe. Happens often, e.g. if head is listening and got all the lines it needs.     
-fi
-
 # Functions
-# Standard error response 
+# Standard error response
 error_response_std() {
+
+    # Printint some information
     echo "Error was trapped" 1>&2
     echo "Error in bash script $(basename ${BASH_SOURCE[0]})" 1>&2
     echo "Error on line $1" 1>&2
-    echo "Environment variables" 1>&2 
+    echo "Environment variables" 1>&2
     echo "----------------------------------" 1>&2
     env 1>&2
-    if [[ "${error_response}" == "ignore" ]]; then
+
+    # Checking error response
+    if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]]; then
+
+        # Printing some information
         echo -e "\n * Ignoring error. Trying to continue..."
-    elif [[ "${error_response}" == "next_job" ]]; then
-        echo -e "\n * Trying to stop this step without stopping the jobline/causing a failure..."
+    elif [[ "${VF_ERROR_RESPONSE}" == "next_job" ]]; then
+
+        # Printing some information
+        echo -e "\n * Trying to stop this queue without causing the jobline to fail..."
+
+        # Exiting
         exit 0
-    elif [[ "${error_response}" == "fail" ]]; then
+
+    elif [[ "${VF_ERROR_RESPONSE}" == "fail" ]]; then
+
+        # Printing some information
+        echo -e "\n * Trying to stop this queue and causing the jobline to fail..."
+
+        # Exiting
         exit 1
     fi
 }
 trap 'error_response_std $LINENO' ERR
 
-# Handling signals
 time_near_limit() {
-    echo "The script ${BASH_SOURCE[0]} caught a time limit signal at $(date)."
+    echo "The script one-step.sh caught a time limit signal."
     echo "Sending this signal to all the queues started by this step."
     kill -s 10 ${pids[*]} || true
     wait
 }
 trap 'time_near_limit' 10
-termination_signal() {
-    echo "The script ${BASH_SOURCE[0]} caught a termination signal at $(date)."
-    echo "Sending termination signal to all the queues started by this step."
+
+another_signal() {
+    echo "The script one-step.sh caught a terminating signal."
+    echo "Sending terminating signal to all the queues started by this step."
     kill -s 1 ${pids[*]} || true
     wait
 }
-trap 'termination_signal' 1 2 3 9 12 15
+trap 'time_near_limit' 1 2 3 9 15
 
 
-# Creating the required folders    
-if [ ! -d "/tmp/${USER}/" ]; then
-    mkdir /tmp/${USER}/
-fi
+clean_up() {
+
+    # Removing the used temp folder folder
+    rm -r ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/packages || true
+}
+trap 'clean_up' EXIT
+
+# Sourcing bashrc
+source ~/.bashrc
 
 prepare_queue_files_tmp() {
     # Creating the required folders    
-    if [ -d "/tmp/${USER}/${queue_no}/" ]; then
-        rm -r /tmp/${USER}/${queue_no}/
+    if [ -d "${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/" ]; then
+        rm -r ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/
     fi
-    mkdir -p /tmp/${USER}/${queue_no}/workflow/output-files/queues
+    mkdir -p ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues
     
     # Copying the requires files
-    if ls -1 ../workflow/output-files/queues/queue-${queue_no}.* > /dev/null 2>&1; then
-        cp ../workflow/output-files/queues/queue-${queue_no}.* /tmp/${USER}/${queue_no}/workflow/output-files/queues/
-    fi    
+    if ls -1 ../workflow/output-files/queues/queue-${VF_QUEUE_NO}.* > /dev/null 2>&1; then
+        cp ../workflow/output-files/queues/queue-${VF_QUEUE_NO}.* ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/
+    fi
 }
 
-# Setting important variables
-export queue_no_2=${step_no}
-export queue_no_12="${queue_no_1}-${queue_no_2}"
-export little_time="false";
-export start_time_seconds
-export timelimit_seconds
+# Verbosity
+if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
+    set -x
+fi
+
+# Setting and exporting variables
+export VF_QUEUE_NO_2=${VF_STEP_NO}
+export VF_QUEUE_NO_12="${VF_QUEUE_NO_1}-${VF_QUEUE_NO_2}"
+export VF_LITTLE_TIME="false";
+export VF_START_TIME_SECONDS
+export VF_TIMELIMIT_SECONDS
 pids=""
+store_queue_log_files="$(grep -m 1 "^store_queue_log_files=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+
 
 # Starting the individual queues
-for i in $(seq 1 ${queues_per_step}); do
-    export queue_no_3="${i}"
-    export queue_no="${queue_no_12}-${queue_no_3}"
+for i in $(seq 1 ${VF_QUEUES_PER_STEP}); do
+    export VF_QUEUE_NO_3="${i}"
+    export VF_QUEUE_NO="${VF_QUEUE_NO_12}-${VF_QUEUE_NO_3}"
     prepare_queue_files_tmp
-    echo "Job step ${step_no} is starting queue ${queue_no} on host $(hostname)."
-    bash ../workflow/job-files/sub/one-queue.sh >> /tmp/${USER}/${queue_no}/workflow/output-files/queues/queue-${queue_no}.out 2>&1 &
-    pids[$(( i - 0 ))]=$!
+    echo "Job step ${VF_STEP_NO} is starting queue ${VF_QUEUE_NO} on host $(hostname)."
+    if [ ${store_queue_log_files} == "all_uncompressed" ]; then
+        source ../workflow/job-files/sub/one-queue.sh &>> ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.all &
+    elif [ ${store_queue_log_files} == "all_compressed" ]; then
+        source ../workflow/job-files/sub/one-queue.sh 2>&1 | gzip >> ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.all.gz &
+    elif [ ${store_queue_log_files} == "only_error_uncompressed" ]; then
+        source ../workflow/job-files/sub/one-queue.sh 2> ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.err &
+    elif [ ${store_queue_log_files} == "only_error_compressed" ]; then
+        source ../workflow/job-files/sub/one-queue.sh 2> >(gzip >> ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.err.gz) &
+    elif [ ${store_queue_log_files} == "std_compressed_error_uncompressed" ]; then
+        source ../workflow/job-files/sub/one-queue.sh 1> >(gzip >> ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.std.gz) 2>> ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.err &
+    elif [ ${store_queue_log_files} == "all_compressed_error_uncompressed" ]; then
+        source ../workflow/job-files/sub/one-queue.sh 1> >(gzip >> ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.all.gz) 2> >(tee ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.err) &
+    elif [ ${store_queue_log_files} == "none" ]; then
+        source ../workflow/job-files/sub/one-queue.sh 2>&1 >/dev/null &
+    else
+        echo "Error: The variable store_log_file in the control file ${VF_CONTROLFILE} has an unsupported value (${store_queue_log_files})."
+        false
+    fi
+    pids[$(( i - 1 ))]=$!
 done
 
 # Checking if all queues exited without error ("wait" waits for all of them, but always returns 0)
@@ -99,7 +135,8 @@ for pid in ${pids[@]}; do
     wait $pid || let "exit_code=1"
 done
 if [ "$exit_code" == "1" ]; then
-    error_response_std
+    error_response_std $LINENO
 fi
 
+# Cleaning up
 exit 0

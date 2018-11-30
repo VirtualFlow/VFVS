@@ -1,7 +1,7 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
 #
-# Usage: Usage: vf_start_jobline start_jobline_no end_jobline_no job_template submit_mode folders_to_reset delay_time_in_seconds [quiet]
+# Usage: Usage: vf_start_jobline.sh start_jobline_no end_jobline_no job_template submit_mode folders_to_reset delay_time_in_seconds [quiet]
 #
 # Description: Creates many copies of a template job file.
 #
@@ -12,7 +12,7 @@
 #
 # Option: folders_to_reset
 #    Possible values: 
-#        Are the possible values for the folders_to_reset option of the reset-folders script.
+#        Are the possible values for the folders_to_reset option of the reset-folders.sh script.
 #        Anything else: no resetting of folders
 #
 # Option: quiet (optional)
@@ -22,24 +22,22 @@
 # Option: delay_time_in_seconds
 #    Possible values: Any nonnegative integer
 #
-# Revision history:
-# 2015-12-05  Created (version 1.2)
-# 2015-12-05  Various improvements (version 1.9)
-# 2015-12-16  Adaption to version 2.1
-# 2016-07-16  Various improvements
-# 2017-03-18  Removing the partition as an argument (instead including it in the config file)
-#
 # ---------------------------------------------------------------------------
 
 #Checking the input arguments
-usage="Usage: vf_start_jobline <start_jobline_no> <end_jobline_no> <job_template> <submit_mode> <folders_to_reset> <delay_time_in_seconds> [quiet]
+usage="Usage: vf_start_jobline.sh <start_jobline_no> <end_jobline_no> <job_template> <submit_mode> <folders_to_reset> <delay_time_in_seconds> [quiet]
 
 Arguments:
     <start_jobline_no>:         Positive integer
     <end_jobline_no>:           Positive integer
     <job_template>:             Filename (with absolute or relative path) of the job templates in the template folder, depending on the batchsystem
     <submit mode>:              Whether the newly created job should be directly submitted to the batch system. Possible options: submit, nosubmit
-    <folder_to_reset>:          Useful for cleaning up the workflow and output files of previous runs if desired. Possible values are the same for the script slave/reset-folders (see the header of the file)
+    <folder_to_reset>:          Useful for cleaning up the workflow and output files of previous runs if desired. Possible values:
+        workflow: Cleans the workflow folder
+        output: Cleans the output-files folder
+        templates: Copies all the template files
+        all: Cleans the workflow and the output-files folder
+        none: no cleaning
     <time delay_in_seconds>:    Time delay between submitted jobs (to disperse the jobs in time to prevent problems with the central task list)
 "
 
@@ -78,15 +76,26 @@ delay_time=${6}
 folders_to_reset=${5}
 submit_mode=${4}
 job_template=${3}
+if [ -f ../workflow/control/all.ctrl ]; then
+    export VF_CONTROLFILE="../workflow/control/all.ctrl"
+else
+    export VF_CONTROLFILE="templates/all.ctrl"
+fi
+
+# Verbosity
+VF_VERBOSITY_COMMANDS="$(grep -m 1 "^verbosity_commands=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+export VF_VERBOSITY_COMMANDS
+if [ "${VF_VERBOSITY_COMMANDS}" = "debug" ]; then
+    set -x
+fi
 
 # Cleaning up if specified
 cd slave
-. reset-folders ${folders_to_reset}
+. reset-folders.sh ${folders_to_reset}
 cd ..
 
 # Getting the batchsystem type
-line=$(grep -m 1 batchsystem ../workflow/control/all.ctrl)
-batchsystem="${line/batchsystem=}"
+batchsystem="$(grep -m 1 "^batchsystem=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Formatting screen output
 echo "" 
@@ -96,7 +105,7 @@ for i in $(seq ${start_jobline_no} ${end_jobline_no}); do
     cp ${job_template} ../workflow/job-files/main/${i}.job
     sed -i "s/-1\.1/-${i}\.1/g" ../workflow/job-files/main/${i}.job
     cd slave
-    . sync-jobfile ${i}
+    . sync-jobfile.sh ${i}
     cd ..
 done
 
@@ -107,7 +116,7 @@ echo ""
 if [[ "${submit_mode}" = "submit" ]]; then
     cd slave
     for i in $(seq ${start_jobline_no} ${end_jobline_no}); do
-        . submit ../workflow/job-files/main/${i}.job
+        . submit.sh ../workflow/job-files/main/${i}.job
         if [ ! "${i}" = "${end_jobline_no}" ]; then
             sleep ${delay_time}
         fi

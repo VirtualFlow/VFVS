@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #Checking the input arguments
-usage="Usage: vf_redistribute_collections_single <input_collection_file> <queues_per_step_new> <nodes_per_job_new> <first_job_no> <output_folder>
+usage="Usage: vf_redistribute_collections_single.sh <input_collection_file> <queues_per_step_new> <steps_per_job_new> <first_job_no> <output_folder>
 
 One collection will be placed per collection file/queue.
 All existing files in the output folder will be deleted."
@@ -36,9 +36,16 @@ trap 'error_response_nonstd $LINENO' ERR
 # Variables
 input_collection_file=$1
 queues_per_step_new=$2
-nodes_per_job_new=$3
+steps_per_job_new=$3
 first_job_no=$4
 output_folder=$5
+export VF_CONTROLFILE="../workflow/control/all.ctrl"
+
+# Verbosity
+export VF_VERBOSITY_COMMANDS="$(grep -m 1 "^verbosity_commands=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+if [ "${VF_VERBOSITY_COMMANDS}" = "debug" ]; then
+    set -x
+fi
 
 # Preparing the directory
 echo -e " *** Preparing the output directory ***\n"
@@ -56,7 +63,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     if [ "${queue_no}" -gt "${queues_per_step_new}" ]; then
         queue_no=1
         step_no=$((step_no + 1))
-        if [ "${step_no}" -gt "${nodes_per_job_new}" ]; then
+        if [ "${step_no}" -gt "${steps_per_job_new}" ]; then
             step_no=1
             job_no=$((job_no + 1))
         fi
