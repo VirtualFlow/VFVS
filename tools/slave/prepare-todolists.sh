@@ -31,7 +31,7 @@ queue_no_1="${1}"
 steps_per_job="${2}"
 queues_per_step="${3}"
 export LC_ALL=C
-todo_file_temp=${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all
+todo_file_temp=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all
 
 # Verbosity (the script is only called by the job scripts)
 if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
@@ -147,7 +147,7 @@ clean_up() {
 #    fi
     cp ${todo_file_temp}  ../../workflow/ligand-collections/todo/todo.all.locked
     mv ../../workflow/ligand-collections/todo/todo.all.locked ../../workflow/ligand-collections/todo/todo.all
-    rm -r ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_JOBLINE_NO} || true
+    rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO} || true
 }
 trap 'clean_up' EXIT
 
@@ -155,8 +155,8 @@ trap 'clean_up' EXIT
 status="false";
 k="1"
 max_iter=250
-if [ ! -d ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ ]; then
-    mkdir -p ${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
+if [ ! -d ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ ]; then
+    mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
 fi
 modification_time_difference=0
 start_time_waiting="$(date +%s)"
@@ -254,7 +254,7 @@ if [[ ! "$*" = *"quiet"* ]]; then
 fi
 
 # Creating a temporary to-do file with the new ligand collections
-todo_new_temp_basename="${VF_TMPDIR}/${USER}/VFLP/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.new"
+todo_new_temp_basename="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.new"
 
 # Getting the number of ligands which are already in the local to-do lists
 ligands_todo=""
