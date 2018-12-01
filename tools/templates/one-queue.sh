@@ -128,7 +128,6 @@ update_ligand_list_end() {
 
     # Variables
     success="${1}" # true or false
-    pipeline_part="${2}"
     ligand_total_time_ms="$(($(date +'%s * 1000 + %-N / 1000000') - ${ligand_start_time_ms}))"
 
     # Updating the ligand-list file
@@ -137,9 +136,9 @@ update_ligand_list_end() {
     # Printing some information
     echo
     if [ "${success}" == "true" ]; then
-        echo "Ligand ${next_ligand} completed ($2) on $(date)."
+        echo "Ligand ${next_ligand} completed successfully on $(date)."
     else
-        echo "Ligand ${next_ligand} failed ($2) on on $(date)."
+        echo "Ligand ${next_ligand} failed on $(date)."
     fi
     echo "Total time for this ligand (${next_ligand}) in ms: ${ligand_total_time_ms}"
     echo
@@ -235,15 +234,6 @@ next_ligand_collection() {
 
     # Updating the ligand-collection files
     echo "${next_ligand_collection} ${next_ligand_collection_length}" > ../workflow/ligand-collections/current/${VF_QUEUE_NO}
-
-    if [ "${VF_VERBOSITY_LOGFILES}" == "debug" ]; then
-        echo -e "\n***************** INFO **********************"
-        echo ${VF_QUEUE_NO}
-        ls -lh ../workflow/ligand-collections/current/${VF_QUEUE_NO} 2>/dev/null || true
-        cat ../workflow/ligand-collections/current/${VF_QUEUE_NO} 2>/dev/null || true
-        cat ../workflow/ligand-collections/todo/${VF_QUEUE_NO} 2>/dev/null || true
-        echo -e "***************** INFO END ******************\n"
-    fi
 
     # Creating the subfolder in the ligand-lists folder
     mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists
@@ -742,12 +732,6 @@ while true; do
         end_queue 0
     fi
 
-    # Updating the ligand-list files
-    update_ligand_list_start
-    
-    # Adjusting the ligand-list file
-    ligand_list_entry="${ligand_list_entry} entry-type:initial"
-    
     # Loop for each docking type
     for docking_type_index in $(seq ${docking_type_index_start} ${docking_type_index_end}); do
 
@@ -772,9 +756,6 @@ while true; do
                 echo
                 end_queue 0
             fi
-            echo $VF_START_TIME_SECONDS
-            echo $(date +%s)
-            echo $VF_TIMELIMIT_SECONDS
             if [[ "$((VF_TIMELIMIT_SECONDS - $(date +%s ) + VF_START_TIME_SECONDS )) " -lt "${minimum_time_remaining}" ]]; then
                 echo
                 echo "This queue was ended because there were less than the minimum time remaining (${minimum_time_remaining} s) for the job (by internal calculation)."
