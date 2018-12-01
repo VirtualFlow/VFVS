@@ -37,7 +37,7 @@ echo
 echo
 echo "*** Job Infos by checkjob and qstat -f ***"
 echo "--------------------------------------------------"
-qstat -j $JOB_ID
+qstat -j ${JOB_ID}
 
 # Running the Job - Screening of the Ligands
 ######################################################################
