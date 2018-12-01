@@ -530,7 +530,7 @@ docking_type_inputfolders_length=${#docking_type_inputfolders[@]}
 
 # Getting the value for the variable minimum_time_remaining
 minimum_time_remaining="$(grep -m 1 "^minimum_time_remaining=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-minimum_time_remaining=$((${line/"minimum_time_remaining="} * 60)) # Conversion from minutes to seconds
+minimum_time_remaining=$((minimum_time_remaining * 60)) # Conversion from minutes to seconds
 
 # Checking the variables for errors
 if ! [ "${docking_type_index_end}" -eq "${docking_type_programs_length}" ]; then
