@@ -519,7 +519,7 @@ IFS=':' read -a docking_type_programs <<< "$docking_type_programs"
 docking_type_programs_length=${#docking_type_programs[@]}
 
 # Determining the docking type replicas
-docking_type_replicas_total="$(grep -m 1 "^docking_type_replicas_total=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+docking_type_replicas_total="$(grep -m 1 "^docking_type_replicas=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_type_replicas_total <<< "$docking_type_replicas_total"
 docking_type_replicas_total_length=${#docking_type_replicas_total[@]}
 
