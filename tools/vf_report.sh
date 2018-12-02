@@ -378,7 +378,7 @@ if [[ "${category}" = "workflow" ]]; then
             dockings_failed=0
         fi
     fi
-    echo -ne " Number of dockings failed completed: ${dockings_success}                                                \\r"
+    echo -ne " Number of dockings failed completed: ${dockings_failed}                                                \\r"
     echo
 
     echo
