@@ -340,7 +340,7 @@ if [[ "${category}" = "workflow" ]]; then
             ligands_failed=0
         fi
     fi
-    echo -ne " Number of ligands failed completed: ${ligands_failed}                                                \\r"
+    echo -ne " Number of ligands failed: ${ligands_failed}                                                \\r"
     echo
 
     echo
@@ -378,7 +378,7 @@ if [[ "${category}" = "workflow" ]]; then
             dockings_failed=0
         fi
     fi
-    echo -ne " Number of dockings failed completed: ${dockings_failed}                                                \\r"
+    echo -ne " Number of dockings failed: ${dockings_failed}                                                \\r"
     echo
 
     echo
