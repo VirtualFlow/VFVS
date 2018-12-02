@@ -179,7 +179,7 @@ batchsystem="$(grep -m 1 "^batchsystem=" ${controlfile} | tr -d '[[:space:]]' | 
 job_letter="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Docking variables
-docking_type_replicas_total="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+docking_type_replicas_total="$(grep -m 1 "^docking_type_replicas=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_type_replicas_total <<< "$docking_type_replicas_total"
 docking_runs_perligand=0
 for value in ${docking_type_replicas_total[@]}; do
@@ -340,7 +340,7 @@ if [[ "${category}" = "workflow" ]]; then
             ligands_failed=0
         fi
     fi
-    echo -ne " Number of ligands failed completed: ${dockings_failed}                                                \\r"
+    echo -ne " Number of ligands failed completed: ${ligands_failed}                                                \\r"
     echo
 
     echo
