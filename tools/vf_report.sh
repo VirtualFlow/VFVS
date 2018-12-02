@@ -340,14 +340,11 @@ if [[ "${category}" = "workflow" ]]; then
             ligands_failed=0
         fi
     fi
-    echo -ne " Number of ligands failed completed: ${ligands_success}                                                \\r"
+    echo -ne " Number of ligands failed completed: ${dockings_failed}                                                \\r"
     echo
 
     echo
     echo
-
-
-
 
     echo "                                Dockings (in completed collections)   "
     echo "................................................................................................"
@@ -356,7 +353,7 @@ if [[ "${category}" = "workflow" ]]; then
 
     dockings_started=0
     if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        dockings_started="$(grep -ho "Ligands-started:[0-9]\+" ../workflow/ligand-collections/done/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+        dockings_started="$(grep -ho "Dockings-started:[0-9]\+" ../workflow/ligand-collections/done/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
         if [[ -z "${dockings_started// }" ]]; then
             dockings_started=0
         fi
@@ -366,7 +363,7 @@ if [[ "${category}" = "workflow" ]]; then
 
     dockings_success=0
     if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        dockings_success="$(grep -ho "Ligands-succeeded:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+        dockings_success="$(grep -ho "Dockings-succeeded:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
         if [[ -z "${dockings_success// }" ]]; then
             dockings_success=0
         fi
@@ -376,7 +373,7 @@ if [[ "${category}" = "workflow" ]]; then
 
     dockings_failed=0
     if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        dockings_failed="$(grep -ho "Ligands-failed:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
+        dockings_failed="$(grep -ho "Dockings-failed:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
         if [[ -z "${dockings_failed// }" ]]; then
             dockings_failed=0
         fi
@@ -387,7 +384,6 @@ if [[ "${category}" = "workflow" ]]; then
     echo
     echo
 fi
-
 
 # Displaying information about the results if desired
 if [[ "${category}" = "vs" ]]; then
