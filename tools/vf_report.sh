@@ -64,6 +64,12 @@ tmp_dir=/tmp/vfvs_report_$(date | tr " :" "_")
 # Folders
 mkdir -p tmp
 
+# Verbosity
+verbosity="$(grep -m 1 "^verbosity_commands=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+if [ "${verbosity}" = "debug" ]; then
+    set -x
+fi
+
 # Treating the input arguments
 category_flag="false"
 verbosity_flag="false"
