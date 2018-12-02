@@ -399,37 +399,41 @@ if [[ "${category}" = "vs" ]]; then
     rm -r ${tmp_dir}/${USER:0:8}/report/ 2>/dev/null || true
     folder=../output-files/complete/${docking_type_name}
     summary_flag="false"
-    summary_folders="${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses"
-    mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses
-    if [ -d ${folder}/summaries/first-poses/ ]; then
-        if [ -n "$(ls -A ${folder}/summaries/first-poses/)" ]; then
+    summary_folders="${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/"
+    mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries
+    if [ -d ${folder}/summaries/ ]; then
+        if [ -n "$(ls -A ${folder}/summaries/)" ]; then
             summary_flag="true"
-            for file in $(ls ${folder}/summaries/first-poses/  2>/dev/null || true); do
-                tar -xf ${folder}/summaries/first-poses/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/
-            done
-            for folder in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/  2>/dev/null || true); do
-                folder=$(basename ${folder})
-                for file in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder} 2>/dev/null || true); do
-                    file=$(basename ${file})
-                    zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}/${file} > ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}_${file/.gz} || true
+            for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
+                for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
+                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}
                 done
-                rm -r ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/${folder}
+            done
+            for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
+                for folder in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}  2>/dev/null || true); do
+                    folder=$(basename ${folder})
+                    for file in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
+                        file=$(basename ${file})
+                        zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}/${file} >> ${tmp_dir}/${USER:0:8}/report/summaries.all || true
+                    done
+                    rm -r ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}
+                done
             done
         fi
     fi
 
     # Adding the incomplete collections
     folder=../output-files/incomplete/${docking_type_name}
-    if [ -d ${folder}/summaries/first-poses/ ]; then
-        for collection_file in $(ls -A ${folder}/summaries/first-poses/); do
-            cp ${folder}/summaries/first-poses/${collection_file} ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/ 2>/dev/null || true
+    if [ -d ${folder}/summaries/ ]; then
+        for collection_file in $(ls -A ${folder}/summaries/); do
+            zcat ${folder}/summaries/${collection_file} >> ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null || true
             summary_flag="true"
         done
     fi
 
     # Checking if data already available
     if [[ "${summary_flag}" == "false" ]]; then
-        echo -e "\nNo data yet available (probably all data still on ${tmp_dir}). Try again later.\n\n\n"
+        echo -e "\nNo data yet available (probably all data still on the temporary filesystem). Try again later....\n\n\n"
         exit 0
     fi
 
@@ -562,7 +566,7 @@ if [[ "${category}" = "vs" ]]; then
         echo "                          Binding affinity - highest scoring compounds    "
         echo "................................................................................................"
         echo
-        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -Hv "average-score" ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/first-poses/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $11, $10, $13}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
+        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -Hv "average-score" ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $11, $10, $13}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
     fi
 fi
 
