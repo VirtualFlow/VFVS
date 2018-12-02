@@ -98,6 +98,14 @@ store_queue_log_files=all_compressed_error_uncompressed
 #   * all_compressed_error_uncompressed
 #   * none: reduces required memory and storage
 
+keep_ligand_summary_logs=true
+# Summary log files which show for each ligand the success status of conversion and the conversion time.
+# If the conversion failed, a reason is stated.
+# If the transformation succeeded, the conversion programs which were used are stated.
+# Possible values:
+#   * false
+#   * true
+
 error_sensitivity=normal
 # Possible values: normal, high
 # high sets the shell options "-uo pipefail". Not recommended for production runs, useful mainly for debugging. Pipefails often occur with tar combined with head/tail in pipes, which are not an actual problem.

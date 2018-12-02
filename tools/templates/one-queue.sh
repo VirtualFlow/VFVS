@@ -391,6 +391,16 @@ clean_collection_files_tmp() {
 
             done
 
+            # Updating the ligand collection files
+            echo -n "" > ../workflow/ligand-collections/current/${VF_QUEUE_NO}
+            ligands_started="$(cat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status | awk '{print $1}' | sort -u | wc -l)"
+            ligands_succeeded="$(grep "succeeded" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status | awk '{print $1}' | sort -u | wc -l)"
+            ligands_failed="$(grep "failed" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status | awk '{print $1}' | sort -u | wc -l)"
+            dockings_started="$(cat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status | wc -l)"
+            dockings_succeeded="$(grep -c "succeeded" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status)"
+            dockings_failed="$(grep -c "failed" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status)"
+            echo "${local_ligand_collection} was completed by queue ${VF_QUEUE_NO} on $(date). Ligands-started:${ligands_started} Ligands-succeeded:${ligands_succeeded} Ligands-failed:${ligands_failed}  Dockings-started:${dockings_started} Dockings-succeeded:${dockings_succeeded} Dockings-failed:${dockings_failed}" >> ../workflow/ligand-collections/done/${VF_QUEUE_NO}
+
             # Checking if we should keep the ligand log summary files
             if [ "${keep_ligand_summary_logs}" = "true" ]; then
 
@@ -404,16 +414,6 @@ clean_collection_files_tmp() {
                 # Removing possible old status files
                 rm ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status &> /dev/null || true
             fi
-
-            # Updating the ligand collection files
-            echo -n "" > ../workflow/ligand-collections/current/${VF_QUEUE_NO}
-            ligands_started="$(zcat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz | awk '{print $1}' | sort -u | wc -l)"
-            ligands_succeeded="$(zgrep "succeeded" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz | awk '{print $1}' | sort -u | wc -l)"
-            ligands_failed="$(zgrep "failed" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz | awk '{print $1}' | sort -u | wc -l)"
-            dockings_started="$(zcat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz | wc -l)"
-            dockings_succeeded="$(zgrep -c "succeeded" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz)"
-            dockings_failed="$(zgrep -c "failed" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz)"
-            echo "${local_ligand_collection} was completed by queue ${VF_QUEUE_NO} on $(date). Ligands-started:${ligands_started} Ligands-succeeded:${ligands_succeeded} Ligands-failed:${ligands_failed}  Dockings-started:${dockings_started} Dockings-succeeded:${dockings_succeeded} Dockings-failed:${dockings_failed}" >> ../workflow/ligand-collections/done/${VF_QUEUE_NO}
 
         else
             # Loop for each target format
