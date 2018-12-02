@@ -172,6 +172,14 @@ fi
 batchsystem="$(grep -m 1 "^batchsystem=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 job_letter="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
+# Docking variables
+docking_type_replicas_total="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+IFS=':' read -a docking_type_replicas_total <<< "$docking_type_replicas_total"
+docking_runs_perligand=0
+for value in ${docking_type_replicas_total[@]}; do
+    docking_runs_perligand=$((docking_runs_perligand+value))
+done
+
 
 if [[ "${category}" = "workflow" ]]; then
 
@@ -288,81 +296,88 @@ if [[ "${category}" = "workflow" ]]; then
     echo "                                 Ligands (in completed collections)   "
     echo "................................................................................................"
     echo
-    
-    if [[ "$verbosity" -gt "2" ]]; then
-        ligands_total=0
-        totalNo=$(grep -c "" ../workflow/ligand-collections/var/todo.original 2>/dev/null || true)
-        iteration=1
-        for i in $(cat ../workflow/ligand-collections/var/todo.original); do
-            echo -ne " Total number of ligands: ${ligands_total} (counting collection ${iteration}/${totalNo})\\r"
-            queue_collection_basename=${i/.pdbqt.gz.tar}
-            noToAdd=$(grep "${queue_collection_basename} " ${collection_folder}.length 2>/dev/null  | awk '{print $2}')
-            if [[ -z "${noToAdd// }" ]]; then   
-            noToAdd=0
-            fi
-            ligands_total=$((${ligands_total} + ${noToAdd} )) 2>/dev/null || true
-            iteration=$((iteration + 1))
-        done
-        echo -ne " Total number of ligands: ${ligands_total}                                                 \\r"
-        echo
+
+    ligands_total=0
+    if [ -s ../workflow/ligand-collections/var/todo.original ]; then
+        ligands_total="$(awk '{print $2}' | paste -sd+ | bc -l 2>/dev/null || true)"
+        if [[ -z "${ligands_total// }" ]]; then
+            ligands_total=0
+        fi
     fi
-    
+    echo -ne " Total number of ligands: ${ligands_total}                                                     \\r"
+    echo
+
     ligands_started=0
     if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        ligands_started="$(grep -ho "started:[0-9]\+" ../workflow/ligand-collections/done/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+        ligands_started="$(grep -ho "Ligands-started:[0-9]\+" ../workflow/ligand-collections/done/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
         if [[ -z "${ligands_started// }" ]]; then
             ligands_started=0
         fi
     fi
-    echo -ne " Number of ligands started (not counting tautomers): ${ligands_started}                                                     \\r"
+    echo -ne " Number of ligands started: ${ligands_started}                                                     \\r"
     echo
 
     ligands_success=0
     if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        ligands_success="$(grep -ho "succeeded(tautomerization):[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+        ligands_success="$(grep -ho "Ligands-succeeded:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
         if [[ -z "${ligands_success// }" ]]; then
             ligands_success=0
         fi
     fi
-    echo -ne " Number of ligands successfully completed (up to tautomerization, not counting tautomers): ${ligands_success}                                                \\r"
+    echo -ne " Number of ligands successfully completed: ${ligands_success}                                                \\r"
     echo
-
-    ligands_success=0
-    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        ligands_success="$(grep -ho "succeeded(target-format):[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
-        if [[ -z "${ligands_success// }" ]]; then
-            ligands_success=0
-        fi
-    fi
-    echo -ne " Number of ligands successfully completed (up to target format, counting tautomers): ${ligands_success}                                                \\r"
-    echo
-    
-#    ligands_processing=0
-#    totalNo=$(ls ../workflow/ligand-collections/ligand-lists/ | grep -c "" 2>/dev/null || true)
-#    iteration=1
-#    for folder in $(ls ../workflow/ligand-collections/ligand-lists/); do
-#        echo -ne " Number of ligands processing: ${ligands_processing} (counting tranch ${iteration}/${totalNo}) \\r"
-#        for file in $(ls ../workflow/ligand-collections/ligand-lists/${folder}/ 2>/dev/null); do
-#            noToAdd="$(grep -h "processing" ../workflow/ligand-collections/ligand-lists/${folder}/${file} 2>/dev/null | awk -F ' ' '{print $1}' 2>/dev/null | uniq | wc -l || true)"
-#            if [[ -z "${noToAdd// }" ]]; then
-#                noToAdd=0
-#            fi
-#            ligands_processing=$((${ligands_processing} + ${noToAdd})) 2>/dev/null || true
-#        done
-#        iteration=$((iteration + 1))
-#    done
-#    echo -ne " Number of ligands in state processing: ${ligands_processing}                                               \\r"
-#    echo
 
     ligands_failed=0
     if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        ligands_failed="$(grep -ho "failed:[0-9]\+" ../workflow/ligand-collections/done/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+        ligands_failed="$(grep -ho "Ligands-failed:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
         if [[ -z "${ligands_failed// }" ]]; then
             ligands_failed=0
         fi
     fi
-    echo -ne " Number of ligands failed (counting tautomers): ${ligands_failed}                                                              \\r"
+    echo -ne " Number of ligands failed completed: ${ligands_success}                                                \\r"
     echo
+
+    echo
+    echo
+
+
+
+
+    echo "                                Dockings (in completed collections)   "
+    echo "................................................................................................"
+    echo
+    echo " Docking runs per ligand: ${docking_runs_perligand}"
+
+    dockings_started=0
+    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
+        dockings_started="$(grep -ho "Ligands-started:[0-9]\+" ../workflow/ligand-collections/done/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+        if [[ -z "${dockings_started// }" ]]; then
+            dockings_started=0
+        fi
+    fi
+    echo -ne " Number of dockings started: ${dockings_started}                                                     \\r"
+    echo
+
+    dockings_success=0
+    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
+        dockings_success="$(grep -ho "Ligands-succeeded:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+        if [[ -z "${dockings_success// }" ]]; then
+            dockings_success=0
+        fi
+    fi
+    echo -ne " Number of dockings successfully completed: ${dockings_success}                                                \\r"
+    echo
+
+    dockings_failed=0
+    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
+        dockings_failed="$(grep -ho "Ligands-failed:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
+        if [[ -z "${dockings_failed// }" ]]; then
+            dockings_failed=0
+        fi
+    fi
+    echo -ne " Number of dockings failed completed: ${dockings_success}                                                \\r"
+    echo
+
     echo
     echo
 fi

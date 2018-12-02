@@ -13,7 +13,7 @@ batchsystem=SLURM
 partition=shared
 # Partitions are also called queues in some batchsystems
 
-timelimit=1-00:00:00
+timelimit=7-00:00:00
 # Format for slurm: dd-hh:mm:ss
 # Format for TORQUE and PBS: hh:mm:ss
 # Format for SGE: hh:mm:ss
@@ -52,7 +52,7 @@ central_todo_list_splitting_size=10000
 # The smaller the value, the faster the ligand collections can be distributed.
 # For many types of clusters it is recommended if the total number of splitted todo lists stays below 10000.
 
-ligands_todo_per_queue=500000
+ligands_todo_per_queue=100000
 # Used as a limit of ligands for the to-do lists
 # This value should be divisible by the next setting "ligands_todo_per_refilling_step"
 
@@ -60,7 +60,7 @@ ligands_per_refilling_step=10000
 # The to-do files of the queues are filled with <ligands_per_refilling_step> ligands per refill step
 # A number roughly equal to the average of number of ligands per collection is recommended
 
-collection_folder=../../../collections/Enamine-REAL-2018q12_isomers.smi.splitted1000_ind_tgz_tar
+collection_folder=../../../collections/Enamine-REAL-2018q12_isomers.pdbqt
 # Slash at the end is not required (optional)
 # Relative pathname is required w.r.t. the folder tools/
 
