@@ -305,7 +305,7 @@ if [[ "${category}" = "workflow" ]]; then
 
     ligands_total=0
     if [ -s ../workflow/ligand-collections/var/todo.original ]; then
-        ligands_total="$(awk '{print $2}' | paste -sd+ | bc -l 2>/dev/null || true)"
+        ligands_total="$(awk '{print $2}' ../workflow/ligand-collections/var/todo.original | paste -sd+ | bc -l 2>/dev/null || true)"
         if [[ -z "${ligands_total// }" ]]; then
             ligands_total=0
         fi
