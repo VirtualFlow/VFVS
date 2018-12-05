@@ -51,15 +51,14 @@ Options:
 "
 help_info="The -h option can be used to get more information on how to use this script."
 controlfile="../workflow/control/all.ctrl"
-line=$(cat ${controlfile} | grep "collection_folder=" | sed 's/\/$//g')
-collection_folder=${line/"collection_folder="}
+collection_folder="$(grep -m 1 "^collection_folder=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 export LC_ALL=C
 export LANG=C
 # Determining the names of each docking type
-line=$(cat ${controlfile} | grep "^docking_type_names=")
-docking_type_names=${line/"docking_type_names="}
+docking_type_names="$(grep -m 1 "^docking_type_names=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_type_names <<< "$docking_type_names"
-tmp_dir=/tmp/vfvs_report_$(date | tr " :" "_")
+vf_tmpdir="$(grep -m 1 "^tempdir=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+tmp_dir=/${vf_tmpdir}/vfvs_report_$(date | tr " :" "_")
 
 # Folders
 mkdir -p tmp
