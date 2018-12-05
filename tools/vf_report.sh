@@ -400,11 +400,11 @@ if [[ "${category}" = "vs" ]]; then
     folder=../output-files/complete/${docking_type_name}
     summary_flag="false"
     summary_folders="${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/"
-    mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries
     if [ -d ${folder}/summaries/ ]; then
         if [ -n "$(ls -A ${folder}/summaries/)" ]; then
             summary_flag="true"
             for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
+                mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}
                 for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
                     tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}
                 done
