@@ -412,7 +412,7 @@ if [[ "${category}" = "vs" ]]; then
                 for folder in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}  2>/dev/null || true); do
                     folder=$(basename ${folder})
                     for file in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
-                        file=$(basename ${file})
+                        file=$(basename ${file} || true)
                         zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}/${file} >> ${tmp_dir}/${USER:0:8}/report/summaries.all || true
                     done
                     rm -r ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}
