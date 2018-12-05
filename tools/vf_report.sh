@@ -449,88 +449,86 @@ if [[ "${category}" = "vs" ]]; then
             ligands_no_tmp[i]=0
         done
         for folder in ${summary_folders}; do
-            for file in $folder/*; do
-                while IFS='' read -r line || [[ -n "$line" ]]; do
-                    read -a line_array <<< "${line}"
-                    if [ "${line_array[0]}" != "average-score" ] 2>/dev/null; then
-                        score=${line_array[2]}
-                        case $score in
-                            [0-9]*)
-                                ligands_no_tmp[23]=$((ligands_no_tmp[23] +1))
-                                ;;
-                            -[0-4].*)
-                                ligands_no_tmp[0]=$((ligands_no_tmp[0] +1))
-                                ;;
-                            -5.[0-4])
-                                ligands_no_tmp[1]=$((ligands_no_tmp[1] +1))
-                                ;;
-                            -5.[5-9])
-                                ligands_no_tmp[2]=$((ligands_no_tmp[2] +1))
-                                ;;
-                            -6.[0-4])
-                                ligands_no_tmp[3]=$((ligands_no_tmp[3] +1))
-                                ;;
-                            -6.[5-9])
-                                ligands_no_tmp[4]=$((ligands_no_tmp[4] +1))
-                                ;;
-                            -7.[0-4])
-                                ligands_no_tmp[5]=$((ligands_no_tmp[5] +1))
-                                ;;
-                            -7.[5-9])
-                                ligands_no_tmp[6]=$((ligands_no_tmp[6] +1))
-                                ;;
-                            -8.[0-4])
-                                ligands_no_tmp[7]=$((ligands_no_tmp[7] +1))
-                                ;;
-                            -8.[5-9])
-                                ligands_no_tmp[8]=$((ligands_no_tmp[8] +1))
-                                ;;
-                            -9.[0-4])
-                                ligands_no_tmp[9]=$((ligands_no_tmp[9] +1))
-                                ;;
-                            -9.[5-9])
-                                ligands_no_tmp[10]=$((ligands_no_tmp[10] +1))
-                                ;;
-                            -10.[0-4])
-                                ligands_no_tmp[11]=$((ligands_no_tmp[11] +1))
-                                ;;
-                            -10.[5-9])
-                                ligands_no_tmp[12]=$((ligands_no_tmp[12] +1))
-                                ;;
-                            -11.[0-4])
-                                ligands_no_tmp[13]=$((ligands_no_tmp[13] +1))
-                                ;;
-                            -11.[5-9])
-                                ligands_no_tmp[14]=$((ligands_no_tmp[14] +1))
-                                ;;
-                            -12.[0-4])
-                                ligands_no_tmp[15]=$((ligands_no_tmp[15] +1))
-                                ;;
-                            -12.[5-9])
-                                ligands_no_tmp[16]=$((ligands_no_tmp[16] +1))
-                                ;;
-                            -13.[0-4])
-                                ligands_no_tmp[17]=$((ligands_no_tmp[17] +1))
-                                ;;
-                            -13.[5-9])
-                                ligands_no_tmp[18]=$((ligands_no_tmp[18] +1))
-                                ;;
-                            -14.[0-4])
-                                ligands_no_tmp[19]=$((ligands_no_tmp[19] +1))
-                                ;;
-                            -14.[5-9])
-                                ligands_no_tmp[20]=$((ligands_no_tmp[20] +1))
-                                ;;
-                            -1[5-9].*)
-                                ligands_no_tmp[21]=$((ligands_no_tmp[21] +1))
-                                ;;
-                            -[2-9][0-9]*)
-                                ligands_no_tmp[22]=$((ligands_no_tmp[22] +1))
-                                ;;
-                        esac
-                    fi
-                done < "$file"
-            done
+            while IFS='' read -r line || [[ -n "$line" ]]; do
+                read -a line_array <<< "${line}"
+                if [ "${line_array[0]}" != "average-score" ] 2>/dev/null; then
+                    score=${line_array[3]}
+                    case $score in
+                        [0-9]*)
+                            ligands_no_tmp[23]=$((ligands_no_tmp[23] +1))
+                            ;;
+                        -[0-4].*)
+                            ligands_no_tmp[0]=$((ligands_no_tmp[0] +1))
+                            ;;
+                        -5.[0-4])
+                            ligands_no_tmp[1]=$((ligands_no_tmp[1] +1))
+                            ;;
+                        -5.[5-9])
+                            ligands_no_tmp[2]=$((ligands_no_tmp[2] +1))
+                            ;;
+                        -6.[0-4])
+                            ligands_no_tmp[3]=$((ligands_no_tmp[3] +1))
+                            ;;
+                        -6.[5-9])
+                            ligands_no_tmp[4]=$((ligands_no_tmp[4] +1))
+                            ;;
+                        -7.[0-4])
+                            ligands_no_tmp[5]=$((ligands_no_tmp[5] +1))
+                            ;;
+                        -7.[5-9])
+                            ligands_no_tmp[6]=$((ligands_no_tmp[6] +1))
+                            ;;
+                        -8.[0-4])
+                            ligands_no_tmp[7]=$((ligands_no_tmp[7] +1))
+                            ;;
+                        -8.[5-9])
+                            ligands_no_tmp[8]=$((ligands_no_tmp[8] +1))
+                            ;;
+                        -9.[0-4])
+                            ligands_no_tmp[9]=$((ligands_no_tmp[9] +1))
+                            ;;
+                        -9.[5-9])
+                            ligands_no_tmp[10]=$((ligands_no_tmp[10] +1))
+                            ;;
+                        -10.[0-4])
+                            ligands_no_tmp[11]=$((ligands_no_tmp[11] +1))
+                            ;;
+                        -10.[5-9])
+                            ligands_no_tmp[12]=$((ligands_no_tmp[12] +1))
+                            ;;
+                        -11.[0-4])
+                            ligands_no_tmp[13]=$((ligands_no_tmp[13] +1))
+                            ;;
+                        -11.[5-9])
+                            ligands_no_tmp[14]=$((ligands_no_tmp[14] +1))
+                            ;;
+                        -12.[0-4])
+                            ligands_no_tmp[15]=$((ligands_no_tmp[15] +1))
+                            ;;
+                        -12.[5-9])
+                            ligands_no_tmp[16]=$((ligands_no_tmp[16] +1))
+                            ;;
+                        -13.[0-4])
+                            ligands_no_tmp[17]=$((ligands_no_tmp[17] +1))
+                            ;;
+                        -13.[5-9])
+                            ligands_no_tmp[18]=$((ligands_no_tmp[18] +1))
+                            ;;
+                        -14.[0-4])
+                            ligands_no_tmp[19]=$((ligands_no_tmp[19] +1))
+                            ;;
+                        -14.[5-9])
+                            ligands_no_tmp[20]=$((ligands_no_tmp[20] +1))
+                            ;;
+                        -1[5-9].*)
+                            ligands_no_tmp[21]=$((ligands_no_tmp[21] +1))
+                            ;;
+                        -[2-9][0-9]*)
+                            ligands_no_tmp[22]=$((ligands_no_tmp[22] +1))
+                            ;;
+                    esac
+                fi
+            done < "${tmp_dir}/${USER:0:8}/report/summaries.all"
         done
         # Printing the scores
         echo " Number of ligands screened with binding affinity between     0  and   inf kcal/mole: ${ligands_no_tmp[23]}"
@@ -566,7 +564,7 @@ if [[ "${category}" = "vs" ]]; then
         echo "                          Binding affinity - highest scoring compounds    "
         echo "................................................................................................"
         echo
-        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -Hv "average-score" ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/* 2>/dev/null ) | sort -S 80% -k 3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $11, $10, $13}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
+        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -v "average-score"  ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null ) | sort -S 80% -k 4 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $2, $1, $4}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
     fi
 fi
 
