@@ -787,7 +787,7 @@ while true; do
     fi
 
     # Checking if the ligand contains duplicate coordinates
-    duplicate_count=$(grep ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt | awk '{print $6, $7, $8}' | sort | uniq -c | grep -v " 1 " | wc -l)
+    duplicate_count=$(grep ATOM ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt | awk '{print $6, $7, $8}' | sort | uniq -c | grep -v " 1 " | wc -l)
     if [ ${duplicate_count} -ne "0" ]; then
         error_response_ligand_coordinates
     fi
