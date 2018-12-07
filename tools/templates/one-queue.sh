@@ -76,26 +76,60 @@ error_response_docking() {
     echo "Skipping this ligand and continuing with next one."
 
     # Variables
-    ligand_list_entry="docking:failed"
+    ligand_list_entry="failed(docking)"
 
     # Updating the ligand list
     update_ligand_list_end "false"
-    continue
+    continue 2
 }
 
 # Error reponse docking program
 error_response_docking_program() {
 
+    # Variables
+    ligand_list_entry="failed(docking_program)"
+
     # Printing some information
     echo "An error occurred during the docking procedure (${docking_type_name})."
-    echo "An unsupported docking program ($1) has been specified."
+    echo "An unsupported docking program ($docking_type_program) has been specified."
     echo "Supported docking programs are: ${supported_docking_programs}"
     echo "Aborting the virtual screening procedure..."
-    fail_reason="unsported docking program specified ($1)"
 
     # Updating the ligand list
-    update_ligand_list_end "true"
+    update_ligand_list_end "false"
     exit 1
+}
+
+# Error reponse ligand elements
+error_response_ligand_elements() {
+
+    # Variables
+    element=$1
+    ligand_list_entry="failed(ligand_elements:${element})"
+
+    # Printing some information
+    echo "The ligand contains elements (${element}) which cannot be handled by quickvina."
+    echo "Skipping this ligand and continuing with next one."
+
+    # Skipping the ligand
+    update_ligand_list_end "false"
+    continue
+}
+
+# Error reponse ligand coordinates
+error_response_ligand_coordinates() {
+
+    # Variables
+    element=$1
+    ligand_list_entry="failed(ligand_coordinates)"
+
+    # Printing some information
+    echo "The ligand contains elements with the same coordinates."
+    echo "Skipping this ligand and continuing with next one."
+
+    # Skipping the ligand
+    update_ligand_list_end "false"
+    continue
 }
 
 # Time limit close
@@ -117,7 +151,7 @@ trap 'clean_queue_files_tmp' EXIT RETURN
 update_ligand_list_start() {
 
     # Variables
-    ligand_start_time_ms=$(($(date +'%s * 1000 + %-N / 1000000')))
+    docking_start_time_ms=$(($(date +'%s * 1000 + %-N / 1000000')))
     ligand_list_entry=""
 
     # Updating the ligand-list file
@@ -128,25 +162,24 @@ update_ligand_list_end() {
 
     # Variables
     success="${1}" # true or false
-    ligand_total_time_ms="$(($(date +'%s * 1000 + %-N / 1000000') - ${ligand_start_time_ms}))"
+    docking_total_time_ms="$(($(date +'%s * 1000 + %-N / 1000000') - ${docking_start_time_ms}))"
 
     # Updating the ligand-list file
     # Not uesd currently: ligand_list_entry
     if [ "${success}" == "true" ]; then
-        perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing.*/${next_ligand} ${docking_type_index} ${docking_replica_index} succeeded total-time:${ligand_total_time_ms}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
+        perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing.*/${next_ligand} ${docking_type_index} ${docking_replica_index} succeeded total-time:${docking_total_time_ms}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
     else
-        perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing.*/${next_ligand} ${docking_type_index} ${docking_replica_index} failed total-time:${ligand_total_time_ms}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
+        perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing.*/${next_ligand} ${docking_type_index} ${docking_replica_index} ${ligand_list_entry} total-time:${docking_total_time_ms}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
     fi
-
 
     # Printing some information
     echo
     if [ "${success}" == "true" ]; then
-        echo "Ligand ${next_ligand} completed successfully on $(date)."
+        echo "Docking type  ${docking_type_index}/${docking_type_index_end} (${docking_type_name}), replica ${docking_replica_index}/${docking_replica_index_end} of ${next_ligand} completed successfully on $(date)."
     else
-        echo "Ligand ${next_ligand} failed on $(date)."
+        echo "Docking type  ${docking_type_index}/${docking_type_index_end} (${docking_type_name}), replica ${docking_replica_index}/${docking_replica_index_end} of ${next_ligand} ${ligand_list_entry} on $(date)."
     fi
-    echo "Total time for this ligand (${next_ligand}) in ms: ${ligand_total_time_ms}"
+    echo "Total time for this docking (${next_ligand}) in ms: ${docking_total_time_ms}"
     echo
 
     # Variables
@@ -744,6 +777,21 @@ while true; do
         end_queue 0
     fi
 
+    # Checking if ligand contains B, Si, Sn
+    if grep -q " B " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
+        error_response_ligand_elements "B"
+    elif grep -i -q " Si " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
+        error_response_ligand_elements "Si"
+    elif grep -i -q " Sn " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
+        error_response_ligand_elements "Sn"
+    fi
+
+    # Checking if the ligand contains duplicate coordinates
+    duplicate_count=$(grep ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt | awk '{print $6, $7, $8}' | sort | uniq -c | grep -v " 1 " | wc -l)
+    if [ ${duplicate_count} -ne "0" ]; then
+        error_response_ligand_coordinates
+    fi
+
     # Loop for each docking type
     for docking_type_index in $(seq ${docking_type_index_start} ${docking_type_index_end}); do
 
@@ -759,7 +807,6 @@ while true; do
             # Setting up variables
             docking_replica_index_start=1 # Need to reset it in case a new job was started before and set the variable to a value greater than 1
             start_time_ms=$(($(date +'%s * 1000 + %-N / 1000000')))
-            fail_reason=""
 
             # Checking if there is enough time left for a new ligand
             if [[ "${VF_LITTLE_TIME}" = "true" ]]; then
@@ -782,15 +829,6 @@ while true; do
             echo
             echo "   ***   Starting new docking run: docking type ${docking_type_index}/${docking_type_index_end} (${docking_type_name}), replica ${docking_replica_index}/${docking_replica_index_end}   ***   "
             echo
-
-            # Checking if ligand contains B, Si, Sn
-            if grep -q " B " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
-                error_response_ligand_elements "B"
-            elif grep -i -q " Si " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
-                error_response_ligand_elements "Si"
-            elif grep -i -q " Sn " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.pdbqt; then
-                error_response_ligand_elements "Sn"
-            fi
 
             # Running the docking program
             trap 'error_response_docking' ERR
@@ -822,7 +860,6 @@ while true; do
                     error_response_docking_program $docking_type_program
             esac
             trap 'error_response_std $LINENO' ERR
-
 
             # Updating the summary
             update_summary
