@@ -80,7 +80,7 @@ error_response_docking() {
 
     # Updating the ligand list
     update_ligand_list_end "false"
-    continue 2
+    continue
 }
 
 # Error reponse docking program
@@ -108,11 +108,17 @@ error_response_ligand_elements() {
     ligand_list_entry="failed(ligand_elements:${element})"
 
     # Printing some information
+    echo
     echo "The ligand contains elements (${element}) which cannot be handled by quickvina."
     echo "Skipping this ligand and continuing with next one."
 
-    # Skipping the ligand
-    update_ligand_list_end "false"
+    # Updating the ligand list file
+    echo "${next_ligand} ${ligand_list_entry}" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
+
+    # Printing some information
+    echo "Ligand ${next_ligand} ${ligand_list_entry} on $(date)."
+
+    # Continuing with next ligand
     continue
 }
 
@@ -124,11 +130,17 @@ error_response_ligand_coordinates() {
     ligand_list_entry="failed(ligand_coordinates)"
 
     # Printing some information
+    echo
     echo "The ligand contains elements with the same coordinates."
     echo "Skipping this ligand and continuing with next one."
 
-    # Skipping the ligand
-    update_ligand_list_end "false"
+    # Updating the ligand list file
+    echo "${next_ligand} ${ligand_list_entry}" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
+
+    # Printing some information
+    echo "Ligand ${next_ligand} ${ligand_list_entry} on $(date)."
+
+    # Continuing with next ligand
     continue
 }
 
@@ -141,6 +153,7 @@ trap 'time_near_limit' 1 2 3 9 10 12 15
 
 # Cleaning the queue folders
 clean_queue_files_tmp() {
+
     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.* ../workflow/output-files/queues/
     sleep 1
     rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/
@@ -165,7 +178,7 @@ update_ligand_list_end() {
     docking_total_time_ms="$(($(date +'%s * 1000 + %-N / 1000000') - ${docking_start_time_ms}))"
 
     # Updating the ligand-list file
-    # Not uesd currently: ligand_list_entry
+    # Not used currently: ligand_list_entry
     if [ "${success}" == "true" ]; then
         perl -pi -e "s/${next_ligand} ${docking_type_index} ${docking_replica_index} processing.*/${next_ligand} ${docking_type_index} ${docking_replica_index} succeeded total-time:${docking_total_time_ms}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
     else
