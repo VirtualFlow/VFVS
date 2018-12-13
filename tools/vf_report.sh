@@ -413,7 +413,7 @@ if [[ "${category}" = "vs" ]]; then
                     folder=$(basename ${folder})
                     for file in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
                         file=$(basename ${file} || true)
-                        zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}/${file} >> ${tmp_dir}/${USER:0:8}/report/summaries.all || true
+                        zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}/${file} | awk '{print $1, $2, $4}' >> ${tmp_dir}/${USER:0:8}/report/summaries.all || true
                     done
                     rm -r ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}
                 done
@@ -425,7 +425,7 @@ if [[ "${category}" = "vs" ]]; then
     folder=../output-files/incomplete/${docking_type_name}
     if [ -d ${folder}/summaries/ ]; then
         for collection_file in $(ls -A ${folder}/summaries/); do
-            zcat ${folder}/summaries/${collection_file} >> ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null || true
+            zcat ${folder}/summaries/${collection_file} | awk '{print $1, $2, $4}' >> ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null || true
             summary_flag="true"
         done
     fi
@@ -563,7 +563,7 @@ if [[ "${category}" = "vs" ]]; then
         echo "                          Binding affinity - highest scoring compounds    "
         echo "................................................................................................"
         echo
-        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -v "average-score" ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null ) | sort -T ${tmp_dir} -S 80% -k 4,4 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $2, $1, $4}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
+        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -v "average-score" ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null ) | sort -T ${tmp_dir} -S 80% -k 3,3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $2, $1, $3}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
     fi
 fi
 
