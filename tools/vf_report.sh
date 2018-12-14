@@ -451,7 +451,7 @@ if [[ "${category}" = "vs" ]]; then
             while IFS='' read -r line || [[ -n "$line" ]]; do
                 read -a line_array <<< "${line}"
                 if [ "${line_array[0]}" != "average-score" ] 2>/dev/null; then
-                    score=${line_array[3]}
+                    score=${line_array[2]}
                     case $score in
                         [0-9]*)
                             ligands_no_tmp[23]=$((ligands_no_tmp[23] +1))
