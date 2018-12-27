@@ -24,7 +24,7 @@ steps_per_job=1
 # Not (yet) available for LSF and SGE (is always set to 1)
 # Should not be changed during runtime, and be the same for all joblines
 
-cpus_per_step=4
+cpus_per_step=8
 # Sets the slurm cpus-per-task variable (task = step) in SLURM
 # In LSF this corresponds to the number of slots per node
 # Should not be changed during runtime, and be the same for all joblines

@@ -186,11 +186,14 @@ for value in ${docking_type_replicas_total[@]}; do
 done
 
 
+# Displaying date
+echo
+echo "                                  $(date)                                       "
+
+# Checking category
 if [[ "${category}" = "workflow" ]]; then
 
     # Displaying the information
-    echo
-    echo "                                  $(date)                                       "
     echo
     echo
     echo "                                         Workflow Status                                        "
@@ -402,10 +405,10 @@ if [[ "${category}" = "vs" ]]; then
     if [ -d ${folder}/summaries/ ]; then
         if [ -n "$(ls -A ${folder}/summaries/)" ]; then
             summary_flag="true"
-            for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
+            for metatranch in $(ls ${folder}/summaries/ 2>/dev/null || true); do
                 mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}
                 for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
-                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}
+                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch} || true
                 done
             done
             for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
