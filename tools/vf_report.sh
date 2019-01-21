@@ -428,9 +428,13 @@ if [[ "${category}" = "vs" ]]; then
     # Adding the incomplete collections
     folder=../output-files/incomplete/${docking_type_name}
     if [ -d ${folder}/summaries/ ]; then
-        for collection_file in $(ls -A ${folder}/summaries/); do
-            zcat ${folder}/summaries/${collection_file} | awk '{print $1, $2, $4}' >> ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null || true
-            summary_flag="true"
+        for metatranch in $(ls -A ${folder}/summaries/); do
+            for tranch in $(ls -A ${folder}/summaries/${metatranch}); do
+                for file in $(ls -A ${folder}/summaries/${metatranch}/${tranch}); do
+                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file} | awk '{print $1, $2, $4}' >> ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null || true
+                    summary_flag="true"
+                done
+            done
         done
     fi
 
