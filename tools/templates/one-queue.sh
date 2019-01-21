@@ -66,8 +66,6 @@ error_response_std() {
 }
 trap 'error_response_std $LINENO' ERR
 
-
-
 # Error reponse docking
 error_response_docking() {
 
@@ -234,9 +232,11 @@ next_ligand_collection() {
     trap 'error_response_std $LINENO' ERR
     needs_cleaning="false"
 
+    # Determining the controlfile
+    determine_controlfile
+
     # Checking if this jobline should be stopped now
-    line=$(cat ${VF_CONTROLFILE} | grep "^stop_after_collection=")
-    stop_after_collection=${line/"stop_after_collection="}
+    stop_after_collection="$(grep -m 1 "^stop_after_collection=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
     if [ "${stop_after_collection}" = "true" ]; then
         echo
         echo "This job line was stopped by the stop_after_collection flag in the VF_CONTROLFILE ${VF_CONTROLFILE}."
@@ -537,11 +537,43 @@ end_queue() {
     exit ${exitcode}
 }
 
+determine_controlfile() {
+
+    # Determining the VF_CONTROLFILE to use for this jobline
+    VF_CONTROLFILE=""
+    for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do
+        file_basename=$(basename $file)
+        jobline_range=${file_basename/.*}
+        jobline_no_start=${jobline_range/-*}
+        jobline_no_end=${jobline_range/*-}
+        if [[ "${jobline_no_start}" -le "${VF_JOBLINE_NO}" && "${VF_JOBLINE_NO}" -le "${jobline_no_end}" ]]; then
+            export VF_CONTROLFILE="${file}"
+            break
+        fi
+    done
+
+    # Checking if a specific control file was found
+    if [ -z "${VF_CONTROLFILE}" ]; then
+        if [ -f ../workflow/control/all.ctrl ]; then
+
+            # Variables
+            VF_CONTROLFILE="../workflow/control/all.ctrl"
+
+        else
+            # Error response
+            echo "Error: No relevant control file was found..."
+            false
+        fi
+    fi
+}
 
 # Verbosity
 if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
     set -x
 fi
+
+# Determining the control file
+determine_controlfile
 
 # Variables
 targetformats="$(grep -m 1 "^targetformats=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
@@ -748,25 +780,12 @@ while true; do
     # Setting up variables
     # Checking if the current ligand index divides by ligand_check_interval
     if [ "$((ligand_index % ligand_check_interval))" == "0" ]; then
-        # Determining the VF_CONTROLFILE to use for this jobline
-        VF_CONTROLFILE=""
-        for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do
-            file_basename=$(basename $file)
-            jobline_range=${file_basename/.*}
-            jobline_no_start=${jobline_range/-*}
-            jobline_no_end=${jobline_range/*-}
-            if [[ "${jobline_no_start}" -le "${VF_JOBLINE_NO}" && "${VF_JOBLINE_NO}" -le "${jobline_no_end}" ]]; then
-                export VF_CONTROLFILE="${file}"
-                break
-            fi
-        done
-        if [ -z "${VF_CONTROLFILE}" ]; then
-            VF_CONTROLFILE="../workflow/control/all.ctrl"
-        fi
+
+        # Determining the controlfile
+        determine_controlfile
 
         # Checking if this queue line should be stopped immediately
-        line=$(cat ${VF_CONTROLFILE} | grep "^stop_after_next_check_interval=")
-        stop_after_next_check_interval=${line/"stop_after_next_check_interval="}
+        stop_after_next_check_interval="$(grep -m 1 "^stop_after_next_check_interval=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
         if [ "${stop_after_next_check_interval}" = "true" ]; then
             echo
             echo " * This queue will be stopped due to the stop_after_next_check_interval flag in the VF_CONTROLFILE ${VF_CONTROLFILE}."

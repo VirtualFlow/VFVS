@@ -74,8 +74,7 @@ termination_signal() {
 }
 trap 'termination_signal' 1 2 3 9 15
 
-
-next_todo_list() {
+next_todo_list1() {
 
     # Variables
     next_todo_list_index=$(printf "%04d" $((10#${current_todo_list_index}+1)) )
@@ -100,7 +99,32 @@ next_todo_list() {
         current_todo_list_index=${next_todo_list_index}
     fi
 }
-trap 'termination_signal' 1 2 3 9 15
+
+next_todo_list2() {
+
+
+    # Changing the symlink
+    rm ../../workflow/ligand-collections/todo/todo.all.locked
+    next_todo_list=$(wc -l todo.all* | grep todo | grep -v " 0 " | head -n 1 | awk '{print $2}')
+    if [ -n ${next_todo_list} ]; then
+
+        ln -s ${next_todo_list} ../../workflow/ligand-collections/todo/todo.all.locked
+        next_todo_list_index=${next_todo_list/*.}
+
+        # Printing information
+        echo "The next todo list will be used (${next_todo_list})"
+
+        # Copying the new todo list to temp
+        cp ../../workflow/ligand-collections/todo/${next_todo_list} ${todo_file_temp}
+
+        # Emptying the old todo list
+        echo -n "" > ../../workflow/ligand-collections/todo/todo.all.${current_todo_list_index}
+
+        # Changing variables
+        current_todo_list_index=${next_todo_list_index}
+    fi
+}
+
 
 # Clean up when exiting
 clean_up() {
@@ -220,13 +244,21 @@ no_collections_incomplete="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:bl
 if [[ "${no_collections_incomplete}" = "0" ]]; then
 
     # Checking if there is one more todo list
-    next_todo_list
+    next_todo_list1
     no_collections_incomplete="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
 
     # If no more new todo list, quitting
     if [[ "${no_collections_incomplete}" = "0" ]]; then
-        echo "There is no more ligand collection in the todo.all file. Stopping the refilling procedure."
-        exit 0
+
+        # Using the alternative method
+        next_todo_list2
+        no_collections_incomplete="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
+
+        # If no more new todo list, quitting
+        if [[ "${no_collections_incomplete}" = "0" ]]; then
+            echo "There is no more ligand collection in the todo.all file. Stopping the refilling procedure."
+            exit 0
+        fi
     fi
 fi
 
@@ -274,24 +306,7 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
         ligands_todo[${queue_no_2}0000${queue_no_3}]=0
         queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=0
         # Getting the current number of the ligands to-do
-        if [ -f "../../workflow/ligand-collections/todo/${queue_no}" ]; then
-            queue_collection_index=0
-            for queue_collection in $(awk '{print $1}' ../../workflow/ligand-collections/todo/${queue_no}); do
-                queue_collection_lengths=$(awk '{print $2}' ../../workflow/ligand-collections/todo/${queue_no} | tr "\n" " ")
-                queue_collection_lengths=(${queue_collection_lengths})
-		        no_to_add=${queue_collection_lengths[queue_collection_index]}
-                if [ ! "${no_to_add}" -eq "${no_to_add}" ]; then
-                    echo " * Warning: Could not get the length of collection ${queue_collection}. Found value is: ${no_to_add}. Using value 0 for the length."
-                    no_to_add=0
-                fi
-                ligands_todo[${queue_no_2}0000${queue_no_3}]=$((ligands_todo[${queue_no_2}0000${queue_no_3}] + ${no_to_add} ))
-                queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$((queue_collection_numbers[${queue_no_2}0000${queue_no_3}] + 1 ))
-                queue_collection_index=$((queue_collection_index+1))
-            done
-        else
-        # If no local to-do list exists create one
-            touch ../../workflow/ligand-collections/todo/${queue_no}
-        fi
+
         if [ -f "../../workflow/ligand-collections/current/${queue_no}" ]; then
             queue_collection_index=0
             for queue_collection in $(awk '{print $1}' ../../workflow/ligand-collections/current/${queue_no}); do

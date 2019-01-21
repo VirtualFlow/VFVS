@@ -270,7 +270,7 @@ if [[ "${category}" = "workflow" ]]; then
             sumCores=$((sumCores + coreNumber))
         done < tmp/report.tmp
         echo " Number of cores/slots currently used by the workflow: ${sumCores}"
-        rm tmp/report.tmp
+        rm tmp/report.tmp  || true
     fi
     
     echo
@@ -397,6 +397,7 @@ if [[ "${category}" = "vs" ]]; then
 
     # Preparing the summary files and folders
     summary_folders=""
+
     # Complete collections
     rm -r ${tmp_dir}/${USER:0:8}/report/ 2>/dev/null || true
     folder=../output-files/complete/${docking_type_name}
