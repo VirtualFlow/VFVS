@@ -1,44 +1,19 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
 #
-# Usage: Usage: vf_start_jobline.sh start_jobline_no end_jobline_no job_template submit_mode folders_to_reset delay_time_in_seconds [quiet]
-#
-# Description: Creates many copies of a template job file.
-#
-# Option: submit_mode
-#    Possible values: 
-#        submit: job is submitted to the batch system.
-#        anything else: no job is submitted to the batch system. 
-#
-# Option: folders_to_reset
-#    Possible values: 
-#        Are the possible values for the folders_to_reset option of the reset-folders.sh script.
-#        Anything else: no resetting of folders
-#
-# Option: quiet (optional)
-#    Possible values: 
-#        quiet: No information is displayed on the screen.
-#
-# Option: delay_time_in_seconds
-#    Possible values: Any nonnegative integer
-#
 # ---------------------------------------------------------------------------
 
 #Checking the input arguments
-usage="Usage: vf_start_jobline.sh <start_jobline_no> <end_jobline_no> <job_template> <submit_mode> <folders_to_reset> <delay_time_in_seconds> [quiet]
+usage="Usage: vf_start_jobline.sh <start-jobline-id> <end-jobline-id> <job_template> <submit-job> <delay-time-in-seconds>
+
+Description: Prepares the jobfiles of joblines and if specified submits them.
 
 Arguments:
-    <start_jobline_no>:         Positive integer
-    <end_jobline_no>:           Positive integer
-    <job_template>:             Filename (with absolute or relative path) of the job templates in the template folder, depending on the batchsystem
-    <submit mode>:              Whether the newly created job should be directly submitted to the batch system. Possible options: submit, nosubmit
-    <folder_to_reset>:          Useful for cleaning up the workflow and output files of previous runs if desired. Possible values:
-        workflow: Cleans the workflow folder
-        output: Cleans the output-files folder
-        templates: Copies all the template files
-        all: Cleans the workflow and the output-files folder
-        none: no cleaning
-    <time delay_in_seconds>:    Time delay between submitted jobs (to disperse the jobs in time to prevent problems with the central task list)
+    <start-jobline-id>:         Positive integer
+    <end-jobline-id>:           Positive integer
+    <job-template>:             Filename (with absolute or relative path) of the job templates in the template folder, depending on the batchsystem
+    <submit-job>:               Whether the newly created job should be directly submitted to the batch system. Possible options: submit, nosubmit
+    <time-delay-in-seconds>:    Time delay between submitted jobs (to disperse the jobs in time to prevent problems with the central task list)
 "
 
 if [ "${1}" == "-h" ]; then
@@ -46,10 +21,17 @@ if [ "${1}" == "-h" ]; then
    exit 0 
 fi
 
-if [[ "$#" -ne "6" ]] && [[ "$#" -ne "7" ]]; then
-   echo -e "\nWrong number of arguments. Exiting.\n"
-   echo -e "${usage}\n\n"
-   exit 1
+if [[ "$#" -ne "5" ]]; then
+
+    # Printing some information
+    echo
+    echo "The wrong number of arguments was provided."
+    echo "Number of expected arguments: 5"
+    echo "Number of provided arguments: ${#}"
+    echo "Use the -h option to display basic usage information of the command."
+    echo
+    echo
+    exit 1
 fi
 
 # Displaying the banner
@@ -72,8 +54,7 @@ trap 'error_response_nonstd $LINENO' ERR
 # Variables
 start_jobline_no=${1}
 end_jobline_no=${2}
-delay_time=${6}
-folders_to_reset=${5}
+delay_time=${5}
 submit_mode=${4}
 job_template=${3}
 if [ -f ../workflow/control/all.ctrl ]; then
@@ -88,11 +69,6 @@ export VF_VERBOSITY_COMMANDS
 if [ "${VF_VERBOSITY_COMMANDS}" = "debug" ]; then
     set -x
 fi
-
-# Cleaning up if specified
-cd slave
-. reset-folders.sh ${folders_to_reset}
-cd ..
 
 # Getting the batchsystem type
 batchsystem="$(grep -m 1 "^batchsystem=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
@@ -122,10 +98,4 @@ if [[ "${submit_mode}" = "submit" ]]; then
         fi
     done
     cd ..
-fi
-
-# Displaying some information
-if [[ ! "$*" = *"quiet"* ]]; then
-    echo "All joblines have been prepared/started."
-    echo
 fi

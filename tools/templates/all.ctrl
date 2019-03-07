@@ -6,12 +6,15 @@ job_letter=t
 # One alphabetic character (i.e. a letter from a-z or A-Z)
 # Should not be changed during runtime, and be the same for all joblines
 # Required when running VF several times on the same cluster to distinguish the jobs in the batchsystem
+# Settable via range control files: No
 
 batchsystem=SLURM
 # Possible values: SLURM, TOQRUE, PBS, LSF, SGE
+# Settable via range control files: No
 
 partition=shared
 # Partitions are also called queues in some batchsystems
+# Settable via range control files: Yes
 
 timelimit=7-00:00:00
 # Format for slurm: dd-hh:mm:ss
@@ -19,26 +22,31 @@ timelimit=7-00:00:00
 # Format for SGE: hh:mm:ss
 # Format for LSF: hh:mm
 # For all batchsystems: always fill up with two digits per field (used be the job scripts)
+# Settable via range control files: Yes
 
 steps_per_job=1
 # Not (yet) available for LSF and SGE (is always set to 1)
 # Should not be changed during runtime, and be the same for all joblines
+# Settable via range control files: Yes
 
 cpus_per_step=8
 # Sets the slurm cpus-per-task variable (task = step) in SLURM
 # In LSF this corresponds to the number of slots per node
 # Should not be changed during runtime, and be the same for all joblines
 # Not yet available for SGE (always set to 1)
+# Settable via range control files: Yes
 
 queues_per_step=8
 # Sets the number of queues/processes per step
 # Should not be changed during runtime, and be the same for all joblines
 # Not yet available for SGE (always set to 1)
+# Settable via range control files: Yes
 
 cpus_per_queue=1
 # Should be equal or higher than <cpus-per-step/queues-per-step>
 # Should not be changed during runtime, and be the same for all joblines
 # Not yet available for SGE (always set to 1)
+# Settable via range control files: Yes
 
 
 *****************************************************************************************************************************************************************
@@ -51,24 +59,29 @@ central_todo_list_splitting_size=10000
 # Possible values: Positive integer
 # The smaller the value, the faster the ligand collections can be distributed.
 # For many types of clusters it is recommended if the total number of splitted todo lists stays below 10000.
+# Settable via range control files: Yes
 
 ligands_todo_per_queue=100000
 # Used as a limit of ligands for the to-do lists
 # This value should be divisible by the next setting "ligands_todo_per_refilling_step"
+# Settable via range control files: Yes
 
 ligands_per_refilling_step=10000
 # The to-do files of the queues are filled with <ligands_per_refilling_step> ligands per refill step
 # A number roughly equal to the average of number of ligands per collection is recommended
+# Settable via range control files: Yes
 
 collection_folder=../../../collections/Enamine-REAL-2018q12_isomers.pdbqt
 # Slash at the end is not required (optional)
 # Relative pathname is required w.r.t. the folder tools/
+# Settable via range control files: Yes
 
 minimum_time_remaining=10
 # In minutes
 # A new job if the time left until the end of the walltime is smaller than the timelimit
 # This is checked before each ligand is screened
 # Thus the timelimit should be larger than the maximum time which is needed to process one ligand
+# Settable via range control files: Yes
 
 dispersion_time_min=3
 # One positive integer, resembling the time in seconds
@@ -77,16 +90,19 @@ dispersion_time_max=10
 # The dispersion time is used when jobs try to access the central task list.
 # Each job has to wait a random amount of time in the dispersion interval.
 # The effect of this is that when two jobs arrive at the same time at the central task list, the random waiting time will disperse their access on the central task list in time
+# Settable via range control files: Yes
 
 verbosity_commands=standard
 # Possible values: standard, debug
 # This option mainly effects the screen output and the logfiles
+# Settable via range control files: No
 
 verbosity_logfiles=standard
 # Possible values:
 #   * standard
 #   * debug : activates the set -x option. Increases size of log-files in average by nearly a factor of 10
 # This option affects the preparation scripts for setting up the basic workflow files (before the workflow is running)
+# Settable via range control files: Yes
 
 store_queue_log_files=all_compressed_error_uncompressed
 # Supported values (experimental)
@@ -97,6 +113,7 @@ store_queue_log_files=all_compressed_error_uncompressed
 #   * std_compressed_error_uncompressed
 #   * all_compressed_error_uncompressed
 #   * none: reduces required memory and storage
+# Settable via range control files: Yes
 
 keep_ligand_summary_logs=true
 # Summary log files which show for each ligand the success status of conversion and the conversion time.
@@ -105,11 +122,13 @@ keep_ligand_summary_logs=true
 # Possible values:
 #   * false
 #   * true
+# Settable via range control files: Yes
 
 error_sensitivity=normal
 # Possible values: normal, high
 # high sets the shell options "-uo pipefail". Not recommended for production runs, useful mainly for debugging. Pipefails often occur with tar combined with head/tail in pipes, which are not an actual problem.
 # The u-option will always lead to a direct exit of the shell script when an unset variable is going to be used.
+# Settable via range control files: Yes
 
 error_response=fail
 # Affects most errors, but not all (e.g. not the u-option of the shell)
@@ -117,12 +136,14 @@ error_response=fail
 #   * ignore    : ignore error and continue
 #   * next_job  : end this job and start new job
 #   * fail      : exit workflow with failure (exit code 1)
+# Settable via range control files: Yes
 
 tempdir=/dev/shm
 # The directory which is used for the temporary workflow files
 # Should be a very fast filesystem not part of the distributed cluster filesystem, e.g. a local ramfs (as normally provided by ${VF_TMPDIR})
 # The directory does only need to be available on the node on which the job step/queue is running
 # In the tempdir, a subfolder named ${USER} will automatically be created
+# Settable via range control files: Yes
 
 
 *****************************************************************************************************************************************************************
@@ -133,12 +154,14 @@ docking_type_names=smina_vinardo_flexible_receptor1:smina_vinardo_flexible_recep
 # Values have to be separated by colons ":" and without spaces, e.g: docking_type_names=vina-rigid:smina-rigid
 # Used for instance for the folder names in which the output files are stored
 # Should not be changed during runtime, and be the same for all joblines
+# Settable via range control files: Yes
 
 docking_type_programs=smina_flexible:smina_flexible:vina:vina
 # Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, adfr
 # Values have to be separated by colons ":" and without spaces, e.g: docking_type_programs=vina:smina
 # The same programs can be used multiple times
 # Should not be changed during runtime, and be the same for all joblines
+# Settable via range control files: Yes
 
 docking_type_replicas=1:1:1:1
 # Series of integers separated by colons ":"
@@ -148,12 +171,14 @@ docking_type_replicas=1:1:1:1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
 # Should not be changed during runtime, and be the same for all joblines
+# Settable via range control files: Yes
 
 docking_type_inputfolders=../input-files/smina_vinardo_flexible_receptor1:../input-files/smina_vinardo_flexible_receptor2:../input-files/vina_flexible_receptor1:../input-files/vina_flexible_receptor2
 # Relative path wrt to the tools folders
 # In each input folder must be the file config.txt which is used by the docking program to specify its options
 # If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder
 # Should not be changed during runtime, and be the same for all joblines
+# Settable via range control files: Yes
 
 
 *****************************************************************************************************************************************************************
@@ -165,6 +190,7 @@ stop_after_next_check_interval=false
 # Possible values:
 #   * false : The queue will continue to process ligands as long as there are ligands remaining for the queue
 #   * true : No new ligand will be started after the current ligand is completed
+# Settable via range control files: Yes
 
 ligand_check_interval=100
 # Possible values
@@ -172,12 +198,15 @@ ligand_check_interval=100
 
 stop_after_collection=false
 # Determines whether the queue is stopped after the current collection is completed
+# Settable via range control files: Yes
 # Possible values:
 #   * false : A new collection will be started if the current collection is completed and if there are collections remaining
 #   * true : No new collection will be started after the current collection is completed
+# Settable via range control files: Yes
 
 stop_after_job=false
 # Determines whether the queue is stopped after the current job is completed
 # Possible values:
 #   * false : A new job will be submitted if there are more ligands in the current collection or unprocessed collections remaining
 #   * true : No new job is submitted after the current job has ended
+# Settable via range control files: Yes
