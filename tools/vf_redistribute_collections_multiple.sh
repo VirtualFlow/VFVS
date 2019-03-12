@@ -1,5 +1,22 @@
 #!/usr/bin/env bash
 
+# Copyright (C) 2019 Christoph Gorgulla
+#
+# This file is part of VirtualFlow.
+#
+# VirtualFlow is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# VirtualFlow is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with VirtualFlow.  If not, see <https://www.gnu.org/licenses/>.
+
 #Checking the input arguments
 usage="Usage: vf_redistribute_collections_multiple <input_collection_file> <jobline_no_start> <jobline_no_end> <steps_per_job> <queues_per_step> <collections_per_queue> <output_folder>
 
