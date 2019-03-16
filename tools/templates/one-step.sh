@@ -120,7 +120,6 @@ export VF_TIMELIMIT_SECONDS
 pids=""
 store_queue_log_files="$(grep -m 1 "^store_queue_log_files=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
-
 # Starting the individual queues
 for i in $(seq 1 ${VF_QUEUES_PER_STEP}); do
     export VF_QUEUE_NO_3="${i}"

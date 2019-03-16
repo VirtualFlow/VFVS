@@ -141,3 +141,5 @@ if [ "${confirm}" = "yes" ]; then
     . slave/copy-templates.sh all
 fi
 
+# Making the bin files executable
+chmod ug+x bin/*

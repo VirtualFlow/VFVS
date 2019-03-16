@@ -59,7 +59,7 @@ Options:
             workflow: Shows information about the status of the workflow and the batchsystem.
             vs: Shows information about the virtual screening results. Requires the -d option.
     -v: Specifies the verbosity level of the output. Possible values are 1-3 (default 1)
-    -d: Specifies the docking type name (as defined in the all.ctrl file)
+    -d: Specifies the docking type name (as defined in the workflow/control/all.ctrl file)
     -s: Specifies if statistical information should be shown about the virtual screening results (in the vs category)
         Possible values: true, false
         Default value: true
