@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright (C) 2019 Christoph Gorgulla
 #
@@ -16,16 +16,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with VirtualFlow.  If not, see <https://www.gnu.org/licenses/>.
-
-# ---------------------------------------------------------------------------
-#
-# Description: Automatically finds the joblines with jobline numbers between first/last_jobline_no which are not running and continues the jobline.
-#
-# Option: quiet (optional)
-#    Possible values:
-#        quiet: No information is displayed on the screen.
-#
-# ---------------------------------------------------------------------------
 
 #Checking the input arguments
 usage="Usage: vf_continue_jobline.sh first_jobline_no last_jobline_no job_template delay_time_in_seconds [quiet]"
