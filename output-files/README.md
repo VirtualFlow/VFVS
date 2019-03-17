@@ -4,4 +4,4 @@ This folder contains all the output files of the programs which the workflow car
  * summary files containing the docking scores
  * ...
 
-Initialy the folder is therefore empty
+Initialy the folder is therefore empty.
