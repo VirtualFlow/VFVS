@@ -1,0 +1,2 @@
+This folder contains all the files which are needed and used by VFVS during the runtime for its internal organization and logging.
+This folder is prepared by the user with the command vf_prepare_folders.sh during the preparation of the workflow, as described in the documentation.
