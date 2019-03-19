@@ -150,30 +150,30 @@ tempdir=/dev/shm
 *****************************************************************    Virtual Screenign Options    ***************************************************************
 *****************************************************************************************************************************************************************
 
-docking_type_names=smina_vinardo_flexible_receptor1:smina_vinardo_flexible_receptor2:vina_flexible_receptor1:vina_flexible_receptor2
-# Values have to be separated by colons ":" and without spaces, e.g: docking_type_names=vina-rigid:smina-rigid
+docking_scenario_names=smina_vinardo_flexible_receptor1:smina_vinardo_flexible_receptor2:vina_flexible_receptor1:vina_flexible_receptor2
+# Values have to be separated by colons ":" and without spaces, e.g: docking_scenario_names=vina-rigid:smina-rigid
 # Used for instance for the folder names in which the output files are stored
 # Should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
-docking_type_programs=smina_flexible:smina_flexible:vina:vina
+docking_scenario_programs=smina_flexible:smina_flexible:vina:vina
 # Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, adfr
-# Values have to be separated by colons ":" and without spaces, e.g: docking_type_programs=vina:smina
+# Values have to be separated by colons ":" and without spaces, e.g: docking_scenario_programs=vina:smina
 # The same programs can be used multiple times
 # Should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
-docking_type_replicas=1:1:1:1
+docking_scenario_replicas=1:1:1:1
 # Series of integers separated by colons ":"
 # The number of values has to equal the number of docking programs specified in the variable "docking_programs"
-# The values are in the same order as the docking programs specified in the variable "docking_type_programs
-# e.g.: docking_type_replicas=1:1
+# The values are in the same order as the docking programs specified in the variable "docking_scenario_programs
+# e.g.: docking_scenario_replicas=1:1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
 # Should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
-docking_type_inputfolders=../input-files/smina_vinardo_flexible_receptor1:../input-files/smina_vinardo_flexible_receptor2:../input-files/vina_flexible_receptor1:../input-files/vina_flexible_receptor2
+docking_scenario_inputfolders=../input-files/smina_vinardo_flexible_receptor1:../input-files/smina_vinardo_flexible_receptor2:../input-files/vina_flexible_receptor1:../input-files/vina_flexible_receptor2
 # Relative path wrt to the tools folders
 # In each input folder must be the file config.txt which is used by the docking program to specify its options
 # If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder

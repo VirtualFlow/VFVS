@@ -74,8 +74,8 @@ collection_folder="$(grep -m 1 "^collection_folder=" ${controlfile} | tr -d '[[:
 export LC_ALL=C
 export LANG=C
 # Determining the names of each docking type
-docking_type_names="$(grep -m 1 "^docking_type_names=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-IFS=':' read -a docking_type_names <<< "$docking_type_names"
+docking_scenario_names="$(grep -m 1 "^docking_scenario_names=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+IFS=':' read -a docking_scenario_names <<< "$docking_scenario_names"
 vf_tmpdir="$(grep -m 1 "^tempdir=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 tmp_dir=/${vf_tmpdir}/vfvs_report_$(date | tr " :" "_")
 
@@ -91,7 +91,7 @@ fi
 # Treating the input arguments
 category_flag="false"
 verbosity_flag="false"
-docking_type_name_flag="false"
+docking_scenario_name_flag="false"
 show_vs_statistics_flag="false"
 number_highest_scores_flag="false"
 while getopts ':hc:v:d:n:s:' option; do
@@ -117,16 +117,16 @@ while getopts ':hc:v:d:n:s:' option; do
             fi
             verbosity_flag=true
             ;;
-        d)  docking_type_name=$OPTARG
-            for name in ${docking_type_names[@]};do
-                if [ "${docking_type_name}" == "${name}" ]; then
-                    docking_type_name_flag="true"
+        d)  docking_scenario_name=$OPTARG
+            for name in ${docking_scenario_names[@]};do
+                if [ "${docking_scenario_name}" == "${name}" ]; then
+                    docking_scenario_name_flag="true"
                 fi
             done
 
-           if [[ "${docking_type_name_flag}" == "false" ]]; then
-                echo -e "\nAn unsupported docking_type_name (${docking_type_name}) has been specified via the -d option."
-                echo -e "In the control-file $controlfile the following docking type names are specified: ${docking_type_names[@]}"
+           if [[ "${docking_scenario_name_flag}" == "false" ]]; then
+                echo -e "\nAn unsupported docking_scenario_name (${docking_scenario_name}) has been specified via the -d option."
+                echo -e "In the control-file $controlfile the following docking type names are specified: ${docking_scenario_names[@]}"
                 echo -e "${help_info}\n"
                 echo -e "Cleaning up and exiting...\n\n"
                 exit 1
@@ -174,9 +174,9 @@ if [ "${category_flag}" == "false" ]; then
     echo -e "Cleaning up and exiting...\n\n"
     exit 1
 elif [ "${category_flag}" == "true" ]; then
-    if [[ "${category}" == "vs" &&  "${docking_type_name_flag}" == "false" ]]; then
+    if [[ "${category}" == "vs" &&  "${docking_scenario_name_flag}" == "false" ]]; then
         echo -e "\nThe option -d which specifies the docking type name was not specified, but it is required for this category (vs)."
-        echo -e "In the control-file $controlfile the following docking type names are specified: ${docking_type_names[@]}"
+        echo -e "In the control-file $controlfile the following docking type names are specified: ${docking_scenario_names[@]}"
         echo -e "${help_info}\n"
         echo -e "Cleaning up and exiting...\n\n"
         exit 1
@@ -197,10 +197,10 @@ batchsystem="$(grep -m 1 "^batchsystem=" ${controlfile} | tr -d '[[:space:]]' | 
 job_letter="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Docking variables
-docking_type_replicas_total="$(grep -m 1 "^docking_type_replicas=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-IFS=':' read -a docking_type_replicas_total <<< "$docking_type_replicas_total"
+docking_scenario_replicas_total="$(grep -m 1 "^docking_scenario_replicas=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+IFS=':' read -a docking_scenario_replicas_total <<< "$docking_scenario_replicas_total"
 docking_runs_perligand=0
-for value in ${docking_type_replicas_total[@]}; do
+for value in ${docking_scenario_replicas_total[@]}; do
     docking_runs_perligand=$((docking_runs_perligand+value))
 done
 
@@ -419,33 +419,33 @@ if [[ "${category}" = "vs" ]]; then
 
     # Complete collections
     rm -r ${tmp_dir}/${USER:0:8}/report/ 2>/dev/null || true
-    folder=../output-files/complete/${docking_type_name}
+    folder=../output-files/complete/${docking_scenario_name}
     summary_flag="false"
-    summary_folders="${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/"
+    summary_folders="${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/"
     if [ -d ${folder}/summaries/ ]; then
         if [ -n "$(ls -A ${folder}/summaries/)" ]; then
             summary_flag="true"
             for metatranch in $(ls ${folder}/summaries/ 2>/dev/null || true); do
-                mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}
+                mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}
                 for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
-                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch} || true
+                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch} || true
                 done
             done
             for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
-                for folder in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}  2>/dev/null || true); do
+                for folder in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}  2>/dev/null || true); do
                     folder=$(basename ${folder})
-                    for file in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
+                    for file in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
                         file=$(basename ${file} || true)
-                        zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}/${file} | awk '{print $1, $2, $4}' >> ${tmp_dir}/${USER:0:8}/report/summaries.all || true
+                        zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} | awk '{print $1, $2, $4}' >> ${tmp_dir}/${USER:0:8}/report/summaries.all || true
                     done
-                    rm -r ${tmp_dir}/${USER:0:8}/report/output-files/${docking_type_name}/summaries/${metatranch}/${folder}
+                    rm -r ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}
                 done
             done
         fi
     fi
 
     # Adding the incomplete collections
-    folder=../output-files/incomplete/${docking_type_name}
+    folder=../output-files/incomplete/${docking_scenario_name}
     if [ -d ${folder}/summaries/ ]; then
         for metatranch in $(ls -A ${folder}/summaries/); do
             for tranch in $(ls -A ${folder}/summaries/${metatranch}); do
