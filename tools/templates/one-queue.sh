@@ -34,11 +34,11 @@ if [[ "${VF_ERROR_SENSITIVITY}" == "high" ]]; then
     trap '' PIPE        # SIGPIPE = exit code 141, means broken pipe. Happens often, e.g. if head is listening and got all the lines it needs.
 fi
 
-# TODO: Different input file format
-# TODO: Test with storing logfile
-# TODO: Change ligand-lists/todo /current ... to subfolders
-# TODO: Add ligand info into each completed collection -> creating correct sums and faster
-# TODO: Refill during runtime
+# Idea: Different input file format
+# Idea: Test with storing logfile
+# Idea: Change ligand-lists/todo /current ... to subfolders
+# Idea: Add ligand info into each completed collection -> creating correct sums and faster
+# Idea: Refill during runtime
 
 
 # Functions

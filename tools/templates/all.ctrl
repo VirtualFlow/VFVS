@@ -71,7 +71,7 @@ ligands_per_refilling_step=10000
 # A number roughly equal to the average of number of ligands per collection is recommended
 # Settable via range control files: Yes
 
-collection_folder=../../../collections/Enamine-REAL-2018q12_isomers.pdbqt
+collection_folder=../input-files/ligand-library
 # Slash at the end is not required (optional)
 # Relative pathname is required w.r.t. the folder tools/
 # Settable via range control files: Yes
