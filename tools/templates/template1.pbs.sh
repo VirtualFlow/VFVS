@@ -41,10 +41,10 @@
 #PBS -o ../workflow/output-files/jobs/job-1.1_${PBS_JOBID}.out
 #PBS -e ../workflow/output-files/jobs/job-1.1_${PBS_JOBID}.out
 #PBS -l walltime=00:12:00
-#PBS -A bec00123
+##PBS -A To be completed if uncommented
 #PBS -q mpp2testq
 #PBS -m a
-#PBS -M silmaril@zedat.fu-berlin.de
+##PBS -M To be completed if uncommented
 #PBS -l signal=10@300
 
 # Job Information
