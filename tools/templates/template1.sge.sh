@@ -38,7 +38,7 @@
 #$ -l h_rt=12:00:00
 #$ -q wagnerlab
 #$ -m a
-#$ -M cgorgulla@crystal.harvard.edu
+##$ -M To be completed if uncommented
 #$ -notify
 
 # Job Information

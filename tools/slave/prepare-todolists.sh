@@ -29,7 +29,7 @@
 #
 # ---------------------------------------------------------------------------
 
-# TODO: improve second backup mecha (copying back)
+# Idea: improve second backup mecha (copying back)
 
 # Displaying help if the first argument is -h
 usage="Usage: . prepare-todolists.sh jobline_no steps_per_job queues_per_step [quiet]"
@@ -316,7 +316,7 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
         # Variables
         queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
 
-        # TODO: checking if it works (job run on test). Read the entire listinto memory as bash array. 10K package size during refilling. Test the new ligand-list mechanism during breaks.
+        # Maybe to test: Checking if it works (job run on test). Read the entire listinto memory as bash array. 10K package size during refilling. Test the new ligand-list mechanism during breaks.
 
         # Creating empty temp todo files
         echo -n "" > ${todo_new_temp_basename}_${queue_no}
