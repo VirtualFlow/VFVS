@@ -1,6 +1,4 @@
-*.iws
-workspace.xml
-tasks.xml
+.idea/
 
 *.pyc
 .dropbox.attr
