@@ -46,7 +46,7 @@ trap 'error_response_nonstd $LINENO' ERR
 
 # Clean up
 clean_up() {
-    rm -r ${tmp_dir}/ 2>/dev/null || true
+    rm -r ${tempdir}/ 2>/dev/null || true
 }
 trap 'clean_up' EXIT
 
@@ -73,14 +73,15 @@ controlfile="../workflow/control/all.ctrl"
 collection_folder="$(grep -m 1 "^collection_folder=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 export LC_ALL=C
 export LANG=C
+
 # Determining the names of each docking type
 docking_scenario_names="$(grep -m 1 "^docking_scenario_names=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_scenario_names <<< "$docking_scenario_names"
-vf_tmpdir="$(grep -m 1 "^tempdir=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-tmp_dir=/${vf_tmpdir}/vfvs_report_$(date | tr " :" "_")
 
-# Folders
-mkdir -p tmp
+# Tempdir creation
+vf_tempdir="$(grep -m 1 "^tempdir=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+tempdir=${vf_tempdir}/$USER/VFLP/${VF_JOBLETTER}/vf_report_$(date | tr " :" "_")
+mkdir -p ${tempdir}
 
 # Verbosity
 verbosity="$(grep -m 1 "^verbosity_commands=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
@@ -273,11 +274,11 @@ if [[ "${category}" = "workflow" ]]; then
     fi
     if [[ "${batchsystem}" == "LSF" || "${batchsystem}" == "SLURM" || "{batchsystem}" == "SGE" ]]; then
         if [[ "${batchsystem}" == "SLURM" ]]; then
-            squeue -o "%.18i %.9P %.8j %.8u %.8T %.10M %.9l %.6D %R %C" | grep RUN | grep "${USER:0:8}" | grep "${job_letter}\-" | awk '{print $10}' > tmp/report.tmp
+            squeue -o "%.18i %.9P %.8j %.8u %.8T %.10M %.9l %.6D %R %C" | grep RUN | grep "${USER:0:8}" | grep "${job_letter}\-" | awk '{print $10}' > ${tempdir}/report.tmp
         elif [[ "${batchsystem}" == "LSF" ]]; then
-            bin/sqs | grep RUN | grep "${USER:0:8}" | grep "${job_letter}\-" | awk -F " *" '{print $6}' > tmp/report.tmp
+            bin/sqs | grep RUN | grep "${USER:0:8}" | grep "${job_letter}\-" | awk -F " *" '{print $6}' > ${tempdir}/report.tmp
         elif [[ "${batchsystem}" == "SGE" ]]; then
-            bin/sqs | grep " r " | grep "${USER:0:8}" | grep "${job_letter}\-" | awk '{print $7}' > tmp/report.tmp
+            bin/sqs | grep " r " | grep "${USER:0:8}" | grep "${job_letter}\-" | awk '{print $7}' > ${tempdir}/report.tmp
         fi
         sumCores='0'
         while IFS='' read -r line || [[ -n  "${line}" ]]; do 
@@ -287,9 +288,9 @@ if [[ "${category}" = "workflow" ]]; then
                 coreNumber=1
             fi
             sumCores=$((sumCores + coreNumber))
-        done < tmp/report.tmp
+        done < ${tempdir}/report.tmp
         echo " Number of cores/slots currently used by the workflow: ${sumCores}"
-        rm tmp/report.tmp  || true
+        rm ${tempdir}/report.tmp  || true
     fi
     
     echo
@@ -418,27 +419,27 @@ if [[ "${category}" = "vs" ]]; then
     summary_folders=""
 
     # Complete collections
-    rm -r ${tmp_dir}/${USER:0:8}/report/ 2>/dev/null || true
+    rm -r ${tempdir} 2>/dev/null || true
     folder=../output-files/complete/${docking_scenario_name}
     summary_flag="false"
-    summary_folders="${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/"
+    summary_folders="${tempdir}/output-files/${docking_scenario_name}/summaries/"
     if [ -d ${folder}/summaries/ ]; then
         if [ -n "$(ls -A ${folder}/summaries/)" ]; then
             summary_flag="true"
             for metatranch in $(ls ${folder}/summaries/ 2>/dev/null || true); do
-                mkdir -p ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}
+                mkdir -p ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}
                 for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
-                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch} || true
+                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch} || true
                 done
             done
             for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
-                for folder in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}  2>/dev/null || true); do
+                for folder in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}  2>/dev/null || true); do
                     folder=$(basename ${folder})
-                    for file in $(ls ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
+                    for file in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
                         file=$(basename ${file} || true)
-                        zcat ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} | awk '{print $1, $2, $4}' >> ${tmp_dir}/${USER:0:8}/report/summaries.all || true
+                        zcat ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all || true
                     done
-                    rm -r ${tmp_dir}/${USER:0:8}/report/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}
+                    rm -r ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}
                 done
             done
         fi
@@ -450,7 +451,7 @@ if [[ "${category}" = "vs" ]]; then
         for metatranch in $(ls -A ${folder}/summaries/); do
             for tranch in $(ls -A ${folder}/summaries/${metatranch}); do
                 for file in $(ls -A ${folder}/summaries/${metatranch}/${tranch}); do
-                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file} | awk '{print $1, $2, $4}' >> ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null || true
+                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file} | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all 2>/dev/null || true
                     summary_flag="true"
                 done
             done
@@ -554,7 +555,7 @@ if [[ "${category}" = "vs" ]]; then
                             ;;
                     esac
                 fi
-            done < "${tmp_dir}/${USER:0:8}/report/summaries.all"
+            done < "${tempdir}/summaries.all"
         done
         # Printing the scores
         echo " Number of ligands screened with binding affinity between     0  and   inf kcal/mole: ${ligands_no_tmp[23]}"
@@ -590,7 +591,7 @@ if [[ "${category}" = "vs" ]]; then
         echo "                          Binding affinity - highest scoring compounds    "
         echo "................................................................................................"
         echo
-        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -v "average-score" ${tmp_dir}/${USER:0:8}/report/summaries.all 2>/dev/null ) | sort -T ${tmp_dir} -S 80% -k 3,3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $2, $1, $3}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
+        ( echo -e "\n      Rank       Ligand           Collection       Highest-Score\n" & (zgrep -v "average-score" ${tempdir}/summaries.all 2>/dev/null ) | sort -T ${tempdir} -S 80% -k 3,3 -n | head -n ${number_highest_scores} | sed "s/\.txt//g" | awk -F '[: /]+' '{printf "    %5d    %10s     %s            %5.1f\n", NR, $2, $1, $3}' ) | column -t | sed "s/^/       /g" | sed "s/Score$/Score\n/g" # awk counts also the empty column in the beginning since there is a backslash
     fi
 fi
 

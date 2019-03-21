@@ -45,30 +45,37 @@ error_response_nonstd() {
 }
 trap 'error_response_nonstd $LINENO' ERR
 
+# Clean up
+clean_up() {
+    rm -r ${tempdir}/ 2>/dev/null || true
+}
+trap 'clean_up' EXIT
+
 # Variables
 job_template=$1
 delay_time=$2
 export VF_CONTROLFILE="../workflow/control/all.ctrl"
 export VF_JOBLETTER="$(grep -m 1 "^job_letter=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 no_of_jobfiles=$(ls ../workflow/job-files/main/ | wc -l)
+vf_tempdir="$(grep -m 1 "^tempdir=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Verbosity
 export VF_VERBOSITY_COMMANDS="$(grep -m 1 "^verbosity_commands=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-export VF_VERBOSITY_COMMANDS
 if [ "${VF_VERBOSITY_COMMANDS}" = "debug" ]; then
     set -x
 fi
 
 # Body
-mkdir -p tmp
-cat /dev/null > tmp/sqs.out
-bin/sqs > tmp/sqs.out || true
+tempdir=${vf_tempdir}/$USER/VFLP/${VF_JOBLETTER}/vf_continue_all_$(date | tr " :" "_")
+mkdir -p ${tempdir}
+cat /dev/null > ${tempdir}/sqs.out
+bin/sqs > ${tempdir}/sqs.out || true
 
 # Loop for each jobfile
 counter=1
 for file in $(ls -v ../workflow/job-files/main/); do
     VF_JOBLINE_NO=${file/.job}
-    if ! grep -q "${VF_JOBLETTER}\-${VF_JOBLINE_NO}\." tmp/sqs.out; then
+    if ! grep -q "${VF_JOBLETTER}\-${VF_JOBLINE_NO}\." ${tempdir}/sqs.out; then
         vf_continue_jobline.sh ${VF_JOBLINE_NO} ${VF_JOBLINE_NO} ${job_template} 1
         if [ ! "${counter}" -eq "${no_of_jobfiles}" ]; then
             sleep $delay_time
@@ -77,4 +84,4 @@ for file in $(ls -v ../workflow/job-files/main/); do
     counter=$((counter + 1))
 done
 
-rm tmp/sqs.out
+rm ${tempdir}/sqs.out
