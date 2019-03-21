@@ -138,7 +138,7 @@ if [ "${confirm}" = "yes" ]; then
     mkdir -p ../workflow/control/
 
     # Copyinng the templates
-    cd slave
+    cd helpers
     . copy-templates.sh all
     cd ..
 fi

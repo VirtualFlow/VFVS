@@ -34,7 +34,7 @@ fi
 if [[ "$0" != "$BASH_SOURCE" ]]; then # test if the script was sourced or executed
     echo
     echo
-    . slave/show_banner.sh
+    . helpers/show_banner.sh
     echo
     echo
 fi
@@ -96,7 +96,7 @@ if [ -f tmp/jobs-to-continue ]; then
     k_max="$(cat tmp/jobs-to-continue | wc -l)"
     for VF_JOBLINE_NO in $(cat tmp/jobs-to-continue ); do
         k=$(( k + 1 ))
-        cd slave
+        cd helpers
         echo "Continuing jobline ${VF_JOBLINE_NO}"
         . exchange-continue-jobline.sh ${VF_JOBLINE_NO} ${VF_JOBLINE_NO} ${job_template} quiet
         cd ..

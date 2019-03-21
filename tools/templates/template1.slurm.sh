@@ -274,7 +274,7 @@ line=$(cat ${VF_CONTROLFILE} | grep "queues_per_step=")
 export VF_QUEUES_PER_STEP=${line/"queues_per_step="}
 
 # Preparing the todo lists for the queues
-cd slave
+cd helpers
 bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
 cd ..
 
@@ -311,7 +311,7 @@ echo
 check_queue_end2
 
 # Syncing the new jobfile with the settings in the VF_CONTROLFILE
-cd slave
+cd helpers
 . sync-jobfile.sh ${VF_JOBLINE_NO}
 cd ..
 
@@ -335,7 +335,7 @@ if [ "${time_diff}" -le "${treshhold}" ]; then
 fi
 
 # Submitting a new new job
-cd slave 
+cd helpers
 . submit.sh ../workflow/job-files/main/${VF_JOBLINE_NO}.job
 cd ..
 
