@@ -9,7 +9,7 @@ job_letter=t
 # Settable via range control files: No
 
 batchsystem=SLURM
-# Possible values: SLURM, TOQRUE, PBS, LSF, SGE
+# Possible values: SLURM, TORQUE, PBS, LSF, SGE
 # Settable via range control files: No
 
 partition=shared

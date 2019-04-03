@@ -72,7 +72,14 @@ elif [ "${batchsystem}" == "SGE" ]; then
     qsub ${jobfile}
 elif [ "${batchsystem}" == "LSF" ]; then
     bsub < ${jobfile}
+else
+    echo
+    echo "Error: The batch system (${batchsystem}) which was specified in the control file (${VF_CONTROLFILE}) is not supported."
+    echo
+    exit 1
 fi
+
+# Changing the directory
 cd helpers
 
 # Printing some information

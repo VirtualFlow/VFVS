@@ -127,7 +127,7 @@ for i in $(seq 1 ${VF_QUEUES_PER_STEP}); do
     prepare_queue_files_tmp
     echo "Job step ${VF_STEP_NO} is starting queue ${VF_QUEUE_NO} on host $(hostname)."
     if [ ${store_queue_log_files} == "all_uncompressed" ]; then
-        source ../workflow/job-files/sub/one-queue.sh &>> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.all &
+        source ../workflow/job-files/sub/one-queue.sh >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.all 2>&1 &
     elif [ ${store_queue_log_files} == "all_compressed" ]; then
         source ../workflow/job-files/sub/one-queue.sh 2>&1 | gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/queue-${VF_QUEUE_NO}.out.all.gz &
     elif [ ${store_queue_log_files} == "only_error_uncompressed" ]; then

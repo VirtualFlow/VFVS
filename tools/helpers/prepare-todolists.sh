@@ -378,6 +378,7 @@ for refill_step in $(seq 1 ${no_of_refilling_steps}); do
             queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
 
             while [ "${ligands_todo[${queue_no_2}0000${queue_no_3}]}" -lt "${step_limit}" ]; do
+
                 # Checking if there is one more ligand collection to be done
                 if [ "${no_collections_remaining}" -eq "0" ]; then
 
