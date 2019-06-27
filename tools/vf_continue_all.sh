@@ -76,7 +76,7 @@ counter=1
 for file in $(ls -v ../workflow/job-files/main/); do
     VF_JOBLINE_NO=${file/.job}
     if ! grep -q "${VF_JOBLETTER}\-${VF_JOBLINE_NO}\." ${tempdir}/sqs.out; then
-        vf_continue_jobline.sh ${VF_JOBLINE_NO} ${VF_JOBLINE_NO} ${job_template} 1
+        ./vf_continue_jobline.sh ${VF_JOBLINE_NO} ${VF_JOBLINE_NO} ${job_template} 1
         if [ ! "${counter}" -eq "${no_of_jobfiles}" ]; then
             sleep $delay_time
         fi
