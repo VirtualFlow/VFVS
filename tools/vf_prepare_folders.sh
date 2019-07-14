@@ -26,6 +26,19 @@ if [ "${1}" == "-h" ]; then
    exit 0
 fi
 
+# Variables
+if [ -f ../workflow/control/all.ctrl ]; then
+    export VF_CONTROLFILE="../workflow/control/all.ctrl"
+else
+    export VF_CONTROLFILE="templates/all.ctrl"
+fi
+
+# Verbosity
+export VF_VERBOSITY_COMMANDS="$(grep -m 1 "^verbosity_commands=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+if [ "${VF_VERBOSITY_COMMANDS}" = "debug" ]; then
+    set -x
+fi
+
 if [[ "$#" -ne "0" ]]; then
 
     # Printing some information
