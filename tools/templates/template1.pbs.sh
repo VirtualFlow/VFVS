@@ -170,7 +170,7 @@ check_queue_end1() {
     i=0
     # Using a loop to try several times if there are no ligand collections left - maybe the files where just shortly inaccessible
     while [ "${no_collections_incomplete}" == "0" ]; do
-        no_collections_incomplete="$(cat ../workflow/ligand-collections/todo/todo.all* ../workflow/ligand-collections/todo/${VF_JOBLINE_NO}-* ../workflow/ligand-collections/current/${VF_JOBLINE_NO}-* 2>/dev/null | grep -c "[^[:blank:]]" || true)"
+        no_collections_incomplete="$(cat ../workflow/ligand-collections/todo/todo.all* ../workflow/ligand-collections/todo/${VF_JOBLINE_NO}/*/* ../workflow/ligand-collections/current/${VF_JOBLINE_NO}/*/* 2>/dev/null | grep -c "[^[:blank:]]" || true)"
         i="$((i + 1))"
         if [ "${i}" == "5" ]; then
             break

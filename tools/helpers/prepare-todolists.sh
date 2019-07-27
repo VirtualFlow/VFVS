@@ -115,6 +115,9 @@ next_todo_list1() {
 
         # Changing variables
         current_todo_list_index=${next_todo_list_index}
+        no_collections_remaining="$(grep -cv '^\s*$' ${todo_file_temp} || true)"
+        no_collections_assigned=0
+        no_collections_beginning=${no_collections_remaining}
     fi
 }
 
@@ -140,6 +143,9 @@ next_todo_list2() {
 
         # Changing variables
         current_todo_list_index=${next_todo_list_index}
+        no_collections_remaining="$(grep -cv '^\s*$' ${todo_file_temp} || true)"
+        no_collections_assigned=0
+        no_collections_beginning=${no_collections_remaining}
     fi
 }
 
@@ -193,19 +199,89 @@ clean_up() {
 }
 trap 'clean_up' EXIT
 
+
+# Copying the control to temp
+vf_controlfile_temp=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/controlfile
+cp ${VF_CONTROLFILE} ${vf_controlfile_temp}
+
+# Variables
+collection_folder="$(grep -m 1 "^collection_folder=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+collection_folder=${collection_folder%/}
+ligands_todo_per_queue="$(grep -m 1 "^ligands_todo_per_queue=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+ligands_per_refilling_step="$(grep -m 1 "^ligands_per_refilling_step=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+
+# Screen formatting output
+if [[ ! "$*" = *"quiet"* ]]; then
+    echo
+fi
+
+
+# Getting the number of ligands which are already in the local to-do lists
+ligands_todo=""
+queue_collection_numbers=""
+todofile_queue_old_temp="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.old"
+for queue_no_2 in $(seq 1 ${steps_per_job}); do
+    # Loop for each queue of the node
+    for queue_no_3 in $(seq 1 ${queues_per_step}); do
+
+        # Variables
+        queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
+        ligands_todo[${queue_no_2}0000${queue_no_3}]=0
+        queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=0
+
+        # Creating a temporary to-do file with the new ligand collections
+        todofile_queue_new_temp[${queue_no}]="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.new.${queue_no}"
+
+        # Maybe to test: Checking if it works (job run on test). Read the entire list into memory as bash array. 10K package size during refilling. Test the new ligand-list mechanism during breaks.
+
+        # Checking the number of ligands in the queue todo lists
+        if [ -s "../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}" ]; then
+            cp ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no} ${todofile_queue_old_temp}
+            queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$(grep -c "" ${todofile_queue_old_temp})
+            ligands_to_add=$(awk '{print $2}' ${todofile_queue_old_temp} | paste -sd+ | bc -l)
+            ligands_todo[${queue_no_2}0000${queue_no_3}]=${ligands_to_add}
+        fi
+
+        # Checking the number of ligands in the current ligand collection
+        if [ -s "../../workflow/ligand-collections/current/${queue_no_1}/${queue_no_2}/${queue_no}" ]; then
+            cp ../../workflow/ligand-collections/current/${queue_no_1}/${queue_no_2}/${queue_no} ${todofile_queue_old_temp}
+            queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$(grep -c "" ${todofile_queue_old_temp})
+            ligands_to_add=$(awk '{print $2}' ${todofile_queue_old_temp})
+            if [ ! ${ligands_to_add} -eq ${ligands_to_add} ]; then
+                ligands_to_add=0
+            fi
+            ligands_todo[${queue_no_2}0000${queue_no_3}]=$((ligands_todo[${queue_no_2}0000${queue_no_3}] + ${ligands_to_add} ))
+            queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$((queue_collection_numbers[${queue_no_2}0000${queue_no_3}] + 1 ))
+        fi
+    done
+done
+
+# Printing some infos about the to-do lists of this queue before the refilling
+if [[ ! "$*" = *"quiet"* ]]; then
+    echo "Starting the (re)filling of the todolists of the queues."
+    echo
+    for queue_no_2 in $(seq 1 ${steps_per_job}); do
+        # Loop for each queue of the node
+        for queue_no_3 in $(seq 1 ${queues_per_step}); do
+            queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
+            echo "Before (re)filling the todolists the queue ${queue_no} had ${ligands_todo[${queue_no_2}0000${queue_no_3}]} ligands todo distributed in ${queue_collection_numbers[${queue_no_2}0000${queue_no_3}]} collections."
+        done
+    done
+    echo
+fi
+
+
 # Hiding the to-do.all list
 status="false";
 k="1"
-max_iter=250
+max_iter=1000
 if [ ! -d ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ ]; then
     mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
 fi
 modification_time_difference=0
 start_time_waiting="$(date +%s)"
-line=$(cat ../${VF_CONTROLFILE} | grep "^dispersion_time_min=")
-dispersion_time_min=${line/"dispersion_time_min="}
-line=$(cat ../${VF_CONTROLFILE} | grep "^dispersion_time_max=")
-dispersion_time_max=${line/"dispersion_time_max="}
+dispersion_time_min="$(grep -m 1 "^dispersion_time_min=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+dispersion_time_max="$(grep -m 1 "^dispersion_time_max=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 modification_time_treshhold=$(shuf -i ${dispersion_time_min}-${dispersion_time_max} -n1)
 modification_time_treshhold_lockedfile="3600"              # one hour
 
@@ -284,85 +360,6 @@ fi
 grep '[^[:blank:]]' < ${todo_file_temp} > ${todo_file_temp}.tmp || true
 mv ${todo_file_temp}.tmp ${todo_file_temp}
 
-# Variables
-line=$(cat ../${VF_CONTROLFILE} | grep "collection_folder=" | sed 's/\/$//g')
-collection_folder=${line/"collection_folder="}
-collection_folder=${collection_folder%/}
-VF_START_TIME_SECONDS="$(date +%s)"
-
-# Getting the number of ligands to-do per queue
-line=$(cat ../${VF_CONTROLFILE} | grep "ligands_todo_per_queue=")
-ligands_todo_per_queue=${line/"ligands_todo_per_queue="}
-
-# Getting the number of ligands per refilling step
-line=$(cat ../${VF_CONTROLFILE} | grep "ligands_per_refilling_step=")
-ligands_per_refilling_step=${line/"ligands_per_refilling_step="}
-
-# Screen formatting output
-if [[ ! "$*" = *"quiet"* ]]; then
-    echo
-fi
-
-# Creating a temporary to-do file with the new ligand collections
-todo_new_temp_basename="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.new"
-
-# Getting the number of ligands which are already in the local to-do lists
-ligands_todo=""
-queue_collection_numbers=""
-for queue_no_2 in $(seq 1 ${steps_per_job}); do
-    # Loop for each queue of the node
-    for queue_no_3 in $(seq 1 ${queues_per_step}); do
-
-        # Variables
-        queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
-
-        # Maybe to test: Checking if it works (job run on test). Read the entire listinto memory as bash array. 10K package size during refilling. Test the new ligand-list mechanism during breaks.
-
-        # Creating empty temp todo files
-        echo -n "" > ${todo_new_temp_basename}_${queue_no}
-
-        ligands_todo[${queue_no_2}0000${queue_no_3}]=0
-        queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=0
-        # Getting the current number of the ligands to-do
-
-        if [ -f "../../workflow/ligand-collections/current/${queue_no}" ]; then
-            queue_collection_index=0
-            for queue_collection in $(awk '{print $1}' ../../workflow/ligand-collections/current/${queue_no}); do
-                queue_collection_tranch=${queue_collection/_*}
-                queue_collection_ID=${queue_collection/*_}
-                queue_collection_lengths=$(awk '{print $2}' ../../workflow/ligand-collections/current/${queue_no} | tr "\n" " ")
-                no_to_add=${queue_collection_lengths[queue_collection_index]}
-                if [ ! "${no_to_add}" -eq "${no_to_add}" ]; then
-                    echo " * Warning: Could not get the length of collection ${queue_collection}. Found value is: ${no_to_add}. Using value 0 for the length."
-                    no_to_add=0
-                fi
-                no_to_substract=0
-                if [ -f ../../workflow/ligand-collections/ligand-lists/${queue_collection_tranch}/${queue_collection_ID}.status ]; then
-                    no_to_substract=$(cat ../../workflow/ligand-collections/ligand-lists/${queue_collection_tranch}/${queue_collection_ID}.* | awk '{print $1}' | uniq | wc -l)
-                else
-                    echo -e " * Warning: Could not get the number of ligands to substract. Found value is: ${no_to_substract} \n * Using value 0 for the length."
-                    no_to_substract=0
-                fi
-                ligands_todo[${queue_no_2}0000${queue_no_3}]=$((ligands_todo[${queue_no_2}0000${queue_no_3}] + ${no_to_add} - ${no_to_substract} ))
-                queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$((queue_collection_numbers[${queue_no_2}0000${queue_no_3}] + 1 ))
-            done
-        fi
-    done
-done
-
-# Printing some infos about the to-do lists of this queue before the refilling
-if [[ ! "$*" = *"quiet"* ]]; then
-    echo "Starting the (re)filling of the todolists of the queues."
-    echo
-    for queue_no_2 in $(seq 1 ${steps_per_job}); do
-        # Loop for each queue of the node
-        for queue_no_3 in $(seq 1 ${queues_per_step}); do
-            queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
-            echo "Before (re)filling the todolists the queue ${queue_no} had ${ligands_todo[${queue_no_2}0000${queue_no_3}]} ligands todo distributed in ${queue_collection_numbers[${queue_no_2}0000${queue_no_3}]} collections."
-        done
-    done
-    echo
-fi
 
 # Loop for each refilling step
 no_of_refilling_steps="$((${ligands_todo_per_queue} / ${ligands_per_refilling_step}))"
@@ -404,7 +401,7 @@ for refill_step in $(seq 1 ${no_of_refilling_steps}); do
                 # Setting some variables
                 next_ligand_collection_and_length="$(head -n 1 ${todo_file_temp})"
                 next_ligand_collection=${next_ligand_collection_and_length// *}
-                echo "${next_ligand_collection_and_length}" >> ${todo_new_temp_basename}_${queue_no}
+                echo "${next_ligand_collection_and_length}" >> ${todofile_queue_new_temp[${queue_no}]}
                 no_to_add=${next_ligand_collection_and_length//* }
                 if ! [ "${no_to_add}" -eq "${no_to_add}" ]; then
                     echo " * Warning: Could not get the length of collection ${next_ligand_collection}. Found value is: ${no_to_add}. Exiting."
@@ -427,8 +424,9 @@ done
 for queue_no_2 in $(seq 1 ${steps_per_job}); do
     for queue_no_3 in $(seq 1 ${queues_per_step}); do
         queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
-        cat ${todo_new_temp_basename}_${queue_no} >> ../../workflow/ligand-collections/todo/${queue_no}
-        rm ${todo_new_temp_basename}_${queue_no}
+        mkdir -p ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}
+        cat ${todofile_queue_new_temp[${queue_no}]} >> ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}
+        rm ${todofile_queue_new_temp[${queue_no}]}
     done
 done
 
