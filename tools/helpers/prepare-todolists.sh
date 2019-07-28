@@ -195,7 +195,7 @@ clean_up() {
 #    fi
     cp ${todo_file_temp}  ../../workflow/ligand-collections/todo/todo.all.locked
     mv ../../workflow/ligand-collections/todo/todo.all.locked ../../workflow/ligand-collections/todo/todo.all
-    rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO} || true
+    rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ || true
 }
 trap 'clean_up' EXIT
 
@@ -204,7 +204,7 @@ trap 'clean_up' EXIT
 mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
 
 # Copying the control to temp
-vf_controlfile_temp=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/controlfile
+vf_controlfile_temp=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/controlfile
 cp ../${VF_CONTROLFILE} ${vf_controlfile_temp}
 
 # Variables
