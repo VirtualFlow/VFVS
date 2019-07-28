@@ -293,7 +293,6 @@ while [[ "${status}" = "false" ]]; do
         modification_time_difference=0
     fi
     if [ "${modification_time_difference}" -ge "${modification_time_treshhold}" ]; then
-        date
         if mv ../../workflow/ligand-collections/todo/todo.all ../../workflow/ligand-collections/todo/todo.all.locked 2>/dev/null; then
             cp ../../workflow/ligand-collections/todo/todo.all.locked ${todo_file_temp}
             current_todo_list_index="$(realpath ../../workflow/ligand-collections/todo/todo.all.locked | xargs basename | xargs basename | awk -F '.' '{print $3}')"

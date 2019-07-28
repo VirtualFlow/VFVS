@@ -45,7 +45,7 @@ error_response_std() {
     for i in $(seq 1 ${VF_QUEUES_PER_STEP}); do
         VF_QUEUE_NO_3="${i}"
         VF_QUEUE_NO="${VF_QUEUE_NO_12}-${VF_QUEUE_NO_3}"
-        cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.* ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/ || true
+        cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.* ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/ 2>/dev/null || true
     done
 
     # Checking error response
@@ -91,11 +91,11 @@ trap 'time_near_limit' 1 2 3 9 15
 
 clean_up() {
 
-    # Copying again the queue output files back to the shared filesystem (was done already in the one-queue.sh file, but during job abortions it can fail due to a shortage of time)
+    # Copying again the queue output files back to the shared filesystem (was done already in the one-queue.sh file, but during job abortions it can fail due to a shortage of time) Only can work if the clean-up of one-queue did not work, since it deletes the temporary queue folder
     for i in $(seq 1 ${VF_QUEUES_PER_STEP}); do
         VF_QUEUE_NO_3="${i}"
         VF_QUEUE_NO="${VF_QUEUE_NO_12}-${VF_QUEUE_NO_3}"
-        cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.* ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/ || true
+        cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.* ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/ 2>/dev/null || true
     done
 }
 trap 'clean_up' EXIT
@@ -141,6 +141,8 @@ mkdir -p ../workflow/ligand-collections/todo/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
 mkdir -p ../workflow/ligand-collections/current/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
 mkdir -p ../workflow/ligand-collections/done/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
 
+# Copying the input-files to the local storage
+cp -r ../input-files/ ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/
 
 # Starting the individual queues
 for i in $(seq 1 ${VF_QUEUES_PER_STEP}); do
