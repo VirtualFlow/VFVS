@@ -202,7 +202,7 @@ trap 'clean_up' EXIT
 
 # Copying the control to temp
 vf_controlfile_temp=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/controlfile
-cp ${VF_CONTROLFILE} ${vf_controlfile_temp}
+cp ../${VF_CONTROLFILE} ${vf_controlfile_temp}
 
 # Variables
 collection_folder="$(grep -m 1 "^collection_folder=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"

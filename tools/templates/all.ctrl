@@ -193,6 +193,7 @@ stop_after_next_check_interval=false
 # Settable via range control files: Yes
 
 ligand_check_interval=10
+# Determines after how many ligands the controlfile which should be used is determined and checked for termination flags
 # For large scale production runs a value of > 100 is recommended
 # Possible values
 #   * Positive integer
