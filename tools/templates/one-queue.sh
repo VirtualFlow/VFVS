@@ -744,7 +744,7 @@ while true; do
         # Using the old collection
         else
             # Getting the name of the current ligand collection
-            next_ligand_collection=$(awk '{print $1}' ../workflow/ligand-collections/current/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/${VF_QUEUE_NO}
+            next_ligand_collection=$(awk '{print $1}' ../workflow/ligand-collections/current/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/${VF_QUEUE_NO})
             next_ligand_collection_ID="${next_ligand_collection/*_}"
             next_ligand_collection_tranch="${next_ligand_collection/_*}"
             next_ligand_collection_metatranch="${next_ligand_collection_tranch:0:2}"
