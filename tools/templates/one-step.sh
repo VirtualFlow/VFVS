@@ -123,6 +123,7 @@ if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
 fi
 
 # Preparing the temporary controlfile
+mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}
 export VF_CONTROLFILE_TEMP=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/controlfile
 cp ${VF_CONTROLFILE} ${VF_CONTROLFILE_TEMP}
 
