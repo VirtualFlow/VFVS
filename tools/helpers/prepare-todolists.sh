@@ -200,6 +200,9 @@ clean_up() {
 trap 'clean_up' EXIT
 
 
+# Creating the working directory
+mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
+
 # Copying the control to temp
 vf_controlfile_temp=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/controlfile
 cp ../${VF_CONTROLFILE} ${vf_controlfile_temp}
@@ -214,7 +217,6 @@ ligands_per_refilling_step="$(grep -m 1 "^ligands_per_refilling_step=" ${vf_cont
 if [[ ! "$*" = *"quiet"* ]]; then
     echo
 fi
-
 
 # Getting the number of ligands which are already in the local to-do lists
 ligands_todo=""
@@ -275,9 +277,6 @@ fi
 status="false";
 k="1"
 max_iter=1000
-if [ ! -d ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ ]; then
-    mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
-fi
 modification_time_difference=0
 start_time_waiting="$(date +%s)"
 dispersion_time_min="$(grep -m 1 "^dispersion_time_min=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
