@@ -232,7 +232,7 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
         queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=0
 
         # Creating a temporary to-do file with the new ligand collections
-        todofile_queue_new_temp[${queue_no}]="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.new.${queue_no}"
+        todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.new.${queue_no}"
 
         # Maybe to test: Checking if it works (job run on test). Read the entire list into memory as bash array. 10K package size during refilling. Test the new ligand-list mechanism during breaks.
 
@@ -400,7 +400,7 @@ for refill_step in $(seq 1 ${no_of_refilling_steps}); do
                 # Setting some variables
                 next_ligand_collection_and_length="$(head -n 1 ${todo_file_temp})"
                 next_ligand_collection=${next_ligand_collection_and_length// *}
-                echo "${next_ligand_collection_and_length}" >> ${todofile_queue_new_temp[${queue_no}]}
+                echo "${next_ligand_collection_and_length}" >> ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
                 no_to_add=${next_ligand_collection_and_length//* }
                 if ! [ "${no_to_add}" -eq "${no_to_add}" ]; then
                     echo " * Warning: Could not get the length of collection ${next_ligand_collection}. Found value is: ${no_to_add}. Exiting."
@@ -424,8 +424,8 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
     for queue_no_3 in $(seq 1 ${queues_per_step}); do
         queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
         mkdir -p ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}
-        cat ${todofile_queue_new_temp[${queue_no}]} >> ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}
-        rm ${todofile_queue_new_temp[${queue_no}]}
+        cat ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} >> ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}
+        rm ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
     done
 done
 
