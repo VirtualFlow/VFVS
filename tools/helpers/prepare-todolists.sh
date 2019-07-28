@@ -358,12 +358,12 @@ fi
 grep '[^[:blank:]]' < ${todo_file_temp} > ${todo_file_temp}.tmp || true
 mv ${todo_file_temp}.tmp ${todo_file_temp}
 
-
 # Loop for each refilling step
 no_of_refilling_steps="$((${ligands_todo_per_queue} / ${ligands_per_refilling_step}))"
 no_collections_remaining="$(grep -cv '^\s*$' ${todo_file_temp} || true)"
 no_collections_assigned=0
 no_collections_beginning=${no_collections_remaining}
+start_time_seconds="$(date +%s)"
 for refill_step in $(seq 1 ${no_of_refilling_steps}); do
     step_limit=$((${refill_step} * ${ligands_per_refilling_step}))
     # Loop for each node
@@ -443,7 +443,7 @@ fi
 if [[ ! "$*" = *"quiet"* ]]; then
     end_time_seconds="$(date +%s)"
     echo
-    echo "The todo lists for the queues were (re)filled in $((end_time_seconds-VF_START_TIME_SECONDS)) second(s) (waiting time not included)."
+    echo "The todo lists for the queues were (re)filled in $((end_time_seconds-start_time_seconds)) second(s) (waiting time not included)."
     echo "The waiting time was $((end_time_waiting-start_time_waiting)) second(s)."
     echo
 fi
