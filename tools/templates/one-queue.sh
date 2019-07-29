@@ -621,7 +621,7 @@ determine_controlfile() {
     fi
 
     # Checking if the control file has changed
-    if [[ "${VF_CONTROLFILE}" != "${VF_CONTROLFILE_OLD}" ]] || [[ ! -f ${VF_CONTROLFILE_OLD} ]]; then
+    if [[ "${VF_CONTROLFILE}" != "${VF_CONTROLFILE_OLD}" ]] || [[ ! -f ${VF_CONTROLFILE_TEMP} ]]; then
 
         # Updating the temporary controlfile
         cp ${VF_CONTROLFILE} ${VF_CONTROLFILE_TEMP}
