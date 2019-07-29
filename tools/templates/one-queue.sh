@@ -590,8 +590,9 @@ end_queue() {
 determine_controlfile() {
 
     # Determining the VF_CONTROLFILE to use for this jobline
+    VF_CONTROLFILE_OLD=${VF_CONTROLFILE}
     VF_CONTROLFILE=""
-    for file in $(ls ../workflow/control/*-* 2>/dev/null|| true); do
+    for file in $(ls ../workflow/control/*-* 2>/dev/null || true); do
         file_basename=$(basename $file)
         jobline_range=${file_basename/.*}
         jobline_no_start=${jobline_range/-*}
@@ -604,20 +605,27 @@ determine_controlfile() {
 
     # Checking if a specific control file was found
     if [ -z "${VF_CONTROLFILE}" ]; then
-        if [ -f ../workflow/control/all.ctrl ]; then
+        if [[ -f ../workflow/control/all.ctrl ]]; then
 
-            # Variables
-            VF_CONTROLFILE="../workflow/control/all.ctrl"
+            if [[ "{VF_CONTROLFILE_OLD}" != "../workflow/control/all.ctrl" ]]; then
 
-            # Updating the temporary controlfile
-            cp ${VF_CONTROLFILE} ${VF_CONTROLFILE_TEMP}
-
+                # Variables
+                export VF_CONTROLFILE="../workflow/control/all.ctrl"
+            fi
 
         else
             # Error response
             echo "Error: No relevant control file was found..."
             false
         fi
+    fi
+
+    # Checking if the control file has changed
+    if [[ "${VF_CONTROLFILE}" != "${VF_CONTROLFILE_OLD}" ]] || [[ ! -f ${VF_CONTROLFILE_OLD} ]]; then
+
+        # Updating the temporary controlfile
+        cp ${VF_CONTROLFILE} ${VF_CONTROLFILE_TEMP}
+
     fi
 }
 
@@ -627,6 +635,7 @@ if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
 fi
 
 # Determining the control file
+export VF_CONTROLFILE_TEMP=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/controlfile
 determine_controlfile
 
 # Variables

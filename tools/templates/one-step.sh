@@ -122,11 +122,6 @@ if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
     set -x
 fi
 
-# Preparing the temporary controlfile
-mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}
-export VF_CONTROLFILE_TEMP=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/controlfile
-cp ${VF_CONTROLFILE} ${VF_CONTROLFILE_TEMP}
-
 # Setting and exporting variables
 export VF_QUEUE_NO_2=${VF_STEP_NO}
 export VF_QUEUE_NO_12="${VF_QUEUE_NO_1}-${VF_QUEUE_NO_2}"
