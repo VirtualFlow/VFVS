@@ -129,7 +129,7 @@ export VF_LITTLE_TIME="false";
 export VF_START_TIME_SECONDS
 export VF_TIMELIMIT_SECONDS
 pids=""
-store_queue_log_files="$(grep -m 1 "^store_queue_log_files=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+store_queue_log_files="$(grep -m 1 "^store_queue_log_files=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Creating required folders
 mkdir -p ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
