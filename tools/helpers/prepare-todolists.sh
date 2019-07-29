@@ -241,6 +241,9 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
             cp ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no} ${todofile_queue_old_temp}
             queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$(grep -c "" ${todofile_queue_old_temp})
             ligands_to_add=$(awk '{print $2}' ${todofile_queue_old_temp} | paste -sd+ | bc -l)
+            if [ ! ${ligands_to_add} -eq ${ligands_to_add} ]; then
+                ligands_to_add=0
+            fi
             ligands_todo[${queue_no_2}0000${queue_no_3}]=${ligands_to_add}
         fi
 
@@ -423,8 +426,8 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
     for queue_no_3 in $(seq 1 ${queues_per_step}); do
         queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
         mkdir -p ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/
-        cat ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} >> ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}
-        rm ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
+        cat ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} >> ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}  || true
+        rm ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} || true
     done
 done
 
