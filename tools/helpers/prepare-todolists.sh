@@ -233,6 +233,7 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
 
         # Creating a temporary to-do file with the new ligand collections
         todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.new.${queue_no}"
+        touch ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
 
         # Maybe to test: Checking if it works (job run on test). Read the entire list into memory as bash array. 10K package size during refilling. Test the new ligand-list mechanism during breaks.
 
@@ -250,7 +251,6 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
         # Checking the number of ligands in the current ligand collection
         if [ -s "../../workflow/ligand-collections/current/${queue_no_1}/${queue_no_2}/${queue_no}" ]; then
             cp ../../workflow/ligand-collections/current/${queue_no_1}/${queue_no_2}/${queue_no} ${todofile_queue_old_temp}
-            queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$(grep -c "" ${todofile_queue_old_temp})
             ligands_to_add=$(awk '{print $2}' ${todofile_queue_old_temp})
             if [ ! ${ligands_to_add} -eq ${ligands_to_add} ]; then
                 ligands_to_add=0
