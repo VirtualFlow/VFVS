@@ -555,6 +555,7 @@ clean_collection_files_tmp() {
                 else
                     echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
                 fi
+            fi
 
             # Removing possible old status files
             rm ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status &> /dev/null || true
