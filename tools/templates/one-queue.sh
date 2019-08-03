@@ -457,6 +457,7 @@ clean_collection_files_tmp() {
                     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                 else
                     echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
+                    exit 1
                 fi
 
                 # Cleaning up
@@ -481,6 +482,7 @@ clean_collection_files_tmp() {
                     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.txt.gz ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                 else
                     echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
+                    exit 1
                 fi
 
                 # Cleaning up
@@ -505,6 +507,7 @@ clean_collection_files_tmp() {
                     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                 else
                     echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
+                    exit 1
                 fi
 
                 # Cleaning up
@@ -554,6 +557,7 @@ clean_collection_files_tmp() {
                     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz ../output-files/complete/${docking_scenario_name}/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                 else
                     echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
+                    exit 1
                 fi
             fi
 
