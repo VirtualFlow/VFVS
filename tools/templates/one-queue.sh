@@ -445,12 +445,19 @@ clean_collection_files_tmp() {
                 tar -czf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/ ${local_ligand_collection_ID} || true
 
                 # Adding the completed collection archive to the tranch archive
-                mkdir  -p ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}
-                if [ -f ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ]; then
-                    cp ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                if [ "${outputfiles_level}" == "tranch" ]; then
+                    mkdir -p ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}
+                    if [ -f ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ]; then
+                        cp ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                    fi
+                    tar -rf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz || true
+                    mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                elif [ "${outputfiles_level}" == "collection" ]; then
+                    mkdir -p ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                    cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                else
+                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
                 fi
-                tar -rf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz || true
-                mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
 
                 # Cleaning up
                 rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz &> /dev/null || true
@@ -462,12 +469,19 @@ clean_collection_files_tmp() {
                 gzip < ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.txt > ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.txt.gz || true
 
                 # Adding the completed collection archive to the tranch archive
-                mkdir  -p ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}
-                if [ -f ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ]; then
-                    cp ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                if [ "${outputfiles_level}" == "tranch" ]; then
+                    mkdir -p ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}
+                    if [ -f ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ]; then
+                        cp ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                    fi
+                    tar -rf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.txt.gz || true
+                    mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                elif [ "${outputfiles_level}" == "collection" ]; then
+                    mkdir -p ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                    cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.txt.gz ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                else
+                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
                 fi
-                tar -rf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.txt.gz || true
-                mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
 
                 # Cleaning up
                 rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz &> /dev/null || true
@@ -479,12 +493,19 @@ clean_collection_files_tmp() {
                 tar -czf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/ ${local_ligand_collection_ID} || true
 
                 # Adding the completed collection archive to the tranch archive
-                mkdir  -p ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}
-                if [ -f ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ]; then
-                    cp ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                if [ "${outputfiles_level}" == "tranch" ]; then
+                    mkdir -p ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}
+                    if [ -f ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ]; then
+                        cp ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                    fi
+                    tar -rf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz || true
+                    mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar  ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                elif [ "${outputfiles_level}" == "collection" ]; then
+                    mkdir -p ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                    cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                else
+                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
                 fi
-                tar -rf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch} ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz || true
-                mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar  ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
 
                 # Cleaning up
                 rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz &> /dev/null || true
@@ -500,7 +521,6 @@ clean_collection_files_tmp() {
                 if [ -f ../output-files/incomplete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ]; then
                     rm ../output-files/incomplete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz || true
                 fi
-
             done
 
             # Updating the ligand collection files
@@ -516,17 +536,25 @@ clean_collection_files_tmp() {
             # Checking if we should keep the ligand log summary files
             if [ "${keep_ligand_summary_logs}" = "true" ]; then
 
-                # Directory preparation
-                mkdir  -p ../output-files/complete/${docking_scenario_name}//ligand-lists/${local_ligand_collection_metatranch}
+                # Chekcing output file level
+                if [ "${outputfiles_level}" == "tranch" ]; then
 
-                # Compressing and archiving the status file
-                gzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status
-                if [ -f ../output-files/complete/${docking_scenario_name}//ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ]; then
-                    cp ../output-files/complete/${docking_scenario_name}//ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                    # Directory preparation
+                    mkdir  -p ../output-files/complete/${docking_scenario_name}//ligand-lists/${local_ligand_collection_metatranch}
+
+                    # Compressing and archiving the status file
+                    gzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status
+                    if [ -f ../output-files/complete/${docking_scenario_name}//ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ]; then
+                        cp ../output-files/complete/${docking_scenario_name}//ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                    fi
+                    tar -rf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/ ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz || true
+                    mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ../output-files/complete/${docking_scenario_name}//ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
+                elif [ "${outputfiles_level}" == "collection" ]; then
+                    mkdir -p ../output-files/complete/${docking_scenario_name}/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                    cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz ../output-files/complete/${docking_scenario_name}/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
+                else
+                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})"
                 fi
-                tar -rf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/ ${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz || true
-                mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar ../output-files/complete/${docking_scenario_name}//ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}.tar
-            fi
 
             # Removing possible old status files
             rm ../workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status &> /dev/null || true
@@ -584,7 +612,6 @@ clean_collection_files_tmp() {
         for targetformat in ${targetformats//:/ }; do
             rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${targetformat}/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID} &> /dev/null || true
         done
-
     fi
     needs_cleaning="false"
 }
@@ -664,6 +691,7 @@ minimum_time_remaining="$(grep -m 1 "^minimum_time_remaining=" ${VF_CONTROLFILE_
 keep_ligand_summary_logs="$(grep -m 1 "^keep_ligand_summary_logs=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 ligand_check_interval="$(grep -m 1 "^ligand_check_interval=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 cpus_per_queue="$(grep -m 1 "^cpus_per_queue=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+outputfiles_level="$(grep -m 1 "^outputfiles_level=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Docking
 supported_docking_programs="vina, qvina02, qvina_w, smina, adfr"
@@ -695,6 +723,8 @@ docking_scenario_inputfolders_length=${#docking_scenario_inputfolders[@]}
 for docking_scenario_index in $(seq 0 $((${docking_scenario_index_end} - 1)) ); do
     docking_scenario_receptor_filenames[${docking_scenario_index}]=$(grep "^receptor" ${docking_scenario_inputfolders[((docking_scenario_index))]}/config.txt | awk -F "/" '{print $NF}')
 done
+
+
 
 # Getting the value for the variable minimum_time_remaining
 minimum_time_remaining="$(grep -m 1 "^minimum_time_remaining=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"

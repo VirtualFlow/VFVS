@@ -145,6 +145,16 @@ tempdir=/dev/shm
 # In the tempdir, a subfolder named ${USER} will automatically be created
 # Settable via range control files: Yes
 
+outputfiles_level=collection
+# Possible values:
+#   * collection  : The collection output files are stored in tar.gz format. They are stored in subfolders named by metatranch and tranch to reduce the number of files per folder.
+#                   Advantages:
+#                       * Less I/O on the shared cluster file system (as existing tranch archives don't have to be read during storage of completed collectionsds)
+#                       * No risk of output-file clashes when two queues want to store completed collections on the shared filesystem
+#   * tranch      : For each tranch a tar archive is created, which contains the gzipped collection output files.
+#                   Advantages:
+#                       * Less output files (only for each tranch) for each of the output file types (e.g. results, summaries, logfiles, ...)
+
 
 *****************************************************************************************************************************************************************
 *****************************************************************    Virtual Screenign Options    ***************************************************************
