@@ -71,6 +71,7 @@ Options:
 help_info="The -h option can be used to get more information on how to use this script."
 controlfile="../workflow/control/all.ctrl"
 collection_folder="$(grep -m 1 "^collection_folder=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+outputfiles_level="$(grep -m 1 "^outputfiles_level=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 export LC_ALL=C
 export LANG=C
 
@@ -445,32 +446,46 @@ if [[ "${category}" = "vs" ]]; then
 
     # Preparing the summary files and folders
     summary_folders=""
+    rm -r ${tempdir} 2>/dev/null || true
 
     # Complete collections
-    rm -r ${tempdir} 2>/dev/null || true
     folder=../output-files/complete/${docking_scenario_name}
     summary_flag="false"
     summary_folders="${tempdir}/output-files/${docking_scenario_name}/summaries/"
-    if [ -d ${folder}/summaries/ ]; then
-        if [ -n "$(ls -A ${folder}/summaries/)" ]; then
-            summary_flag="true"
-            for metatranch in $(ls ${folder}/summaries/ 2>/dev/null || true); do
-                mkdir -p ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}
-                for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
-                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch} || true
-                done
-            done
-            for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
-                for folder in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}  2>/dev/null || true); do
-                    folder=$(basename ${folder})
-                    for file in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
-                        file=$(basename ${file} || true)
-                        zcat ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all || true
+    if [ "${outputfiles_level}" == "tranch" ]; then
+        if [ -d ${folder}/summaries/ ]; then
+            if [ -n "$(ls -A ${folder}/summaries/)" ]; then
+                summary_flag="true"
+                for metatranch in $(ls ${folder}/summaries/ 2>/dev/null || true); do
+                    mkdir -p ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}
+                    for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
+                        tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch} || true
                     done
-                    rm -r ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}
+                done
+                for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
+                    for folder in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}  2>/dev/null || true); do
+                        folder=$(basename ${folder})
+                        for file in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
+                            file=$(basename ${file} || true)
+                            zcat ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all || true
+                        done
+                        rm -r ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}
+                    done
+                done
+            fi
+        fi
+    elif [ "${outputfiles_level}" == "collection" ]; then
+        for metatranch in $(ls -A ${folder}/summaries/); do
+            for tranch in $(ls -A ${folder}/summaries/${metatranch}); do
+                for file in $(ls -A ${folder}/summaries/${metatranch}/${tranch}); do
+                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file} | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all 2>/dev/null || true
+                    summary_flag="true"
                 done
             done
-        fi
+        done
+    else
+        echo " * Error: The variable 'outputfiles_level' in the controlfile ${controlfile} has an invalid value (${outputfiles_level})"
+        exit 1
     fi
 
     # Adding the incomplete collections
