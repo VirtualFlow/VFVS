@@ -125,8 +125,14 @@ next_todo_list2() {
 
 
     # Changing the symlink
-    rm ../../workflow/ligand-collections/todo/todo.all.locked
-    next_todo_list=$(wc -l todo.all* | grep todo | grep -v " 0 " | head -n 1 | awk '{print $2}')
+    if [ -s ../../workflow/ligand-collections/todo/todo.all.locked ]; then
+        echo " * Warning the old todo file is not empty, trying to compensate... "
+        mv ../../workflow/ligand-collections/todo/todo.all.locked ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
+    else
+        rm ../../workflow/ligand-collections/todo/todo.all.locked
+    fi
+
+    next_todo_list=$(wc -l ../../workflow/ligand-collections/todo/todo.all.[0-9]* | grep -v total | grep -v " 0 " | head -n 1 | awk '{print $2}')
     if [ -n ${next_todo_list} ]; then
 
         ln -s ${next_todo_list} ../../workflow/ligand-collections/todo/todo.all.locked
@@ -140,6 +146,12 @@ next_todo_list2() {
 
         # Emptying the old todo list
         echo -n "" > ../../workflow/ligand-collections/todo/todo.all.${current_todo_list_index}
+
+        # Adding the old list contents if present
+        if [ -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old ]; then
+            cat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old >> ${todo_file_temp}
+            rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
+        fi
 
         # Changing variables
         current_todo_list_index=${next_todo_list_index}
@@ -299,6 +311,12 @@ while [[ "${status}" = "false" ]]; do
         if mv ../../workflow/ligand-collections/todo/todo.all ../../workflow/ligand-collections/todo/todo.all.locked 2>/dev/null; then
             cp ../../workflow/ligand-collections/todo/todo.all.locked ${todo_file_temp}
             current_todo_list_index="$(realpath ../../workflow/ligand-collections/todo/todo.all.locked | xargs basename | xargs basename | awk -F '.' '{print $3}')"
+            if ! [ "${current_todo_list_index}" - eq "${current_todo_list_index}" ]; then
+                echo " * Warning: The current todo file is not a symlink. Trying to compensate..."
+                wc -l ../../workflow/ligand-collections/todo/todo.all.[0-9]* | grep -v total | grep -v " 0 " | awk '{print $2}'
+                rm ../../workflow/ligand-collections/todo/todo.all.locked
+                ln -s ${next_todo_list} ../../workflow/ligand-collections/todo/todo.all.locked
+            fi
             cp ${todo_file_temp} ../../workflow/ligand-collections/var/todo.all.${current_todo_list_index}.bak.${queue_no_1}
             status="true"
             trap 'error_response_std $LINENO' ERR
