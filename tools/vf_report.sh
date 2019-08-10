@@ -447,6 +447,7 @@ if [[ "${category}" = "vs" ]]; then
     # Preparing the summary files and folders
     summary_folders=""
     rm -r ${tempdir} 2>/dev/null || true
+    mkdir -p ${tempdir}
 
     # Complete collections
     folder=../output-files/complete/${docking_scenario_name}
