@@ -399,7 +399,7 @@ if [[ "${category}" = "workflow" ]]; then
     dockings_started=0
     for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
         for folder2 in $(find ../workflow/ligand-collections/done/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
-            dockings_started_to_add="$(grep -ho "Dockings-started:[0-9]\+" ../workflow/ligand-collections/done/$folder1/$folder2/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+            dockings_started_to_add="$(grep -ho "Dockings-started:[0-9]\+" ../workflow/ligand-collections/done/$folder1/$folder2/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
             if [[ -z "${dockings_started_to_add// }" ]]; then
                 dockings_started_to_add=0
             fi
