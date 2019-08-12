@@ -406,7 +406,7 @@ if [[ "${category}" = "workflow" ]]; then
             dockings_started=$((dockings_started + dockings_started_to_add))
         done
     done
-    echo " Number of ligands started: ${dockings_started}"
+    echo " Number of dockings started: ${dockings_started}"
 
     dockings_success=0
     for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
@@ -418,7 +418,7 @@ if [[ "${category}" = "workflow" ]]; then
             dockings_success=$((dockings_success + dockings_success_to_add))
         done
     done
-    echo " Number of ligands successfully completed: ${dockings_success}"
+    echo " Number of dockings successfully completed: ${dockings_success}"
 
     dockings_failed=0
     for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
@@ -430,7 +430,7 @@ if [[ "${category}" = "workflow" ]]; then
             dockings_failed=$((dockings_failed + dockings_failed_to_add))
         done
     done
-    echo " Number of ligands failed: ${dockings_failed}"
+    echo " Number of dockings failed: ${dockings_failed}"
 
     echo
     echo
