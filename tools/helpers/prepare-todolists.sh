@@ -94,45 +94,55 @@ trap 'termination_signal' 1 2 3 9 15
 
 next_todo_list1() {
 
-    # Variables
-    next_todo_list_index=$(printf "%04d" $((10#${current_todo_list_index}+1)) )
-    next_todo_list=../../workflow/ligand-collections/todo/todo.all.${next_todo_list_index}
+    # Checking if current_todo_list_index is a number
+    if [ ${current_todo_list_index} -eq ${current_todo_list_index} ]; then
 
-    # Checking if another todo file exists
-    if [ -f ${next_todo_list} ]; then
+        # Variables
+        next_todo_list_index=$(printf "%04d" $((10#${current_todo_list_index}+1)) )
+        next_todo_list=../../workflow/ligand-collections/todo/todo.all.${next_todo_list_index}
 
-        # Printing information
-        echo "The next todo list will be used (todo.all.${next_todo_list_index})"
+        # Checking if another todo file exists
+        if [ -f ${next_todo_list} ]; then
 
-        # Changing the symlink
-        rm ../../workflow/ligand-collections/todo/todo.all.locked || true
-        ln -s todo.all.${next_todo_list_index} ../../workflow/ligand-collections/todo/todo.all.locked
+            # Printing information
+            echo "The next todo list will be used (todo.all.${next_todo_list_index})"
 
-        # Copying the new todo list to temp
-        cp ${next_todo_list} ${todo_file_temp}
+            # Changing the symlink
+            rm ../../workflow/ligand-collections/todo/todo.all.locked || true
+            ln -s todo.all.${next_todo_list_index} ../../workflow/ligand-collections/todo/todo.all.locked
 
-        # Emptying the old todo list
-        echo -n "" > ../../workflow/ligand-collections/todo/todo.all.${current_todo_list_index}
+            # Copying the new todo list to temp
+            cp ${next_todo_list} ${todo_file_temp}
 
-        # Changing variables
-        current_todo_list_index=${next_todo_list_index}
-        no_collections_remaining="$(grep -cv '^\s*$' ${todo_file_temp} || true)"
-        no_collections_assigned=0
-        no_collections_beginning=${no_collections_remaining}
+            # Emptying the old todo list
+            echo -n "" > ../../workflow/ligand-collections/todo/todo.all.${current_todo_list_index}
+
+            # Changing variables
+            current_todo_list_index=${next_todo_list_index}
+            current_todo_list=${next_todo_list}
+            no_collections_remaining="$(grep -cv '^\s*$' ${todo_file_temp} || true)"
+            no_collections_assigned=0
+            no_collections_beginning=${no_collections_remaining}
+        fi
+    else
+        echo " * Warning: current_todo_list_index is not a number. Trying to compensate..."
     fi
 }
 
 next_todo_list2() {
 
+    # Changing the locked file
+    if [[ -f ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
 
-    # Changing the symlink
-    if [ -s ../../workflow/ligand-collections/todo/todo.all.locked ]; then
-        echo " * Warning the old todo file is not empty, trying to compensate... "
-        mv ../../workflow/ligand-collections/todo/todo.all.locked ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
-    else
-        rm ../../workflow/ligand-collections/todo/todo.all.locked
+        if [[ -s ../../workflow/ligand-collections/todo/todo.all.locked ]] && [[ -L ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
+            echo " * Warning the old todo file is not empty and not a symlink, trying to compensate..."
+            mv ../../workflow/ligand-collections/todo/todo.all.locked ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
+        else
+            rm ../../workflow/ligand-collections/todo/todo.all.locked
+        fi
     fi
 
+    # Determining the next todo list
     next_todo_list=$(wc -l ../../workflow/ligand-collections/todo/todo.all.[0-9]* | grep -v total | grep -v " 0 " | head -n 1 | awk '{print $2}')
     next_todo_list_index=${next_todo_list/*.}
     if [ -n ${next_todo_list_index} ]; then
@@ -151,11 +161,14 @@ next_todo_list2() {
         # Adding the old list contents if present
         if [ -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old ]; then
             cat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old >> ${todo_file_temp}
+            sort -u ${todo_file_temp} > ${todo_file_temp}.tmp # In case that the old todo file was part of the new one
+            mv ${todo_file_temp}.tmp ${todo_file_temp}
             rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
         fi
 
         # Changing variables
         current_todo_list_index=${next_todo_list_index}
+        current_todo_list=${next_todo_list}
         no_collections_remaining="$(grep -cv '^\s*$' ${todo_file_temp} || true)"
         no_collections_assigned=0
         no_collections_beginning=${no_collections_remaining}
@@ -399,14 +412,14 @@ for refill_step in $(seq 1 ${no_of_refilling_steps}); do
 
                     # Checking if there is one more todo list
                     next_todo_list1
-                    no_collections_incomplete="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
+                    no_collections_remaining="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
 
                     # Checking if no more collections
-                    if [[ "${no_collections_incomplete}" = "0" ]]; then
+                    if [[ ! "${no_collections_remaining}" = "0" ]]; then
 
                         # Using the alternative method
                         next_todo_list2
-                        no_collections_incomplete="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
+                        no_collections_remaining="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
 
                         # If no more new collections, quitting
                         if [[ "${no_collections_remaining}" = "0" ]]; then
