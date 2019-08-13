@@ -96,19 +96,20 @@ next_todo_list1() {
 
     # Variables
     next_todo_list_index=$(printf "%04d" $((10#${current_todo_list_index}+1)) )
+    next_todo_list=../../workflow/ligand-collections/todo/todo.all.${next_todo_list_index}
 
     # Checking if another todo file exists
-    if [ -f ../../workflow/ligand-collections/todo/todo.all.${next_todo_list_index} ]; then
+    if [ -f ${next_todo_list} ]; then
 
         # Printing information
         echo "The next todo list will be used (todo.all.${next_todo_list_index})"
 
         # Changing the symlink
-        rm ../../workflow/ligand-collections/todo/todo.all.locked
+        rm ../../workflow/ligand-collections/todo/todo.all.locked || true
         ln -s todo.all.${next_todo_list_index} ../../workflow/ligand-collections/todo/todo.all.locked
 
         # Copying the new todo list to temp
-        cp ../../workflow/ligand-collections/todo/todo.all.${next_todo_list_index} ${todo_file_temp}
+        cp ${next_todo_list} ${todo_file_temp}
 
         # Emptying the old todo list
         echo -n "" > ../../workflow/ligand-collections/todo/todo.all.${current_todo_list_index}
@@ -133,16 +134,16 @@ next_todo_list2() {
     fi
 
     next_todo_list=$(wc -l ../../workflow/ligand-collections/todo/todo.all.[0-9]* | grep -v total | grep -v " 0 " | head -n 1 | awk '{print $2}')
-    if [ -n ${next_todo_list} ]; then
+    next_todo_list_index=${next_todo_list/*.}
+    if [ -n ${next_todo_list_index} ]; then
 
-        ln -s ${next_todo_list} ../../workflow/ligand-collections/todo/todo.all.locked
-        next_todo_list_index=${next_todo_list/*.}
+        ln -s todo.all.${next_todo_list_index} ../../workflow/ligand-collections/todo/todo.all.locked
 
         # Printing information
-        echo "The next todo list will be used (${next_todo_list})"
+        echo "The next todo list will be used (todo.all.${next_todo_list_index})"
 
         # Copying the new todo list to temp
-        cp ../../workflow/ligand-collections/todo/${next_todo_list} ${todo_file_temp}
+        cp ${next_todo_list} ${todo_file_temp}
 
         # Emptying the old todo list
         echo -n "" > ../../workflow/ligand-collections/todo/todo.all.${current_todo_list_index}
@@ -313,9 +314,7 @@ while [[ "${status}" = "false" ]]; do
             current_todo_list_index="$(realpath ../../workflow/ligand-collections/todo/todo.all.locked | xargs basename | xargs basename | awk -F '.' '{print $3}')"
             if ! [ "${current_todo_list_index}" - eq "${current_todo_list_index}" ]; then
                 echo " * Warning: The current todo file is not a symlink. Trying to compensate..."
-                wc -l ../../workflow/ligand-collections/todo/todo.all.[0-9]* | grep -v total | grep -v " 0 " | awk '{print $2}'
-                rm ../../workflow/ligand-collections/todo/todo.all.locked
-                ln -s ${next_todo_list} ../../workflow/ligand-collections/todo/todo.all.locked
+                next_todo_list2
             fi
             cp ${todo_file_temp} ../../workflow/ligand-collections/var/todo.all.${current_todo_list_index}.bak.${queue_no_1}
             status="true"
