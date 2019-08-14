@@ -335,6 +335,11 @@ if [[ "${category}" = "workflow" ]]; then
             ligand_collections_todo=$((ligand_collections_todo + ligand_collections_todo_toadd))
         done
     done
+    ligand_collections_todo_toadd=$(grep -ch "" ../workflow/ligand-collections/todo/todo.all.[0-9]* 2>/dev/null | paste -sd+ 2>/dev/null | bc )
+    if [[ -z "${ligand_collections_todo_toadd// }" ]]; then
+        ligand_collections_todo_toadd=0
+    fi
+    ligand_collections_todo=$((ligand_collections_todo + ligand_collections_todo_toadd))
     echo " Number of ligand collections not yet started: ${ligand_collections_todo}"
     echo
     echo

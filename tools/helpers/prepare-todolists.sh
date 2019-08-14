@@ -311,7 +311,7 @@ start_time_waiting="$(date +%s)"
 dispersion_time_min="$(grep -m 1 "^dispersion_time_min=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 dispersion_time_max="$(grep -m 1 "^dispersion_time_max=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 modification_time_treshhold=$(shuf -i ${dispersion_time_min}-${dispersion_time_max} -n1)
-modification_time_treshhold_lockedfile="3600"              # one hour
+modification_time_treshhold_lockedfile="600"              # 10 minutes
 
 # Loop for hiding the todo.all file
 while [[ "${status}" = "false" ]]; do
@@ -348,7 +348,7 @@ while [[ "${status}" = "false" ]]; do
                 modification_time_difference=0
             fi
             if [ "${modification_time_difference}" -ge "${modification_time_treshhold_lockedfile}" ]; then
-                echo " * The file ../../workflow/ligand-collections/todo/todo.all does exist. Probably it was abandoned because the locked file is quite old."
+                echo " * The file ../../workflow/ligand-collections/todo/todo.all.locked does exist, and probably it was abandoned because the locked file is quite old (${modification_time_difference} seconds)."
                 echo " * Adopting the locked file to this jobline."
                 cp ../../workflow/ligand-collections/todo/todo.all.locked ${todo_file_temp}
                 status="true"
