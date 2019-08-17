@@ -64,14 +64,17 @@ error_response_std() {
     echo "Error has been trapped."
     echo "Error in bash script $(basename ${BASH_SOURCE[0]})"
     echo "Error on line $1"
+
     #clean_up
     if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]]; then
         echo -e "\n * Ignoring error. Trying to continue..."
     elif [[ "${VF_ERROR_RESPONSE}" == "next_job" ]]; then
         echo -e "\n * Trying to stop this job and to start a new job..."
+        kill ${touch_locked_pid} || true
         exit 0        exit 0
     elif [[ "${VF_ERROR_RESPONSE}" == "fail" ]]; then
         echo -e "\n * Stopping this jobline."
+        kill ${touch_locked_pid} || true
         exit 1
     fi
 }
@@ -222,6 +225,7 @@ clean_up() {
     cp ${todo_file_temp}  ../../workflow/ligand-collections/todo/todo.all.locked
     mv ../../workflow/ligand-collections/todo/todo.all.locked ../../workflow/ligand-collections/todo/todo.all
     rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ || true
+    kill ${touch_locked_pid}
 }
 trap 'clean_up' EXIT
 
@@ -311,17 +315,17 @@ start_time_waiting="$(date +%s)"
 dispersion_time_min="$(grep -m 1 "^dispersion_time_min=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 dispersion_time_max="$(grep -m 1 "^dispersion_time_max=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 modification_time_treshhold=$(shuf -i ${dispersion_time_min}-${dispersion_time_max} -n1)
-modification_time_treshhold_lockedfile="600"              # 10 minutes
+modification_time_treshhold_lockedfile="60"              # 1 minute
 
 # Loop for hiding the todo.all file
 while [[ "${status}" = "false" ]]; do
-    modification_time=$(stat -c %Z ../../workflow/ligand-collections/todo/todo.all || true)
-    if [ "${modification_time}" -eq "${modification_time}" ]; then
+    modification_time=$(stat -c %Z ../../workflow/ligand-collections/todo/todo.all 2>/dev/null || true)
+    if [ "${modification_time}" -eq "${modification_time}" 2>/dev/null ]; then
         modification_time_difference="$(($(date +%s) - modification_time))"
     else
         modification_time_difference=0
     fi
-    if [ "${modification_time_difference}" -ge "${modification_time_treshhold}" ]; then
+    if [ "${modification_time_difference}" -ge "${modification_time_treshhold}" 2>/dev/null ]; then
         if mv ../../workflow/ligand-collections/todo/todo.all ../../workflow/ligand-collections/todo/todo.all.locked 2>/dev/null; then
             cp ../../workflow/ligand-collections/todo/todo.all.locked ${todo_file_temp}
             current_todo_list_index="$(realpath ../../workflow/ligand-collections/todo/todo.all.locked | xargs basename | xargs basename | awk -F '.' '{print $3}')"
@@ -332,6 +336,9 @@ while [[ "${status}" = "false" ]]; do
             cp ${todo_file_temp} ../../workflow/ligand-collections/var/todo.all.${current_todo_list_index}.bak.${queue_no_1}
             status="true"
             trap 'error_response_std $LINENO' ERR
+
+            watch -n 1 touch templates/template1.slurm.sh &>/dev/null || true &
+            touch_locked_pid=#!
         else
             sleep 1."$(shuf -i 0-9 -n1)"
         fi
@@ -341,8 +348,8 @@ while [[ "${status}" = "false" ]]; do
         sleep "$(shuf -i 10-30 -n1).$(shuf -i 0-9 -n1)"
         if [ -f ../../workflow/ligand-collections/todo/todo.all.locked ]; then
             # Checking the locked file
-            modification_time=$(stat -c %Z ../../workflow/ligand-collections/todo/todo.all.locked || true)
-            if [ "${modification_time}" -eq "${modification_time}" ]; then
+            modification_time=$(stat -c %Z ../../workflow/ligand-collections/todo/todo.all.locked 2>/dev/null || true)
+            if [ "${modification_time}" -eq "${modification_time}" 2>/dev/null ]; then
                 modification_time_difference="$(($(date +%s) - modification_time))"
             else
                 modification_time_difference=0
