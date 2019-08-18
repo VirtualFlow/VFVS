@@ -124,6 +124,7 @@ next_todo_list1() {
             current_todo_list_index=${next_todo_list_index}
             current_todo_list=${next_todo_list}
             no_collections_remaining="$(grep -cv '^\s*$' ${todo_file_temp} || true)"
+            #no_collections_remaining="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
             no_collections_assigned=0
             no_collections_beginning=${no_collections_remaining}
         fi
@@ -359,7 +360,7 @@ while [[ "${status}" = "false" ]]; do
             if [ "${modification_time_difference}" -ge "${modification_time_treshhold_lockedfile}" ]; then
                 echo " * The file ../../workflow/ligand-collections/todo/todo.all.locked does exist, and probably it was abandoned because the locked file is quite old (${modification_time_difference} seconds)."
                 echo " * Adopting the locked file to this jobline."
-                cp ../../workflow/ligand-collections/todo/todo.all.locked ${todo_file_temp}
+                next_todo_list2
                 status="true"
                 trap 'error_response_std $LINENO' ERR
             elif [ "${k}" = "${max_iter}" ]; then
@@ -421,14 +422,12 @@ for refill_step in $(seq 1 ${no_of_refilling_steps}); do
 
                     # Checking if there is one more todo list
                     next_todo_list1
-                    no_collections_remaining="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
 
                     # Checking if no more collections
                     if [[ ! "${no_collections_remaining}" = "0" ]]; then
 
                         # Using the alternative method
                         next_todo_list2
-                        no_collections_remaining="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
 
                         # If no more new collections, quitting
                         if [[ "${no_collections_remaining}" = "0" ]]; then
