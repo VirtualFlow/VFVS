@@ -138,7 +138,7 @@ next_todo_list2() {
     if [[ -f ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
 
         echo " * Warning: There exists an old (locked) todo file. Trying to take care of it..."
-        if [[ -L ../../workflow/ligand-collections/todo/todo.all.locked ]] && [[ -s ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
+        if [[ ! -L ../../workflow/ligand-collections/todo/todo.all.locked ]] && [[ -s ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
             echo " * Warning: The old todo file is not a symlink and not a empty, trying to preserve it..."
             mv ../../workflow/ligand-collections/todo/todo.all.locked ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
         else
