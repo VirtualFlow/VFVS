@@ -127,6 +127,11 @@ next_todo_list1() {
             #no_collections_remaining="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
             no_collections_assigned=0
             no_collections_beginning=${no_collections_remaining}
+        else
+            next_todo_list_index=$(printf "%04d" $((10#${current_todo_list_index}-1)) )
+            next_todo_list=../../workflow/ligand-collections/todo/todo.all.${next_todo_list_index}
+            no_collections_remaining="0"
+            echo " * Info: No more todo lists."
         fi
     else
         echo " * Warning: current_todo_list_index is not a number. Trying to compensate..."
