@@ -322,7 +322,7 @@ start_time_waiting="$(date +%s)"
 dispersion_time_min="$(grep -m 1 "^dispersion_time_min=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 dispersion_time_max="$(grep -m 1 "^dispersion_time_max=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 modification_time_treshhold=$(shuf -i ${dispersion_time_min}-${dispersion_time_max} -n1)
-modification_time_treshhold_lockedfile="60"              # 1 minute
+modification_time_treshhold_lockedfile="300"              # 5 minute
 
 # Loop for hiding the todo.all file
 while [[ "${status}" = "false" ]]; do
