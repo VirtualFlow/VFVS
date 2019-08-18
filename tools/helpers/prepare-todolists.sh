@@ -266,7 +266,7 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
 
         # Creating a temporary to-do file with the new ligand collections
         todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.new.${queue_no}"
-        touch ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
+        touch -m ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
 
         # Maybe to test: Checking if it works (job run on test). Read the entire list into memory as bash array. 10K package size during refilling. Test the new ligand-list mechanism during breaks.
 
