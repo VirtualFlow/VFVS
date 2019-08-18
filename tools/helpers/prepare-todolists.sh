@@ -137,10 +137,12 @@ next_todo_list2() {
     # Changing the locked file
     if [[ -f ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
 
-        if [[ -s ../../workflow/ligand-collections/todo/todo.all.locked ]] && [[ -L ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
-            echo " * Warning the old todo file is not empty and not a symlink, trying to compensate..."
+        echo " * Warning: There exists an old (locked) todo file. Trying to take care of it..."
+        if [[ -L ../../workflow/ligand-collections/todo/todo.all.locked ]] && [[ -s ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
+            echo " * Warning: The old todo file is not a symlink and not a empty, trying to preserve it..."
             mv ../../workflow/ligand-collections/todo/todo.all.locked ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
         else
+            echo " * Warning: The old todo file is a symlink or an empty file. Removing it..."
             rm ../../workflow/ligand-collections/todo/todo.all.locked
         fi
     fi
@@ -329,7 +331,7 @@ while [[ "${status}" = "false" ]]; do
         if mv ../../workflow/ligand-collections/todo/todo.all ../../workflow/ligand-collections/todo/todo.all.locked 2>/dev/null; then
             cp ../../workflow/ligand-collections/todo/todo.all.locked ${todo_file_temp}
             current_todo_list_index="$(realpath ../../workflow/ligand-collections/todo/todo.all.locked | xargs basename | xargs basename | awk -F '.' '{print $3}')"
-            if ! [ "${current_todo_list_index}" - eq "${current_todo_list_index}" ]; then
+            if ! [ "${current_todo_list_index}" -eq "${current_todo_list_index}" ]; then
                 echo " * Warning: The current todo file is not a symlink. Trying to compensate..."
                 next_todo_list2
             fi
