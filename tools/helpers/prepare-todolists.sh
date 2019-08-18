@@ -70,11 +70,11 @@ error_response_std() {
         echo -e "\n * Ignoring error. Trying to continue..."
     elif [[ "${VF_ERROR_RESPONSE}" == "next_job" ]]; then
         echo -e "\n * Trying to stop this job and to start a new job..."
-        kill ${touch_locked_pid} || true
+        kill -9 ${touch_locked_pid} &>/dev/null  || true
         exit 0        exit 0
     elif [[ "${VF_ERROR_RESPONSE}" == "fail" ]]; then
         echo -e "\n * Stopping this jobline."
-        kill ${touch_locked_pid} || true
+        kill -9 ${touch_locked_pid} &>/dev/null || true
         exit 1
     fi
 }
@@ -225,7 +225,7 @@ clean_up() {
     cp ${todo_file_temp}  ../../workflow/ligand-collections/todo/todo.all.locked
     mv ../../workflow/ligand-collections/todo/todo.all.locked ../../workflow/ligand-collections/todo/todo.all
     rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ || true
-    kill ${touch_locked_pid}
+    kill ${touch_locked_pid} &>/dev/null || true
 }
 trap 'clean_up' EXIT
 
@@ -337,7 +337,7 @@ while [[ "${status}" = "false" ]]; do
             status="true"
             trap 'error_response_std $LINENO' ERR
 
-            watch -n 1 touch templates/template1.slurm.sh &>/dev/null || true &
+            watch -n 1 touch ../../workflow/ligand-collections/var/todo.all.locked &>/dev/null &
             touch_locked_pid=#!
         else
             sleep 1."$(shuf -i 0-9 -n1)"
