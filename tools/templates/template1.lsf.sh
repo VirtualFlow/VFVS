@@ -273,7 +273,7 @@ if [ "${prepare_queue_todolists^^}" == "TRUE" ]; then
     cd helpers
     bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
     cd ..
-if [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
+elif [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
     " * Skipping the todo-list preparation as specified in the control-file."
 else
     echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})."
