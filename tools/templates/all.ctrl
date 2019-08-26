@@ -155,6 +155,11 @@ outputfiles_level=collection
 #                   Advantages:
 #                       * Less output files (only for each tranch) for each of the output file types (e.g. results, summaries, logfiles, ...)
 
+prepare_queue_todolists=true
+# Possible values:
+#   * false The todo lists will not be prepared/refilled at the beginning of the jobs. Useful mainly when the todolists are prepared in advance before the workflow is started.
+#   * true: The todo lists for each queue will be prepared/refilled during the beginning of each job.
+
 
 *****************************************************************************************************************************************************************
 *****************************************************************    Virtual Screenign Options    ***************************************************************

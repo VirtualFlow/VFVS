@@ -268,9 +268,17 @@ line=$(cat ${VF_CONTROLFILE} | grep -m 1 "queues_per_step=")
 export VF_QUEUES_PER_STEP=${line/"queues_per_step="}
 
 # Preparing the to-do lists for the queues
-cd helpers
-bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
-cd ..
+prepare_queue_todolists="$(grep -m 1 "^prepare_queue_todolists=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+if [ "${prepare_queue_todolists^^}" == "TRUE" ]; then
+    cd helpers
+    bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
+    cd ..
+if [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
+    " * Skipping the todo-list preparation as specified in the control-file."
+else
+    echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})."
+    false
+fi
 
 # Starting the individual steps on different nodes
 for VF_STEP_NO in $(seq 1 ${VF_NODES_PER_JOB} ); do

@@ -76,6 +76,10 @@ error_response_std() {
         echo -e "\n * Stopping this jobline."
         kill -9 ${touch_locked_pid} &>/dev/null || true
         exit 1
+    else
+        echo -e "\n * Stopping this jobline."
+        kill -9 ${touch_locked_pid} &>/dev/null || true
+        exit 1
     fi
 }
 # Trapping only after we got hold of the to-do.all file (the wait command seems to fail when catching USR1, and thus causes the general error response rather than a time_near_limit response)
@@ -171,7 +175,7 @@ next_todo_list2() {
 
         # Adding the old list contents if present
         if [ -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old ]; then
-            cat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old >> ${todo_file_temp}
+            cat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old > ${todo_file_temp}
             sort -u ${todo_file_temp} > ${todo_file_temp}.tmp # In case that the old todo file was part of the new one
             mv ${todo_file_temp}.tmp ${todo_file_temp}
             rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
@@ -428,7 +432,7 @@ for refill_step in $(seq 1 ${no_of_refilling_steps}); do
                     next_todo_list1
 
                     # Checking if no more collections
-                    if [[ ! "${no_collections_remaining}" = "0" ]]; then
+                    if [[ "${no_collections_remaining}" = "0" ]]; then
 
                         # Using the alternative method
                         next_todo_list2

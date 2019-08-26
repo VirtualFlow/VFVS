@@ -253,8 +253,7 @@ export VF_JOBLETTER=${line/"job_letter="}
 
 
 # Setting the error sensitivity
-line=$(cat ${VF_CONTROLFILE} | grep -m 1 "error_sensitivity=")
-export VF_ERROR_SENSITIVITY=${line/"error_sensitivity="}
+VF_ERROR_SENSITIVITY="$(grep -m 1 "^error_sensitivity=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 if [[ "${VF_ERROR_SENSITIVITY}" == "high" ]]; then
     set -uo pipefail
     trap '' PIPE        # SIGPIPE = exit code 141, means broken pipe. Happens often, e.g. if head is listening and got all the lines it needs.
@@ -274,9 +273,17 @@ line=$(cat ${VF_CONTROLFILE} | grep "queues_per_step=")
 export VF_QUEUES_PER_STEP=${line/"queues_per_step="}
 
 # Preparing the todo lists for the queues
-cd helpers
-bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
-cd ..
+prepare_queue_todolists="$(grep -m 1 "^prepare_queue_todolists=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+if [ "${prepare_queue_todolists^^}" == "TRUE" ]; then
+    cd helpers
+    bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
+    cd ..
+if [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
+    " * Skipping the todo-list preparation as specified in the control-file."
+else
+    echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})."
+    false
+fi
 
 # Starting the individual steps on different nodes
 for VF_STEP_NO in $(seq 1 ${VF_NODES_PER_JOB} ); do
