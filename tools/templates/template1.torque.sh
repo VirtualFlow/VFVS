@@ -253,8 +253,8 @@ if [[ "${VF_ERROR_SENSITIVITY}" == "high" ]]; then
 fi
 
 # Setting the error response
-line=$(cat ${VF_CONTROLFILE} | grep -m 1 "^error_response=")
-export VF_ERROR_RESPONSE=${line/"error_response="}
+VF_ERROR_RESPONSE="$(grep -m 1 "^error_response=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+export VF_ERROR_RESPONSE
 
 # Checking if queue should be stopped
 check_queue_end1
@@ -276,8 +276,10 @@ if [ "${prepare_queue_todolists^^}" == "TRUE" ]; then
     cd ..
 elif [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
     echo " * Skipping the todo-list preparation as specified in the control-file."
+    echo
 else
     echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})."
+    echo
     false
 fi
 

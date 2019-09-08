@@ -275,8 +275,10 @@ if [ "${prepare_queue_todolists^^}" == "TRUE" ]; then
     cd ..
 elif [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
     echo " * Skipping the todo-list preparation as specified in the control-file."
+    echo
 else
     echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})."
+    echo
     false
 fi
 

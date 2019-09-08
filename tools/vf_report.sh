@@ -194,10 +194,6 @@ if [ "${show_vs_statistics_flag}" == "false" ]; then
     show_vs_statistics="true"
 fi
 
-# Getting the batchsystem type
-batchsystem="$(grep -m 1 "^batchsystem=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-job_letter="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-
 # Docking variables
 docking_scenario_replicas_total="$(grep -m 1 "^docking_scenario_replicas=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_scenario_replicas_total <<< "$docking_scenario_replicas_total"
@@ -211,7 +207,7 @@ done
 echo
 echo "                                  $(date)                                       "
 
-# Checking category
+# Checking the category
 if [[ "${category}" = "workflow" ]]; then
 
     # Displaying the information
