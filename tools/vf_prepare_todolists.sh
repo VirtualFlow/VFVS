@@ -19,13 +19,13 @@
 
 #Checking the input arguments
 usage="Usage: vf_prepare_todolists.sh <start-jobline-id> <end-jobline-id>
-#
-#Description: Prepares the todo lists of the joblines in advance of the workflow. Uses the corresponding control files in ../workflow/control for each jobline.
-#
-#Arguments:
-#    <start-jobline-id>:         Positive integer
-#    <end-jobline-id>:           Positive integer
-#"
+
+Description: Prepares the todo lists of the joblines in advance of the workflow. Uses the corresponding control files in ../workflow/control for each jobline.
+
+Arguments:
+    <start-jobline-id>:         Positive integer
+    <end-jobline-id>:           Positive integer
+"
 if [ "${1}" == "-h" ]; then
    echo -e "\n${usage}\n\n"
    exit 0

@@ -472,8 +472,10 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
     for queue_no_3 in $(seq 1 ${queues_per_step}); do
         queue_no="${queue_no_1}-${queue_no_2}-${queue_no_3}"
         mkdir -p ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/
-        cat ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} >> ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}  || true
-        rm ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} || true
+        if [ -f ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} ]; do
+            cat ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} >> ../../workflow/ligand-collections/todo/${queue_no_1}/${queue_no_2}/${queue_no}  || true
+            rm ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]} || true
+        fi
     done
 done
 
