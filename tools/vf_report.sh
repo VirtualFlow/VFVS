@@ -72,6 +72,8 @@ help_info="The -h option can be used to get more information on how to use this 
 controlfile="../workflow/control/all.ctrl"
 collection_folder="$(grep -m 1 "^collection_folder=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 outputfiles_level="$(grep -m 1 "^outputfiles_level=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+batchsystem="$(grep -m 1 "^batchsystem=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+job_letter="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 export LC_ALL=C
 export LANG=C
 
