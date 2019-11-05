@@ -1,3 +1,5 @@
+### How to contribute to VFVS
+
 #### Table of Contents
 
 - [Introduction](#introduction)
