@@ -8,8 +8,8 @@ VirtualFlow is a versatile, parallel workflow platform for carrying out virtual 
 
 Currently, there exist two versions of VirtualFlow, which are tailored to different types of tasks:
 
-- VFLP: VirtualFlow for Ligand Preparation
-- VFVS : VirtualFlow for Virtual Screenings
+- [VFLP: VirtualFlow for Ligand Preparation](https://github.com/VirtualFlow/VFLP)
+- [VFVS : VirtualFlow for Virtual Screenings](https://github.com/VirtualFlow/VFVS)
 
 They use the same core technology regarding the workflow management and parallelization, and they can be used individually or in concert with each other. Additional versions are expected to arrive in the future. Pre-built ready-to-dock ligand libraries for VFVS are available for free (in the download section). 
 
