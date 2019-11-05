@@ -43,7 +43,7 @@ The following gives an overview of the various resources related to VirtualFlow:
 
 - [Homepage of VirtualFlow](https://virtual-flow.org/)
 - [The documentation of VirtualFlow](https://docs.virtual-flow.org/documentation/-LdE8RH9UN4HKpckqkX3/)
-- [Tutorials for VirtualFlow](https://docs.virtual-flow.org/tutorials/-LdE94b2AVfBFT72zK-v/)
+- [Tutorials for VirtualFlow](https://virtual-flow.org/tutorials)
 - [Feature Requests (powered by Canny)](http://feedback.virtual-flow.org/feature-requests)
 - [GitHub Issue Tracker for VFVS](https://github.com/VirtualFlow/VFVS/issues)
 - [GitHub Issue Tracker for VFLP](https://github.com/VirtualFlow/VFLP/issues)
