@@ -37,7 +37,7 @@ fi
 # Displaying the banner
 echo
 echo
-. slave/show_banner.sh
+. helpers/show_banner.sh
 echo
 echo
 

@@ -34,7 +34,7 @@ fi
 if [[ "$0" != "$BASH_SOURCE" ]]; then # test if the script was sourced or executed
     echo
     echo
-    . slave/show_banner.sh
+    . helpers/show_banner.sh
     echo
     echo
 fi
@@ -48,13 +48,19 @@ error_response_nonstd() {
 }
 trap 'error_response_nonstd $LINENO' ERR
 
+# Clean up
+clean_up() {
+    rm -r ${tempdir}/ 2>/dev/null || true
+}
+trap 'clean_up' EXIT
+
 # Variables
 first_jobline_no=${1}
 last_jobline_no=${2}
 job_template=${3}
 export VF_CONTROLFILE="../workflow/control/all.ctrl"
 export VF_JOBLETTER="$(grep -m 1 "^job_letter=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-
+vf_tempdir="$(grep -m 1 "^tempdir=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
 # Verbosity
 VF_VERBOSITY_COMMANDS="$(grep -m 1 "^verbosity_commands=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
@@ -64,24 +70,25 @@ if [ "${VF_VERBOSITY_COMMANDS}" = "debug" ]; then
 fi
 
 # Formatting screen output
-echo "" 
+echo ""
 
-# Removing old files if existens
-if [ -f "tmp/jobs-to-continue" ]; then
-    rm tmp/jobs-to-continue
+# Removing old files if existent
+tempdir=${vf_tempdir}/$USER/VFVS/${VF_JOBLETTER}/vf_continue_jobline_$(date | tr " :" "_")
+if [ -f "${tempdir}/jobs-to-continue" ]; then
+    rm ${tempdir}/jobs-to-continue
 fi
-mkdir -p tmp
+mkdir -p ${tempdir}
 
 # Storing all the jobs which are currently running
-touch tmp/jobs-all
-bin/sqs > tmp/jobs-all 2>/dev/null || true
+touch ${tempdir}/jobs-all
+bin/sqs > ${tempdir}/jobs-all 2>/dev/null || true
 
 # Storing all joblines which have to be restarted
 echo "Checking which joblines are already in the batchsystem"
 for VF_JOBLINE_NO in $(seq ${first_jobline_no} ${last_jobline_no}); do
-    if ! grep -q "${VF_JOBLETTER}\-${VF_JOBLINE_NO}\."  tmp/jobs-all; then
+    if ! grep -q "${VF_JOBLETTER}\-${VF_JOBLINE_NO}\."  ${tempdir}/jobs-all; then
         echo "Adding jobline ${VF_JOBLINE_NO} to the list of joblines to be continued."
-        echo ${VF_JOBLINE_NO} >> "tmp/jobs-to-continue"
+        echo ${VF_JOBLINE_NO} >> "${tempdir}/jobs-to-continue"
     else
         echo "Omitting jobline ${VF_JOBLINE_NO} because it was found in the batchsystem."
     fi
@@ -92,11 +99,11 @@ k=0
 delay_time="${4}"
 
 # Resetting the collections and continuing the jobs if existent
-if [ -f tmp/jobs-to-continue ]; then
-    k_max="$(cat tmp/jobs-to-continue | wc -l)"
-    for VF_JOBLINE_NO in $(cat tmp/jobs-to-continue ); do
+if [ -f ${tempdir}/jobs-to-continue ]; then
+    k_max="$(cat ${tempdir}/jobs-to-continue | wc -l)"
+    for VF_JOBLINE_NO in $(cat ${tempdir}/jobs-to-continue ); do
         k=$(( k + 1 ))
-        cd slave
+        cd helpers
         echo "Continuing jobline ${VF_JOBLINE_NO}"
         . exchange-continue-jobline.sh ${VF_JOBLINE_NO} ${VF_JOBLINE_NO} ${job_template} quiet
         cd ..
@@ -107,11 +114,11 @@ if [ -f tmp/jobs-to-continue ]; then
 fi
 
 # Removing the temporary files
-if [ -f "tmp/jobs-all" ]; then
-    rm tmp/jobs-all
+if [ -f "${tempdir}/jobs-all" ]; then
+    rm ${tempdir}/jobs-all
 fi
-if [ -f "tmp/jobs-to-continue" ]; then
-    rm tmp/jobs-to-continue
+if [ -f "${tempdir}/jobs-to-continue" ]; then
+    rm ${tempdir}/jobs-to-continue
 fi
 
 # Displaying some information

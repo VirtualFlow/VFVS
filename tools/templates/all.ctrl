@@ -9,7 +9,7 @@ job_letter=t
 # Settable via range control files: No
 
 batchsystem=SLURM
-# Possible values: SLURM, TOQRUE, PBS, LSF, SGE
+# Possible values: SLURM, TORQUE, PBS, LSF, SGE
 # Settable via range control files: No
 
 partition=shared
@@ -145,6 +145,21 @@ tempdir=/dev/shm
 # In the tempdir, a subfolder named ${USER} will automatically be created
 # Settable via range control files: Yes
 
+outputfiles_level=collection
+# Possible values:
+#   * collection  : The collection output files are stored in tar.gz format. They are stored in subfolders named by metatranch and tranch to reduce the number of files per folder.
+#                   Advantages:
+#                       * Less I/O on the shared cluster file system (as existing tranch archives don't have to be read during storage of completed collectionsds)
+#                       * No risk of output-file clashes when two queues want to store completed collections on the shared filesystem
+#   * tranch      : For each tranch a tar archive is created, which contains the gzipped collection output files.
+#                   Advantages:
+#                       * Less output files (only for each tranch) for each of the output file types (e.g. results, summaries, logfiles, ...)
+
+prepare_queue_todolists=true
+# Possible values:
+#   * false The todo lists will not be prepared/refilled at the beginning of the jobs. Useful mainly when the todolists are prepared in advance before the workflow is started.
+#   * true: The todo lists for each queue will be prepared/refilled during the beginning of each job.
+
 
 *****************************************************************************************************************************************************************
 *****************************************************************    Virtual Screenign Options    ***************************************************************
@@ -174,7 +189,7 @@ docking_scenario_replicas=TBC
 # Settable via range control files: Yes
 
 docking_scenario_inputfolders=TBC
-# Relative path wrt to the tools folders
+# Relative path with respect to the tools folders
 # In each input folder must be the file config.txt which is used by the docking program to specify its options
 # If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder
 # Should not be changed during runtime, and be the same for all joblines
@@ -193,6 +208,7 @@ stop_after_next_check_interval=false
 # Settable via range control files: Yes
 
 ligand_check_interval=10
+# Determines after how many ligands the controlfile which should be used is determined and checked for termination flags
 # For large scale production runs a value of > 100 is recommended
 # Possible values
 #   * Positive integer
