@@ -33,3 +33,9 @@ If you are interested in contributing to VirtualFlow, whether it is to report a 
 ### License
 
 The project ist distributed under the GNU GPL v3.0. Please see the file [LICENSE](LICENSE) for more details. 
+
+
+
+### Contact
+
+If you have any questions, or would to get in touch with us, please contact Christoph Gorgulla (cgorgulla@g.harvard.edu).
