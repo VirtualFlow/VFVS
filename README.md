@@ -1,4 +1,4 @@
-## VFLP - VirtualFlow for Ligand Preparation
+## VFVS - VirtualFlow for Virtual Screening
 
 VirtualFlow is a versatile, parallel workflow platform for carrying out virtual screening related tasks on Linux-based computer clusters of any type and size which are managed by a batchsystem (such as SLURM). 
 
@@ -26,7 +26,7 @@ The following gives an overview of the various resources related to VirtualFlow:
 
 ### Contributing
 
-If you are interested in contributing to VirtualFlow, please see the file [CONTRIBUTING.md](CONTRIBUTING.md) and the file [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+If you are interested in contributing to VirtualFlow, whether it is to report a bug or to extend VirtualFlow with your own code, please see the file [CONTRIBUTING.md](CONTRIBUTING.md) and the file [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 
 
