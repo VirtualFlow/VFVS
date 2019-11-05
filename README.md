@@ -26,7 +26,7 @@ The following gives an overview of the various resources related to VirtualFlow:
 
 ### Contributing
 
-If you are interested in contributing to VirtualFlow, please see the file [CONTRIBUTING.md](CONTRIBUTING.md) and the file [CODE_OF_CONDUCT.md](file CODE_OF_CONDUCT.md).
+If you are interested in contributing to VirtualFlow, please see the file [CONTRIBUTING.md](CONTRIBUTING.md) and the file [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 
 
