@@ -1,4 +1,4 @@
-## How to contribute to VFVS
+## How to contribute to VirtualFlow
 
 #### Table of Contents
 
