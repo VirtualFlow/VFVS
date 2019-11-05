@@ -10,13 +10,13 @@
     - [Improving/Extending the Tutorials](#improvingextending-the-tutorials)
     - [Resolution of one of the Issues on GitHub](#resolution-of-one-of-the-github-issues)
     - [Contibuting Code](#contributing-code)
-        - [Types of Code Contributions](#types-of-code-contributions)
+<!---        - [Types of Code Contributions](#types-of-code-contributions)
         - [Development Environment](#development-environment)
         - [Development Process](#development-process)
         - [Testing](#testing)
         - [Style Guidelines](#style-guidelines)
 - [Questions](#questions)
-- [Links](#links)
+- [Links](#links) -->
 
 
 ### Introduction
@@ -42,7 +42,7 @@ The following gives an overview of the various resources related to VirtualFlow:
 - [Homepage of VirtualFlow](https://virtual-flow.org/)
 - [The documentation of VirtualFlow](https://docs.virtual-flow.org/documentation/-LdE8RH9UN4HKpckqkX3/)
 - [Tutorials for VirtualFlow](https://docs.virtual-flow.org/tutorials/-LdE94b2AVfBFT72zK-v/)
-- [Feature Requests (managed by Canny)](http://feedback.virtual-flow.org/feature-requests)
+- [Feature Requests (powered by Canny)](http://feedback.virtual-flow.org/feature-requests)
 - [GitHub Issue Tracker for VFVS](https://github.com/VirtualFlow/VFVS/issues)
 - [GitHub Issue Tracker for VFLP](https://github.com/VirtualFlow/VFLP/issues)
 - In-code documentation of the source code files
@@ -52,17 +52,40 @@ The following gives an overview of the various resources related to VirtualFlow:
 
 #### Features Requests
 
+New features can be requested [here](http://feedback.virtual-flow.org/feature-requests), which is powered by Canny.
+
+
 #### Bug Reports
+
+Bug reports can be done via our GitHub issue tracker:
+- [GitHub Issue Tracker for VFVS](https://github.com/VirtualFlow/VFVS/issues)
+- [GitHub Issue Tracker for VFLP](https://github.com/VirtualFlow/VFLP/issues)
+
 
 #### Improving/Extending the Documentation
 
+If you would like to extend the documenation, please contact Christoph Gorgulla (cgorgulla@g.harvard.edu) for futher coordination.
+
+
 #### Improving/Extending the Tutorials
+
+If you would like to improve/extend the tutorials, please contact Christoph Gorgulla (cgorgulla@g.harvard.edu) for futher coordination.
+
 
 #### Resolution of One of the GitHub Issues
 
+If you would like to help to resolve the issues coming up in our issue trackers, please contact Christoph Gorgulla (cgorgulla@g.harvard.edu) for futher coordination.
+
+
 #### Contributing Code
 
-##### Types of Code Contributions
+Code contributions are managed by pull requests. 
+
+Working on your first Pull Request? You can learn how from this free series:
+- [How to Contribute to an Open Source Project on GitHub](https://egghead.io/series/how-to-contribute-to-an-open-source-project-on-github).
+
+
+<!--- ##### Types of Code Contributions
 
 ##### Development Environment
 
@@ -70,8 +93,9 @@ The following gives an overview of the various resources related to VirtualFlow:
 
 ##### Testing
 
-##### Style Guidelines
+##### Style Guidelines 
 
 ### Questions
 
 ### Links
+-->
