@@ -58,7 +58,7 @@ Options:
     -c: Possible categories are:
             workflow: Shows information about the status of the workflow and the batchsystem.
             vs: Shows information about the virtual screening results. Requires the -d option.
-    -v: Specifies the verbosity level of the output. Possible values are 1-3 (default 1)
+    -v: Specifies the verbosity level of the output. Possible values are 1-2 (default 1)
     -d: Specifies the docking type name (as defined in the workflow/control/all.ctrl file)
     -s: Specifies if statistical information should be shown about the virtual screening results (in the vs category)
         Possible values: true, false
@@ -71,6 +71,9 @@ Options:
 help_info="The -h option can be used to get more information on how to use this script."
 controlfile="../workflow/control/all.ctrl"
 collection_folder="$(grep -m 1 "^collection_folder=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+outputfiles_level="$(grep -m 1 "^outputfiles_level=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+batchsystem="$(grep -m 1 "^batchsystem=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+job_letter="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 export LC_ALL=C
 export LANG=C
 
@@ -110,7 +113,7 @@ while getopts ':hc:v:d:n:s:' option; do
             category_flag=true
             ;;
         v)  verbosity=$OPTARG
-            if ! [[ "${verbosity}" == [1-3] ]]; then
+            if ! [[ "${verbosity}" == [1-2] ]]; then
                 echo -e "\nAn unsupported verbosity level (${verbosity}) has been specified via the -v option."
                 echo -e "${help_info}\n"
                 echo -e "Cleaning up and exiting...\n\n"
@@ -193,10 +196,6 @@ if [ "${show_vs_statistics_flag}" == "false" ]; then
     show_vs_statistics="true"
 fi
 
-# Getting the batchsystem type
-batchsystem="$(grep -m 1 "^batchsystem=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-job_letter="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-
 # Docking variables
 docking_scenario_replicas_total="$(grep -m 1 "^docking_scenario_replicas=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 IFS=':' read -a docking_scenario_replicas_total <<< "$docking_scenario_replicas_total"
@@ -210,7 +209,7 @@ done
 echo
 echo "                                  $(date)                                       "
 
-# Checking category
+# Checking the category
 if [[ "${category}" = "workflow" ]]; then
 
     # Displaying the information
@@ -269,8 +268,8 @@ if [[ "${category}" = "workflow" ]]; then
         done
         echo " Number of joblines in the batch system currently not running: $(bin/sqs 2>/dev/null | grep "${job_letter}\-" | grep "${USER:0:8}" | grep -i  " qw " | grep -c "" 2>/dev/null || true)"
     fi
-    if [[ "$verbosity" -gt "3" ]]; then
-        echo " Number of collections which are currently assigend to more than one queue: $(awk -F '.' '{print $1}' ../workflow/ligand-collections/current/* 2>/dev/null | sort -S 80% | uniq -c | grep " [2-9] " | grep -c "" 2>/dev/null || true)"
+    if [[ "$verbosity" -gt "2" ]]; then
+        echo " Number of collections which are currently assigned to more than one queue: $(awk -F '.' '{print $1}' ../workflow/ligand-collections/current/*/*/* 2>/dev/null | sort -S 80% | uniq -c | grep " [2-9] " | grep -c "" 2>/dev/null || true)"
     fi
     if [[ "${batchsystem}" == "LSF" || "${batchsystem}" == "SLURM" || "{batchsystem}" == "SGE" ]]; then
         if [[ "${batchsystem}" == "SLURM" ]]; then
@@ -299,25 +298,47 @@ if [[ "${category}" = "workflow" ]]; then
     echo "................................................................................................"
     echo
     echo " Total number of ligand collections: $(grep -c "" ../workflow/ligand-collections/var/todo.original 2>/dev/null || true )"
-    
-    ligand_collections_completed="$(grep -ch "" ../workflow/ligand-collections/done/* 2>/dev/null | paste -sd+ 2>/dev/null | bc )"
-    if [ -z ${ligand_collections_completed} ]; then 
-        ligand_collections_completed=0
-    fi
+
+    ligand_collections_completed=0
+    for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/done/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            ligand_collections_completed_toadd="$(grep -ch "" ../workflow/ligand-collections/done/$folder1/$folder2/* 2>/dev/null | paste -sd+ 2>/dev/null | bc )"
+            if [[ -z "${ligand_collections_completed_toadd// }" ]]; then
+                ligand_collections_completed_toadd=0
+            fi
+            ligand_collections_completed=$((ligand_collections_completed + ligand_collections_completed_toadd))
+        done
+    done
     echo " Number of ligand collections completed: ${ligand_collections_completed}"
-    
-    ligand_collections_processing=$(grep -ch "" ../workflow/ligand-collections/current/* 2>/dev/null | paste -sd+ 2>/dev/null | bc )
-    if [ -z ${ligand_collections_processing} ]; then 
-        ligand_collections_processing=0
+
+    ligand_collections_processing=0
+    for folder1 in $(find ../workflow/ligand-collections/current/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/current/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            ligand_collections_processing_toadd=$(grep -ch "" ../workflow/ligand-collections/current/$folder1/$folder2/* 2>/dev/null | paste -sd+ 2>/dev/null | bc )
+            if [[ -z "${ligand_collections_processing_toadd// }" ]]; then
+                ligand_collections_processing_toadd=0
+            fi
+            ligand_collections_processing=$((ligand_collections_processing + ligand_collections_processing_toadd))
+        done
+    done
+    echo " Number of ligand collections in state \"processing\": ${ligand_collections_processing}"
+
+    ligand_collections_todo=0
+    for folder1 in $(find ../workflow/ligand-collections/todo/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/todo/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            ligand_collections_todo_toadd=$(grep -ch "" ../workflow/ligand-collections/todo/$folder1/$folder2/* 2>/dev/null | paste -sd+ 2>/dev/null | bc )
+            if [[ -z "${ligand_collections_todo_toadd// }" ]]; then
+                ligand_collections_todo_toadd=0
+            fi
+            ligand_collections_todo=$((ligand_collections_todo + ligand_collections_todo_toadd))
+        done
+    done
+    ligand_collections_todo_toadd=$(grep -ch "" ../workflow/ligand-collections/todo/todo.all.[0-9]* 2>/dev/null | paste -sd+ 2>/dev/null | bc )
+    if [[ -z "${ligand_collections_todo_toadd// }" ]]; then
+        ligand_collections_todo_toadd=0
     fi
-    echo " Number of ligand collections in state \"processing\": ${ligand_collections_processing}"                      # remove empty lines: grep -v '^\s*$'
-    
-    ligand_collections_todo=$(grep -ch "" ../workflow/ligand-collections/todo/*[0-9]* 2>/dev/null | paste -sd+ 2>/dev/null | bc ) # not counting the symlink todo.all, since this would result in a double-count
-    if [ -z ${ligand_collections_todo} ]; then
-        ligand_collections_todo=0
-    fi
-    echo -ne " Number of ligand collections not yet started: ${ligand_collections_todo}                                   \\r"
-    echo
+    ligand_collections_todo=$((ligand_collections_todo + ligand_collections_todo_toadd))
+    echo " Number of ligand collections not yet started: ${ligand_collections_todo}"
     echo
     echo
 
@@ -332,38 +353,43 @@ if [[ "${category}" = "workflow" ]]; then
             ligands_total=0
         fi
     fi
-    echo -ne " Total number of ligands: ${ligands_total}                                                     \\r"
-    echo
+    echo " Total number of ligands: ${ligands_total}"
 
     ligands_started=0
-    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        ligands_started="$(grep -ho "Ligands-started:[0-9]\+" ../workflow/ligand-collections/done/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
-        if [[ -z "${ligands_started// }" ]]; then
-            ligands_started=0
-        fi
-    fi
-    echo -ne " Number of ligands started: ${ligands_started}                                                     \\r"
-    echo
+    for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/done/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            ligands_started_to_add="$(grep -ho "Ligands-started:[0-9]\+" ../workflow/ligand-collections/done/$folder1/$folder2/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+            if [[ -z "${ligands_started_to_add// }" ]]; then
+                ligands_started_to_add=0
+            fi
+            ligands_started=$((ligands_started + ligands_started_to_add))
+        done
+    done
+    echo " Number of ligands started: ${ligands_started}"
 
     ligands_success=0
-    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        ligands_success="$(grep -ho "Ligands-succeeded:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
-        if [[ -z "${ligands_success// }" ]]; then
-            ligands_success=0
-        fi
-    fi
-    echo -ne " Number of ligands successfully completed: ${ligands_success}                                                \\r"
-    echo
+    for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/done/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            ligands_success_to_add="$(grep -ho "Ligands-succeeded:[0-9]\+" ../workflow/ligand-collections/done/$folder1/$folder2/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+            if [[ -z "${ligands_success_to_add// }" ]]; then
+                ligands_success_to_add=0
+            fi
+            ligands_success=$((ligands_success + ligands_success_to_add))
+        done
+    done
+    echo " Number of ligands successfully completed: ${ligands_success}"
 
     ligands_failed=0
-    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        ligands_failed="$(grep -ho "Ligands-failed:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
-        if [[ -z "${ligands_failed// }" ]]; then
-            ligands_failed=0
-        fi
-    fi
-    echo -ne " Number of ligands failed: ${ligands_failed}                                                \\r"
-    echo
+    for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/done/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            ligands_failed_to_add="$(grep -ho "Ligands-failed:[0-9]\+" ../workflow/ligand-collections/done/$folder1/$folder2/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
+            if [[ -z "${ligands_failed_to_add// }" ]]; then
+                ligands_failed_to_add=0
+            fi
+            ligands_failed=$((ligands_failed + ligands_failed_to_add))
+        done
+    done
+    echo " Number of ligands failed: ${ligands_failed}"
 
     echo
     echo
@@ -374,34 +400,40 @@ if [[ "${category}" = "workflow" ]]; then
     echo " Docking runs per ligand: ${docking_runs_perligand}"
 
     dockings_started=0
-    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        dockings_started="$(grep -ho "Dockings-started:[0-9]\+" ../workflow/ligand-collections/done/* | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
-        if [[ -z "${dockings_started// }" ]]; then
-            dockings_started=0
-        fi
-    fi
-    echo -ne " Number of dockings started: ${dockings_started}                                                     \\r"
-    echo
+    for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/done/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            dockings_started_to_add="$(grep -ho "Dockings-started:[0-9]\+" ../workflow/ligand-collections/done/$folder1/$folder2/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+            if [[ -z "${dockings_started_to_add// }" ]]; then
+                dockings_started_to_add=0
+            fi
+            dockings_started=$((dockings_started + dockings_started_to_add))
+        done
+    done
+    echo " Number of dockings started: ${dockings_started}"
 
     dockings_success=0
-    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        dockings_success="$(grep -ho "Dockings-succeeded:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
-        if [[ -z "${dockings_success// }" ]]; then
-            dockings_success=0
-        fi
-    fi
-    echo -ne " Number of dockings successfully completed: ${dockings_success}                                                \\r"
-    echo
+    for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/done/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            dockings_success_to_add="$(grep -ho "Dockings-succeeded:[0-9]\+" ../workflow/ligand-collections/done/$folder1/$folder2/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" |  paste -sd+ | bc -l 2>/dev/null || true)"
+            if [[ -z "${dockings_success_to_add// }" ]]; then
+                dockings_success_to_add=0
+            fi
+            dockings_success=$((dockings_success + dockings_success_to_add))
+        done
+    done
+    echo " Number of dockings successfully completed: ${dockings_success}"
 
     dockings_failed=0
-    if [ ! -z "$(ls -A ../workflow/ligand-collections/done/)" ]; then
-        dockings_failed="$(grep -ho "Dockings-failed:[0-9]\+" ../workflow/ligand-collections/done/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
-        if [[ -z "${dockings_failed// }" ]]; then
-            dockings_failed=0
-        fi
-    fi
-    echo -ne " Number of dockings failed: ${dockings_failed}                                                \\r"
-    echo
+    for folder1 in $(find ../workflow/ligand-collections/done/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+        for folder2 in $(find ../workflow/ligand-collections/done/$folder1/ -mindepth 1 -maxdepth 1 -type d -printf "%f\n"); do
+            dockings_failed_to_add="$(grep -ho "Dockings-failed:[0-9]\+" ../workflow/ligand-collections/done/$folder1/$folder2/* 2>/dev/null | awk -F ':' '{print $2}' | sed "/^$/d" | paste -sd+ | bc -l 2>/dev/null || true)"
+            if [[ -z "${dockings_failed_to_add// }" ]]; then
+                dockings_failed_to_add=0
+            fi
+            dockings_failed=$((dockings_failed + dockings_failed_to_add))
+        done
+    done
+    echo " Number of dockings failed: ${dockings_failed}"
 
     echo
     echo
@@ -417,32 +449,47 @@ if [[ "${category}" = "vs" ]]; then
 
     # Preparing the summary files and folders
     summary_folders=""
+    rm -r ${tempdir} 2>/dev/null || true
+    mkdir -p ${tempdir}
 
     # Complete collections
-    rm -r ${tempdir} 2>/dev/null || true
     folder=../output-files/complete/${docking_scenario_name}
     summary_flag="false"
     summary_folders="${tempdir}/output-files/${docking_scenario_name}/summaries/"
-    if [ -d ${folder}/summaries/ ]; then
-        if [ -n "$(ls -A ${folder}/summaries/)" ]; then
-            summary_flag="true"
-            for metatranch in $(ls ${folder}/summaries/ 2>/dev/null || true); do
-                mkdir -p ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}
-                for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
-                    tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch} || true
-                done
-            done
-            for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
-                for folder in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}  2>/dev/null || true); do
-                    folder=$(basename ${folder})
-                    for file in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
-                        file=$(basename ${file} || true)
-                        zcat ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all || true
+    if [ "${outputfiles_level}" == "tranch" ]; then
+        if [ -d ${folder}/summaries/ ]; then
+            if [ -n "$(ls -A ${folder}/summaries/)" ]; then
+                summary_flag="true"
+                for metatranch in $(ls ${folder}/summaries/ 2>/dev/null || true); do
+                    mkdir -p ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}
+                    for file in $(ls ${folder}/summaries/${metatranch}  2>/dev/null || true); do
+                        tar -xf ${folder}/summaries/${metatranch}/${file} -C ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch} || true
                     done
-                    rm -r ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}
+                done
+                for metatranch in $(ls ${folder}/summaries/  2>/dev/null || true); do
+                    for folder in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}  2>/dev/null || true); do
+                        folder=$(basename ${folder})
+                        for file in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
+                            file=$(basename ${file} || true)
+                            zcat ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} 2>/dev/null | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all || true
+                        done
+                        rm -r ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}
+                    done
+                done
+            fi
+        fi
+    elif [ "${outputfiles_level}" == "collection" ]; then
+        for metatranch in $(ls -A ${folder}/summaries/); do
+            for tranch in $(ls -A ${folder}/summaries/${metatranch}); do
+                for file in $(ls -A ${folder}/summaries/${metatranch}/${tranch}); do
+                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file} 2>/dev/null | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all 2>/dev/null || true
+                    summary_flag="true"
                 done
             done
-        fi
+        done
+    else
+        echo " * Error: The variable 'outputfiles_level' in the controlfile ${controlfile} has an invalid value (${outputfiles_level})"
+        exit 1
     fi
 
     # Adding the incomplete collections
@@ -451,7 +498,7 @@ if [[ "${category}" = "vs" ]]; then
         for metatranch in $(ls -A ${folder}/summaries/); do
             for tranch in $(ls -A ${folder}/summaries/${metatranch}); do
                 for file in $(ls -A ${folder}/summaries/${metatranch}/${tranch}); do
-                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file} | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all 2>/dev/null || true
+                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file}  2>/dev/null | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all 2>/dev/null || true
                     summary_flag="true"
                 done
             done

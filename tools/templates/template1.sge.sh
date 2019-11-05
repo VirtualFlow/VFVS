@@ -161,7 +161,7 @@ check_queue_end1() {
     i=0
     # Using a loop to try several times if there are no ligand collections left - maybe the files where just shortly inaccessible
     while [ "${no_collections_incomplete}" == "0" ]; do
-        no_collections_incomplete="$(cat ../workflow/ligand-collections/todo/todo.all* ../workflow/ligand-collections/todo/${VF_JOBLINE_NO}-* ../workflow/ligand-collections/current/${VF_JOBLINE_NO}-* 2>/dev/null | grep -c "[^[:blank:]]" || true)"
+        no_collections_incomplete="$(cat ../workflow/ligand-collections/todo/todo.all* ../workflow/ligand-collections/todo/${VF_JOBLINE_NO}/*/* ../workflow/ligand-collections/current/${VF_JOBLINE_NO}/*/* 2>/dev/null | grep -c "[^[:blank:]]" || true)"
         i="$((i + 1))"
         if [ "${i}" == "5" ]; then
             break
@@ -248,8 +248,8 @@ if [[ "${VF_ERROR_SENSITIVITY}" == "high" ]]; then
 fi
 
 # Setting the error response
-line=$(cat ${VF_CONTROLFILE} | grep -m 1 "^error_response=")
-export VF_ERROR_RESPONSE=${line/"error_response="}
+VF_ERROR_RESPONSE="$(grep -m 1 "^error_response=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+export VF_ERROR_RESPONSE
 
 # Checking if queue should be stopped
 check_queue_end1
@@ -264,9 +264,19 @@ line=$(cat ${VF_CONTROLFILE} | grep -m 1 "queues_per_step=")
 export VF_QUEUES_PER_STEP=${line/"queues_per_step="}
 
 # Preparing the todo lists for the queues
-cd helpers
-bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
-cd ..
+prepare_queue_todolists="$(grep -m 1 "^prepare_queue_todolists=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+if [ "${prepare_queue_todolists^^}" == "TRUE" ]; then
+    cd helpers
+    bash prepare-todolists.sh ${VF_JOBLINE_NO} ${VF_NODES_PER_JOB} ${VF_QUEUES_PER_STEP}
+    cd ..
+elif [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
+    echo " * Skipping the todo-list preparation as specified in the control-file."
+    echo
+else
+    echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})."
+    echo
+    false
+fi
 
 # Starting the individual steps on different nodes
 for VF_STEP_NO in $(seq 1 ${VF_NODES_PER_JOB} ); do
