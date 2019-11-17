@@ -84,4 +84,5 @@ for file in $(ls -v ../workflow/job-files/main/); do
     counter=$((counter + 1))
 done
 
+# Cleaning up
 rm ${tempdir}/sqs.out
