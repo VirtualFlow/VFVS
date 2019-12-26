@@ -131,10 +131,12 @@ next_todo_list1() {
             #no_collections_remaining="$(cat ${todo_file_temp} 2>/dev/null | grep -c "[^[:blank:]]" || true)"
             no_collections_assigned=0
             no_collections_beginning=${no_collections_remaining}
+            initial_todolist=false
         else
-            next_todo_list_index=$(printf "%04d" $((10#${current_todo_list_index}-1)) )
+            next_todo_list_index=$(printf "%04d" $((10#${current_todo_list_index})) )
             next_todo_list=../../workflow/ligand-collections/todo/todo.all.${next_todo_list_index}
             no_collections_remaining="0"
+            rm ../../workflow/ligand-collections/todo/todo.all.locked || true
             echo " * Info: No more todo lists."
         fi
     else
@@ -145,7 +147,7 @@ next_todo_list1() {
 next_todo_list2() {
 
     # Changing the locked file
-    if [[ -f ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
+    if [[ -f ../../workflow/ligand-collections/todo/todo.all.locked ]] && [[ ${initial_todolist} == "true" ]]; then
 
         echo " * Warning: There exists an old (locked) todo file. Trying to take care of it..."
         if [[ ! -L ../../workflow/ligand-collections/todo/todo.all.locked ]] && [[ -s ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
@@ -187,6 +189,7 @@ next_todo_list2() {
         no_collections_remaining="$(grep -cv '^\s*$' ${todo_file_temp} || true)"
         no_collections_assigned=0
         no_collections_beginning=${no_collections_remaining}
+        initial_todolist=false
     fi
 }
 
@@ -254,6 +257,7 @@ collection_folder="$(grep -m 1 "^collection_folder=" ${vf_controlfile_temp} | tr
 collection_folder=${collection_folder%/}
 ligands_todo_per_queue="$(grep -m 1 "^ligands_todo_per_queue=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 ligands_per_refilling_step="$(grep -m 1 "^ligands_per_refilling_step=" ${vf_controlfile_temp} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+initial_todolist=true
 
 # Screen formatting output
 if [[ ! "$*" = *"quiet"* ]]; then
