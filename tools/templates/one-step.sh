@@ -101,7 +101,7 @@ clean_up() {
 trap 'clean_up' EXIT
 
 # Sourcing bashrc
-source ~/.bashrc
+source ~/.bashrc || true
 
 prepare_queue_files_tmp() {
 

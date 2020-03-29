@@ -452,6 +452,30 @@ for refill_step in $(seq 1 ${no_of_refilling_steps}); do
                 # Setting some variables
                 next_ligand_collection_and_length="$(head -n 1 ${todo_file_temp})"
                 next_ligand_collection=${next_ligand_collection_and_length// *}
+
+                # Checking for the collection name. Very few times the current todo_list contains the content "Binary file (standard input) matches", and nothing else. In this case, we just go to the next todolist.
+                if [ "${next_ligand_collection}" = "Binary" ]; then
+
+                    # Clearing the faulty file (so that the other queues don't stumple over it as well in case this queue fails to prepare the next todolist)
+                    echo -n "" > ../../workflow/ligand-collections/todo/todo.all
+
+                    # Checking if there is one more todo list
+                    next_todo_list1
+
+                    # Checking if no more collections
+                    if [[ "${no_collections_remaining}" = "0" ]]; then
+
+                        # Using the alternative method
+                        next_todo_list2
+
+                        # If no more new collections, quitting
+                        if [[ "${no_collections_remaining}" = "0" ]]; then
+                            echo "There is no more ligand collection in the todo.all file. Stopping the refilling procedure."
+                            break 4
+                        fi
+                    fi
+                fi
+
                 echo "${next_ligand_collection_and_length}" >> ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
                 no_to_add=${next_ligand_collection_and_length//* }
                 if ! [ "${no_to_add}" -eq "${no_to_add}" ]; then
