@@ -97,7 +97,8 @@ for i in $(seq $start_jobline_no $end_jobline_no); do
     determine_controlfile
 
     # Variables
-    export VF_TMPDIR="$(grep -m 1 "^tempdir_fast=" ../${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+    export VF_TMPDIR="$(grep -m 1 "^tempdir_default=" ../${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+    export VF_TMPDIR_FAST="$(grep -m 1 "^tempdir_fast=" ../${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
     export VF_JOBLETTER="$(grep -m 1 "^job_letter=" ../${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
     steps_per_job="$(grep -m 1 "^steps_per_job=" ../${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
     queues_per_step="$(grep -m 1 "^queues_per_step=" ../${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
