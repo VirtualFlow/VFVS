@@ -66,7 +66,7 @@ if [ "${VF_VERBOSITY_COMMANDS}" = "debug" ]; then
 fi
 
 # Body
-tempdir=${vf_tempdir}/$USER/VFLP/${VF_JOBLETTER}/vf_continue_all_$(date | tr " :" "_")
+tempdir=${vf_tempdir}/$USER/VFVS/${VF_JOBLETTER}/vf_continue_all_$(date | tr " :" "_")
 mkdir -p ${tempdir}
 cat /dev/null > ${tempdir}/sqs.out
 bin/sqs > ${tempdir}/sqs.out || true

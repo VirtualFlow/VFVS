@@ -83,7 +83,7 @@ IFS=':' read -a docking_scenario_names <<< "$docking_scenario_names"
 
 # Tempdir creation
 vf_tempdir="$(grep -m 1 "^tempdir=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-tempdir=${vf_tempdir}/$USER/VFLP/${VF_JOBLETTER}/vf_report_$(date | tr " :" "_")
+tempdir=${vf_tempdir}/$USER/VFVS/${VF_JOBLETTER}/vf_report_$(date | tr " :" "_")
 mkdir -p ${tempdir}
 
 # Verbosity
