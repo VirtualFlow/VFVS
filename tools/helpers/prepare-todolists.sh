@@ -49,7 +49,7 @@ queue_no_1="${1}"
 steps_per_job="${2}"
 queues_per_step="${3}"
 export LC_ALL=C
-todo_file_temp=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all
+todo_file_temp=${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all
 
 # Verbosity (the script is only called by the job scripts)
 if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
@@ -152,7 +152,7 @@ next_todo_list2() {
         echo " * Warning: There exists an old (locked) todo file. Trying to take care of it..."
         if [[ ! -L ../../workflow/ligand-collections/todo/todo.all.locked ]] && [[ -s ../../workflow/ligand-collections/todo/todo.all.locked ]]; then
             echo " * Warning: The old todo file is not a symlink and not a empty, trying to preserve it..."
-            mv ../../workflow/ligand-collections/todo/todo.all.locked ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
+            mv ../../workflow/ligand-collections/todo/todo.all.locked ${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
         else
             echo " * Warning: The old todo file is a symlink or an empty file. Removing it..."
             rm ../../workflow/ligand-collections/todo/todo.all.locked
@@ -176,11 +176,11 @@ next_todo_list2() {
         echo -n "" > ../../workflow/ligand-collections/todo/todo.all.${current_todo_list_index}
 
         # Adding the old list contents if present
-        if [ -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old ]; then
-            cat ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old > ${todo_file_temp}
+        if [ -f ${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old ]; then
+            cat ${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old > ${todo_file_temp}
             sort -u ${todo_file_temp} > ${todo_file_temp}.tmp # In case that the old todo file was part of the new one
             mv ${todo_file_temp}.tmp ${todo_file_temp}
-            rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
+            rm ${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.all.old
         fi
 
         # Changing variables
@@ -239,17 +239,17 @@ clean_up() {
 #    fi
     cp ${todo_file_temp}  ../../workflow/ligand-collections/todo/todo.all.locked
     mv ../../workflow/ligand-collections/todo/todo.all.locked ../../workflow/ligand-collections/todo/todo.all
-    rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ || true
+    rm -r ${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/ || true
     kill ${touch_locked_pid} &>/dev/null || true
 }
 trap 'clean_up' EXIT
 
 
 # Creating the working directory
-mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
+mkdir -p ${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
 
 # Copying the control to temp
-vf_controlfile_temp=${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/controlfile
+vf_controlfile_temp=${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/controlfile
 cp ../${VF_CONTROLFILE} ${vf_controlfile_temp}
 
 # Variables
@@ -267,7 +267,7 @@ fi
 # Getting the number of ligands which are already in the local to-do lists
 ligands_todo=""
 queue_collection_numbers=""
-todofile_queue_old_temp="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.old"
+todofile_queue_old_temp="${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.old"
 for queue_no_2 in $(seq 1 ${steps_per_job}); do
     # Loop for each queue of the node
     for queue_no_3 in $(seq 1 ${queues_per_step}); do
@@ -278,7 +278,7 @@ for queue_no_2 in $(seq 1 ${steps_per_job}); do
         queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=0
 
         # Creating a temporary to-do file with the new ligand collections
-        todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.new.${queue_no}"
+        todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]="${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/todo.queue.new.${queue_no}"
 
         # Maybe to test: Checking if it works (job run on test). Read the entire list into memory as bash array. 10K package size during refilling. Test the new ligand-list mechanism during breaks.
 

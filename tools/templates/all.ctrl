@@ -138,9 +138,16 @@ error_response=fail
 #   * fail      : exit workflow with failure (exit code 1)
 # Settable via range control files: Yes
 
-tempdir=/dev/shm
-# The directory which is used for the temporary workflow files
-# Should be a very fast filesystem not part of the distributed cluster filesystem, e.g. a local ramfs (as normally provided by ${VF_TMPDIR})
+tempdir_default=/tmp
+# The directory which is used for the temporary workflow files which need a normal performance
+# Is normally a local SSD or HDD
+# The directory does only need to be available on the node on which the job step/queue is running
+# In the tempdir, a subfolder named ${USER} will automatically be created
+# Settable via range control files: Yes
+
+tempdir_fast=/dev/shm
+# The directory which is used for the temporary workflow files which need a fast perfomance
+# Should be a a local ram filesystem/ramdisk
 # The directory does only need to be available on the node on which the job step/queue is running
 # In the tempdir, a subfolder named ${USER} will automatically be created
 # Settable via range control files: Yes

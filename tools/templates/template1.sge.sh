@@ -229,7 +229,14 @@ if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
 fi
 
 # VF_TMPDIR
-export VF_TMPDIR="$(grep -m 1 "^tempdir=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+export VF_TMPDIR="$(grep -m 1 "^tempdir_default=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+# Creating the ${VF_TMPDIR}/${USER} folder if not present
+if [ ! -d "${VF_TMPDIR}/${USER}" ]; then
+    mkdir -p ${VF_TMPDIR}/${USER}
+fi
+
+# VF_TMPDIR_FAST
+export VF_TMPDIR_FAST="$(grep -m 1 "^tempdir_fast=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 # Creating the ${VF_TMPDIR}/${USER} folder if not present
 if [ ! -d "${VF_TMPDIR}/${USER}" ]; then
     mkdir -p ${VF_TMPDIR}/${USER}
