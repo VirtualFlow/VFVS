@@ -456,7 +456,7 @@ if [[ "${category}" = "vs" ]]; then
     folder=../output-files/complete/${docking_scenario_name}
     summary_flag="false"
     summary_folders="${tempdir}/output-files/${docking_scenario_name}/summaries/"
-    if [ "${outputfiles_level}" == "tranch" ]; then
+    if [ "${outputfiles_level}" == "tranche" ]; then
         if [ -d ${folder}/summaries/ ]; then
             if [ -n "$(ls -A ${folder}/summaries/)" ]; then
                 summary_flag="true"

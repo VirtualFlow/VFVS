@@ -158,7 +158,7 @@ outputfiles_level=collection
 #                   Advantages:
 #                       * Less I/O on the shared cluster file system (as existing tranch archives don't have to be read during storage of completed collectionsds)
 #                       * No risk of output-file clashes when two queues want to store completed collections on the shared filesystem
-#   * tranch      : For each tranch a tar archive is created, which contains the gzipped collection output files.
+#   * tranche      : For each tranch a tar archive is created, which contains the gzipped collection output files.
 #                   Advantages:
 #                       * Less output files (only for each tranch) for each of the output file types (e.g. results, summaries, logfiles, ...)
 
