@@ -31,7 +31,6 @@
 #BSUB -J h-1.1
 #BSUB -W 00:30
 #BSUB -R "rusage[mem=800]"
-#BSUB -R "select[scratch2]"
 #BSUB -R "span[ptile=4]"
 #BSUB -n 4
 #BSUB -q medium
