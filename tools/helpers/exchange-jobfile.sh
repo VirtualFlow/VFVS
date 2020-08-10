@@ -95,7 +95,7 @@ elif [ "${batchsystem}" = "LSF" ]; then
     job_no=${line/"#BSUB -N [a-zA-Z]-"}
 fi
 # Copying the new job file
-cp ../${job_template} ../../workflow/job-files/main/${new_job_file}
+cp ../templates/${job_template} ../../workflow/job-files/main/${new_job_file}
 . copy-templates.sh subjobfiles
 
 # Changing the job number 1.1 (of template/new job file) to current job number
