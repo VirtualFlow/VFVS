@@ -61,9 +61,9 @@ echo -e "\n * Preparing the to-do lists for jobline ${queue_no_1}\n"
 
 # Standard error response
 error_response_std() {
-    echo "Error has been trapped."
-    echo "Error in bash script $(basename ${BASH_SOURCE[0]})"
-    echo "Error on line $1"
+    echo "Error has been trapped." | tee /dev/stderr
+    echo "Error in bash script $(basename ${BASH_SOURCE[0]})" | tee /dev/stderr
+    echo "Error on line $1" | tee /dev/stderr
 
     #clean_up
     if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]]; then

@@ -46,9 +46,9 @@ fi
 
 # Standard error response
 error_response_nonstd() {
-    echo "Error was trapped which is a nonstandard error."
-    echo "Error in bash script $(basename ${BASH_SOURCE[0]})"
-    echo "Error on line $1"
+    echo "Error was trapped which is a nonstandard error." | tee /dev/stderr
+    echo "Error in bash script $(basename ${BASH_SOURCE[0]})" | tee /dev/stderr
+    echo "Error on line $1" | tee /dev/stderr
     exit 1
 }
 trap 'error_response_nonstd $LINENO' ERR
