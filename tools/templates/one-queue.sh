@@ -57,7 +57,7 @@ error_response_std() {
     if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]]; then
 
         # Printing some information
-        echo -e "\n * Ignoring error. Trying to continue..." | tee /dev/stderr
+        echo -e "\n * Ignoring error. Trying to continue..." | tee -a /dev/stderr
 
     elif [[ "${VF_ERROR_RESPONSE}" == "next_job" ]]; then
 
@@ -65,7 +65,7 @@ error_response_std() {
         clean_queue_files_tmp
 
         # Printing some information
-        echo -e "\n * Trying to stop this queue and causing the jobline to fail..." | tee /dev/stderr
+        echo -e "\n * Trying to stop this queue and causing the jobline to fail..." | tee -a /dev/stderr
 
         # Exiting
         exit 0
@@ -76,7 +76,7 @@ error_response_std() {
         clean_queue_files_tmp
 
         # Printing some information
-        echo -e "\n * Trying to stop this queue and causing the jobline to fail..." | tee /dev/stderr
+        echo -e "\n * Trying to stop this queue and causing the jobline to fail..." | tee -a /dev/stderr
 
         # Exiting
         exit 1
@@ -88,8 +88,8 @@ trap 'error_response_std $LINENO' ERR
 error_response_docking() {
 
     # Printing some information
-    echo "An error occurred during the docking procedure (${docking_scenario_name})." | tee /dev/stderr
-    echo "Skipping this ligand and continuing with next one." | tee /dev/stderr
+    echo "An error occurred during the docking procedure (${docking_scenario_name})." | tee -a /dev/stderr
+    echo "Skipping this ligand and continuing with next one." | tee -a /dev/stderr
 
     # Variables
     ligand_list_entry="failed(docking)"
@@ -106,10 +106,10 @@ error_response_docking_program() {
     ligand_list_entry="failed(docking_program)"
 
     # Printing some information
-    echo "An error occurred during the docking procedure (${docking_scenario_name})." | tee /dev/stderr
-    echo "An unsupported docking program ($docking_scenario_program) has been specified." | tee /dev/stderr
-    echo "Supported docking programs are: ${supported_docking_programs}" | tee /dev/stderr
-    echo "Aborting the virtual screening procedure..." | tee /dev/stderr
+    echo "An error occurred during the docking procedure (${docking_scenario_name})." | tee -a /dev/stderr
+    echo "An unsupported docking program ($docking_scenario_program) has been specified." | tee -a /dev/stderr
+    echo "Supported docking programs are: ${supported_docking_programs}" | tee -a /dev/stderr
+    echo "Aborting the virtual screening procedure..." | tee -a /dev/stderr
 
     # Updating the ligand list
     update_ligand_list_end "false"
@@ -124,9 +124,9 @@ error_response_ligand_elements() {
     ligand_list_entry="failed(ligand_elements:${element})"
 
     # Printing some information
-    echo | tee /dev/stderr
-    echo "The ligand contains elements (${element}) which cannot be handled by quickvina." | tee /dev/stderr
-    echo "Skipping this ligand and continuing with next one." | tee /dev/stderr
+    echo | tee -a /dev/stderr
+    echo "The ligand contains elements (${element}) which cannot be handled by quickvina." | tee -a /dev/stderr
+    echo "Skipping this ligand and continuing with next one." | tee -a /dev/stderr
 
     # Updating the ligand list file
     echo "${next_ligand} ${ligand_list_entry}" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
@@ -374,7 +374,7 @@ prepare_collection_files_tmp() {
             gunzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
         else
             # Raising an error
-            echo " * Error: The tranch archive file ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar does not exist..."  | tee /dev/stderr
+            echo " * Error: The tranch archive file ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar does not exist..."  | tee -a /dev/stderr
             error_response_std $LINENO
         fi
     fi
@@ -383,7 +383,7 @@ prepare_collection_files_tmp() {
     if [ ! -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar ]; then
 
         # Raising an error
-        echo " * Error: The ligand collection ${next_ligand_collection_tranch}_${next_ligand_collection_ID} could not be prepared." | tee /dev/stderr
+        echo " * Error: The ligand collection ${next_ligand_collection_tranch}_${next_ligand_collection_ID} could not be prepared." | tee -a /dev/stderr
         error_response_std $LINENO
     fi
 
@@ -456,7 +456,7 @@ clean_collection_files_tmp() {
                     mkdir -p ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/complete/${docking_scenario_name}/results/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                 else
-                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})" | tee /dev/stderr
+                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})" | tee -a /dev/stderr
                     exit 1
                 fi
 
@@ -481,7 +481,7 @@ clean_collection_files_tmp() {
                     mkdir -p ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.txt.gz ../output-files/complete/${docking_scenario_name}/summaries/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                 else
-                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})" | tee /dev/stderr
+                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})" | tee -a /dev/stderr
                     exit 1
                 fi
 
@@ -506,7 +506,7 @@ clean_collection_files_tmp() {
                     mkdir -p ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.tar.gz ../output-files/complete/${docking_scenario_name}/logfiles/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                 else
-                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})" | tee /dev/stderr
+                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})" | tee -a /dev/stderr
                     exit 1
                 fi
 
@@ -558,7 +558,7 @@ clean_collection_files_tmp() {
                     mkdir -p ../output-files/complete/${docking_scenario_name}/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                     cp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/${local_ligand_collection_ID}.status.gz ../output-files/complete/${docking_scenario_name}/ligand-lists/${local_ligand_collection_metatranch}/${local_ligand_collection_tranch}/
                 else
-                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})" | tee /dev/stderr
+                    echo " * Error: The variable 'outputfiles_level' in the controlfile ${VF_CONTROLFILE} has an invalid value (${outputfiles_level})" | tee -a /dev/stderr
                     exit 1
                 fi
             fi
@@ -666,7 +666,7 @@ determine_controlfile() {
 
         else
             # Error response
-            echo "Error: No relevant control file was found..." | tee /dev/stderr
+            echo "Error: No relevant control file was found..." | tee -a /dev/stderr
             false
         fi
     fi
@@ -731,22 +731,22 @@ minimum_time_remaining=$((minimum_time_remaining * 60)) # Conversion from minute
 
 # Checking the variables for errors
 if ! [ "${docking_scenario_index_end}" -eq "${docking_scenario_programs_length}" ]; then
-    echo "ERROR:" | tee /dev/stderr
-    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE_TEMP} are not compatible." | tee /dev/stderr
-    echo " * The variable docking_scenario_names has ${docking_scenario_index_end} entries." | tee /dev/stderr
-    echo " * The variable docking_scenario_programs has ${docking_scenario_programs_length} entries." | tee /dev/stderr
+    echo "ERROR:" | tee -a /dev/stderr
+    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE_TEMP} are not compatible." | tee -a /dev/stderr
+    echo " * The variable docking_scenario_names has ${docking_scenario_index_end} entries." | tee -a /dev/stderr
+    echo " * The variable docking_scenario_programs has ${docking_scenario_programs_length} entries." | tee -a /dev/stderr
     exit 1
 elif ! [ "${docking_scenario_index_end}" -eq "${docking_scenario_replicas_total_length}" ]; then
-    echo "ERROR:" | tee /dev/stderr
-    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE_TEMP} are not compatible." | tee /dev/stderr
-    echo " * The variable docking_scenario_names has ${docking_scenario_index_end} entries." | tee /dev/stderr
-    echo " * The variable docking_scenario_replicas has ${docking_scenario_replicas_total_length} entries." | tee /dev/stderr
+    echo "ERROR:" | tee -a /dev/stderr
+    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE_TEMP} are not compatible." | tee -a /dev/stderr
+    echo " * The variable docking_scenario_names has ${docking_scenario_index_end} entries." | tee -a /dev/stderr
+    echo " * The variable docking_scenario_replicas has ${docking_scenario_replicas_total_length} entries." | tee -a /dev/stderr
     exit 1
 elif ! [ "${docking_scenario_index_end}" -eq "${docking_scenario_inputfolders_length}" ]; then
-    echo "ERROR:" | tee /dev/stderr
-    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE_TEMP} are not compatible." | tee /dev/stderr
-    echo " * The variable docking_scenario_names has ${docking_scenario_index_end} entries." | tee /dev/stderr
-    echo " * The variable docking_scenario_inputfolders has ${docking_scenario_inputfolders_length} entries." | tee /dev/stderr
+    echo "ERROR:" | tee -a /dev/stderr
+    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE_TEMP} are not compatible." | tee -a /dev/stderr
+    echo " * The variable docking_scenario_names has ${docking_scenario_index_end} entries." | tee -a /dev/stderr
+    echo " * The variable docking_scenario_inputfolders has ${docking_scenario_inputfolders_length} entries." | tee -a /dev/stderr
     exit 1
 fi
 
