@@ -369,7 +369,21 @@ prepare_collection_files_tmp() {
             gunzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
         elif [ -f ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]; then
             rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/* 2>/dev/null || true
-            cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+
+            lock="/tmp/${next_ligand_collection_metatranch}.lock"
+            exec 300>$lock
+            flock 300
+
+
+            mkdir -p /tmp/local_cache/${next_ligand_collection_metatranch}
+            if [[ ! -f /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]]; then
+                cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+            fi
+
+            flock -u 300
+
+            cp /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/
+
             tar -xf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/ ${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
             gunzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
         else
@@ -807,7 +821,19 @@ while true; do
 
             # Extracting the last ligand collection
             mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}
-            cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/
+            lock="/tmp/${next_ligand_collection_metatranch}.lock"
+            exec 300>$lock
+            flock 300
+	  
+            mkdir -p /tmp/local_cache/${next_ligand_collection_metatranch}
+            if [[ ! -f /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]]; then
+                cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+            fi
+
+            flock -u 300
+	 
+            cp /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/
+	    
             tar -xf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/ ${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
             gunzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
             # Extracting all the PDBQT at the same time (faster)
