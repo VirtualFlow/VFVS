@@ -75,6 +75,7 @@ collection_folder=../input-files/ligand-library
 # Slash at the end is not required (optional)
 # Relative pathname is required w.r.t. the folder tools/
 # Settable via range control files: Yes
+# S3 bucket are also supported and should be specified such as `s3://[BUCKET_NAME]`
 
 minimum_time_remaining=10
 # In minutes

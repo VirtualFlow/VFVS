@@ -364,10 +364,29 @@ prepare_collection_files_tmp() {
 
     # Extracting the required files
     if [ ! -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar ]; then
+
+            LIGAND_EXIST=false
+            if [[ ${STORAGE_INPUT} == "S3" ]]; then
+                S3_BUCKET=$(echo ${collection_folder:5} | cut -d "/" -f1)
+                S3_BUCKET_PATH=$(echo ${collection_folder:5} | awk -F/ '{$1=""; print substr($0,2)}' | tr -s ' ' '/')
+                if [[ ! -z "${S3_BUCKET_PATH}" ]]; then
+                    S3_BUCKET_PATH+="/"
+                fi
+
+                object_exists=$(aws s3api head-object --bucket ${S3_BUCKET}  --key ${S3_BUCKET_PATH}${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar || true)
+                if [ ! -z "$object_exists" ]; then
+                    LIGAND_EXIST=true
+                fi
+            elif [[ ${STORAGE_INPUT} == "FS" ]]; then
+                if [ -f ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]; then
+                    LIGAND_EXIST=true
+                fi
+            fi
+
         if [ -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]; then
             tar -xf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/ ${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
             gunzip ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz
-        elif [ -f ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]; then
+        elif [ ${LIGAND_EXIST} ]; then
             rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/pdbqt/${next_ligand_collection_metatranch}/* 2>/dev/null || true
 
             lock="/tmp/${next_ligand_collection_metatranch}.lock"
@@ -377,7 +396,11 @@ prepare_collection_files_tmp() {
 
             mkdir -p /tmp/local_cache/${next_ligand_collection_metatranch}
             if [[ ! -f /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]]; then
-                cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+                if [[ ${STORAGE_INPUT} == "S3" ]]; then
+                    aws s3 cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+                elif [[ ${STORAGE_INPUT} == "FS" ]]; then  
+                    cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+                fi
             fi
 
             flock -u 300
@@ -690,6 +713,14 @@ determine_controlfile() {
 
 }
 
+detect_input_storage_type() {
+    if [[ ${collection_folder} == "s3://*" ]]; then
+        STORAGE_INPUT="S3"
+    else
+        STORAGE_INPUT="FS"
+    fi
+}
+
 # Verbosity
 if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
     set -x
@@ -796,6 +827,8 @@ while true; do
     docking_scenario_index_start=1          # Will be overwritten if neccessary (if continuing collection in the middle of a ligand)
     docking_replica_index_start=1       # Will be overwritten if neccessary (if continuing collection in the middle of a ligand)
 
+    detect_input_storage_type
+
     # Preparing the next ligand
     # Checking the conditions for using a new collection
     if [[ "${ligand_index}" == "1" ]]; then
@@ -827,7 +860,11 @@ while true; do
 	  
             mkdir -p /tmp/local_cache/${next_ligand_collection_metatranch}
             if [[ ! -f /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar ]]; then
-                cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+                if [[ ${STORAGE_INPUT} == "S3" ]]; then
+                    aws s3 cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+                elif [[ ${STORAGE_INPUT} == "FS" ]]; then
+                    cp ${collection_folder}/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar /tmp/local_cache/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}.tar
+                fi
             fi
 
             flock -u 300
