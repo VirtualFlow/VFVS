@@ -118,6 +118,14 @@ prepare_queue_files_tmp() {
     fi
 }
 
+detect_input_docking_storage_type() {
+    if [[ ${docking_files_archive} == "s3://*" ]]; then
+        STORAGE_INPUT="S3"
+    else
+        STORAGE_INPUT="FS"
+    fi
+}
+
 # Verbosity
 if [ "${VF_VERBOSITY_LOGFILES}" = "debug" ]; then
     set -x
@@ -147,6 +155,7 @@ mkdir -p ../workflow/ligand-collections/done/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
 # Preparing the local docking input files
 mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/
 docking_files_archive="$(grep -m 1 "^docking_files_archive=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+detect_input_docking_storage_type
 
 lock="/tmp/docking_files_archive.lock"
 exec 200>$lock
@@ -155,7 +164,11 @@ flock 200
 mkdir -p /tmp/local_cache
 
 if [[ ! -f /tmp/local_cache/docking_files.tar.gz ]]; then
-  cp ${docking_files_archive} /tmp/local_cache/docking_files.tar.gz
+    if [[ ${STORAGE_INPUT} == "S3" ]]; then
+        aws s3 cp ${docking_files_archive} /tmp/local_cache/docking_files.tar.gz
+    elif [[ ${STORAGE_INPUT} == "FS" ]]; then
+        cp ${docking_files_archive} /tmp/local_cache/docking_files.tar.gz
+    fi
 fi
 
 flock -u 200

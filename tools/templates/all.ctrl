@@ -205,7 +205,8 @@ docking_scenario_inputfolders=TBC
 
 docking_files_archive=TBC
 # Relative path with respect to the tools folder.
-# Archive containing the scenario input folders and their relatice configuration file
+# Archive .tar.gz extension containing the scenario input folders and their relatice configuration file
+# S3 bucket are also supported and should be specified such as `s3://[BUCKET_NAME]/[DOCKING_FILE_ARCHIVE].tar.gz`
 
 
 *****************************************************************************************************************************************************************
