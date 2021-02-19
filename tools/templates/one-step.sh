@@ -147,7 +147,22 @@ mkdir -p ../workflow/ligand-collections/done/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
 # Preparing the local docking input files
 mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/
 docking_files_archive="$(grep -m 1 "^docking_files_archive=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-tar -xvzf ${docking_files_archive} -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/
+
+lock="/tmp/docking_files_archive.lock"
+exec 200>$lock
+flock 200
+
+mkdir -p /tmp/local_cache
+
+if [[ ! -f /tmp/local_cache/docking_files.tar.gz ]]; then
+  cp ${docking_files_archive} /tmp/local_cache/docking_files.tar.gz
+fi
+
+flock -u 200
+
+tar -xvzf /tmp/local_cache/docking_files.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/
+
+
 for file in $(find ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/ -iname config.txt); do
     sed -i "s|\.\./|${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/|" $file
 done
