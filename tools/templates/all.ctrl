@@ -203,6 +203,10 @@ docking_scenario_inputfolders=TBC
 # Should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
+docking_files_archive=TBC
+# Relative path with respect to the tools folder.
+# Archive containing the scenario input folders and their relatice configuration file
+
 
 *****************************************************************************************************************************************************************
 *******************************************************************    Terminating Variables    *****************************************************************
