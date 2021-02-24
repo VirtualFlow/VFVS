@@ -765,7 +765,7 @@ docking_scenario_inputfolders_length=${#docking_scenario_inputfolders[@]}
 
 # Determining the docking scenario receptor files
 for docking_scenario_index in $(seq 0 $((${docking_scenario_index_end} - 1)) ); do
-    docking_scenario_receptor_filenames[${docking_scenario_index}]=$(grep "^receptor" ${docking_scenario_inputfolders[((docking_scenario_index))]}/config.txt | awk -F "/" '{print $NF}')
+    docking_scenario_receptor_filenames[${docking_scenario_index}]=$(grep "^receptor" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/${docking_scenario_inputfolders[((docking_scenario_index))]}/config.txt | awk -F "/" '{print $NF}')
 done
 
 
