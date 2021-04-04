@@ -172,34 +172,37 @@ prepare_queue_todolists=true
 *****************************************************************    Virtual Screenign Options    ***************************************************************
 *****************************************************************************************************************************************************************
 
-docking_scenario_names=TBC
-# Values have to be separated by colons ":" and without spaces, e.g: docking_scenario_names=vina-rigid:smina-rigid
-# Used for instance for the folder names in which the output files are stored
-# Should not be changed during runtime, and be the same for all joblines
+docking_scenario_names=TBS (to be specified)
+# Names for the docking scenarios, separated by commas
+# Each docking scenario has one value. Multiple docking scenarios/names have to be separated by colons ":" and without spaces
+# Example: docking_scenario_names=receptor1_vina_rigid:receptor1_smina_flexible
+# The docking scenario names are for exapmle used for the folder names in which the output files are stored
+# The value should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
-docking_scenario_programs=TBC
-# Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, adfr
+docking_scenario_programs=TBS
+# For each docking scenario name, a docking program has to be specified
+# Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, gwovina, adfr
 # Values have to be separated by colons ":" and without spaces, e.g: docking_scenario_programs=vina:smina
-# The same programs can be used multiple times
-# Should not be changed during runtime, and be the same for all joblines
+# smina_rigid has to be used for rigid docking with smina, while smine_flexible for flexible receptor docking
+# The value should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
-docking_scenario_replicas=TBC
+docking_scenario_replicas=TBS
 # Series of integers separated by colons ":"
 # The number of values has to equal the number of docking programs specified in the variable "docking_programs"
 # The values are in the same order as the docking programs specified in the variable "docking_scenario_programs
 # e.g.: docking_scenario_replicas=1:1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
-# Should not be changed during runtime, and be the same for all joblines
+# The value should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
-docking_scenario_inputfolders=TBC
+docking_scenario_inputfolders=TBS
 # Relative path with respect to the tools folders
 # In each input folder must be the file config.txt which is used by the docking program to specify its options
 # If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder
-# Should not be changed during runtime, and be the same for all joblines
+# The value should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
 
