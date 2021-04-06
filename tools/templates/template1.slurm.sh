@@ -212,6 +212,7 @@ job_line=$(grep -m 1 "nodes=" ../workflow/job-files/main/${VF_JOBLINE_NO}.job)
 export VF_NODES_PER_JOB=${job_line/"#SBATCH --nodes="}
 #export VF_NODES_PER_JOB=${SLURM_JOB_NUM_NODES}
 export LC_ALL=C
+export VF_WD="$PWD"
 
 # Determining the VF_CONTROLFILE to use for this jobline
 VF_CONTROLFILE=""
