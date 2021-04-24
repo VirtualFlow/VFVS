@@ -76,6 +76,13 @@ collection_folder=../input-files/ligand-library
 # Relative pathname is required w.r.t. the folder tools/
 # Settable via range control files: Yes
 
+ligand_libary_format=pdbqt
+# Supported values:
+#  * pdbqt
+#  * mol2
+# This value is case sensitive
+# All AutoDock based docking programs require the library to be in the pdbqt format. When the docking program PLANTS is used, both libraries in the pdbqt and the mol2 format are supported.
+
 minimum_time_remaining=10
 # In minutes
 # A new job if the time left until the end of the walltime is smaller than the timelimit
