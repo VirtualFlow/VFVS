@@ -76,7 +76,7 @@ collection_folder=../input-files/ligand-library
 # Relative pathname is required w.r.t. the folder tools/
 # Settable via range control files: Yes
 
-ligand_libary_format=pdbqt
+ligand_library_format=pdbqt
 # Supported values:
 #  * pdbqt
 #  * mol2
