@@ -1,0 +1,25 @@
+{
+  "jobName": "vf-#JOBLETTER#-#JOBLINE#",
+  "jobQueue": "#BATCH_PREFIX#-queue#BATCH_QUEUENUM#",
+  "arrayProperties": {
+    "size": #STEPS_IN_TASK#
+  },
+  "jobDefinition": "#BATCH_PREFIX#-jobdef#JOBDEF_SUFFIX#",
+  "containerOverrides": {
+    "environment": [
+      {
+        "name": "VF_CONTAINER_VCPUS",
+        "value": "#VCPUS#" 
+      },
+      {
+        "name": "VF_QUEUE_NO_1",
+        "value": "#JOBLINE#" 
+      },
+      {
+	"name": "VF_OBJECT_INPUT",
+	"value": "#OBJECT_INPUT#"
+      }
+    ]
+  }
+}
+

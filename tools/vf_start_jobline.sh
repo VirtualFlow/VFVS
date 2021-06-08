@@ -106,7 +106,7 @@ echo ""
 if [[ "${submit_mode}" = "submit" ]]; then
     cd helpers
     for i in $(seq ${start_jobline_no} ${end_jobline_no}); do
-        . submit.sh ../workflow/job-files/main/${i}.job
+        . submit.sh ../workflow/job-files/main/${i}.job | tee ../../workflow/job-files/main/${i}.job.submit
         if [ ! "${i}" = "${end_jobline_no}" ]; then
             sleep ${delay_time}
         fi

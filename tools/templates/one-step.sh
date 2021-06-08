@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright (C) 2019 Christoph Gorgulla
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # This file is part of VirtualFlow.
 #
@@ -26,6 +27,7 @@
 # 2015-12-07  Various improvemnts (version 1.3)
 # 2015-12-16  Adaption to version 2.1
 # 2016-07-16  Various improvements
+# 2021-02-12  Allow running without shared filesystem and containerized support
 #
 # ---------------------------------------------------------------------------
 
@@ -112,9 +114,11 @@ prepare_queue_files_tmp() {
     fi
     mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
     
-    # Copying the required files
-    if ls -1 ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.* > /dev/null 2>&1; then
-        cp ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.* ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
+    if [ "${VF_OBJECT_OUTPUT} -ne 1" ]; then
+        # Copying the required files
+        if ls -1 ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.* > /dev/null 2>&1; then
+            cp ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.* ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
+        fi
     fi
 }
 
@@ -138,18 +142,45 @@ export VF_TIMELIMIT_SECONDS
 pids=""
 store_queue_log_files="$(grep -m 1 "^store_queue_log_files=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 
+
 # Creating required folders
-mkdir -p ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
-mkdir -p ../workflow/ligand-collections/todo/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
-mkdir -p ../workflow/ligand-collections/current/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
-mkdir -p ../workflow/ligand-collections/done/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
+if [[ ${VF_OBJECT_OUTPUT} -ne 1 ]]; then
+    mkdir -p ../workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
+    mkdir -p ../workflow/ligand-collections/todo/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
+    mkdir -p ../workflow/ligand-collections/current/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
+    mkdir -p ../workflow/ligand-collections/done/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/
+fi
 
 # Preparing the local docking input files
 mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/
-cp -r ../input-files/* ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/
+
+if [[ "${VF_OBJECT_INPUT}" -ne "1" ]]; then
+    cp -r ../input-files/* ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/
+else
+    cp -r ${VF_OBJECT_INPUT_PATH}/* ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/
+fi
+
 for file in $(find ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/input-files/ -iname config.txt); do
     sed -i "s|\.\./|${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/|" $file
 done
+
+if [[ "$VF_CONTAINERIZED" -eq "1" ]]; then
+    if [[ "$VF_QUEUE_MODE" == "host" ]]; then
+        jobscript=${VF_CONTAINER_PATH}/tools/templates/one-queue-node.sh
+    else
+        echo "Containerized mode without host queue mode is not supported"
+    fi
+else
+    if [[ "$VF_QUEUE_MODE" == "host" ]]; then
+        jobscript=${VF_CONTAINER_PATH}/tools/templates/one-queue.sh
+    else
+        jobscript="../workflow/job-files/sub/one-queue.sh"
+    fi
+fi
+
+echo "job script is ${jobscript}"
+echo "log files ${store_queue_log_files}"
+ls -al ${jobscript}
 
 # Starting the individual queues
 for i in $(seq 1 ${VF_QUEUES_PER_STEP}); do
@@ -158,19 +189,21 @@ for i in $(seq 1 ${VF_QUEUES_PER_STEP}); do
     prepare_queue_files_tmp
     echo "Job step ${VF_STEP_NO} is starting queue ${VF_QUEUE_NO} on host $(hostname)."
     if [ ${store_queue_log_files} == "all_uncompressed" ]; then
-        source ../workflow/job-files/sub/one-queue.sh >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.all 2>&1 &
+        source ${jobscript} >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.all 2>&1 &
     elif [ ${store_queue_log_files} == "all_compressed" ]; then
-        source ../workflow/job-files/sub/one-queue.sh 2>&1 | gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.all.gz &
+        source ${jobscript} 2>&1 | gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.all.gz &
     elif [ ${store_queue_log_files} == "only_error_uncompressed" ]; then
-        source ../workflow/job-files/sub/one-queue.sh 2> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.err &
+        source ${jobscript} 2> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.err &
     elif [ ${store_queue_log_files} == "only_error_compressed" ]; then
-        source ../workflow/job-files/sub/one-queue.sh 2> >(gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.err.gz) &
+        source ${jobscript} 2> >(gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.err.gz) &
     elif [ ${store_queue_log_files} == "std_compressed_error_uncompressed" ]; then
-        source ../workflow/job-files/sub/one-queue.sh 1> >(gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.std.gz) 2>> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.err &
+        source ${jobscript} 1> >(gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.std.gz) 2>> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.err &
     elif [ ${store_queue_log_files} == "all_compressed_error_uncompressed" ]; then
-        source ../workflow/job-files/sub/one-queue.sh 1> >(gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.all.gz) 2> >(tee ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.err) &
+        source ${jobscript} 1> >(gzip >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.all.gz) 2> >(tee ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/output-files/queues/${VF_QUEUE_NO_1}/${VF_QUEUE_NO_2}/queue-${VF_QUEUE_NO}.out.err) &
     elif [ ${store_queue_log_files} == "none" ]; then
-        source ../workflow/job-files/sub/one-queue.sh 2>&1 >/dev/null &
+        source ${jobscript} 2>&1 >/dev/null &
+    elif [ ${store_queue_log_files} == "stdout" ]; then
+        source ${jobscript} &
     else
         echo "Error: The variable store_log_file in the control file ${VF_CONTROLFILE_TEMP} has an unsupported value (${store_queue_log_files})."
         false

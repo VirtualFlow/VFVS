@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright (C) 2019 Christoph Gorgulla
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # This file is part of VirtualFlow.
 #
@@ -30,6 +31,7 @@
 # 2015-12-16  Adaption to version 2.1
 # 2016-07-16  Various improvements
 # 2017-03-18  Including the parition in the config file
+# 2020-02-23  Including AWS Batch support
 #
 # ---------------------------------------------------------------------------
 # Displaying help if first argument is -h
@@ -110,7 +112,6 @@ elif [ "${batchsystem}" = "LSF" ]; then
 fi
 
 # Syncing the timelimit
-line=$(cat ${controlfile} | grep -m 1 "^timelimit=")
 timelimit_new="$(grep -m 1 "^timelimit=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 if [ "${batchsystem}" == "SLURM" ]; then
     job_line=$(grep -m 1 "^#SBATCH \-\-time=" ../../workflow/job-files/main/${jobline_no}.job)
@@ -131,7 +132,6 @@ elif [ "${batchsystem}" == "LSF" ]; then
 fi
 
 # Syncing the partition
-line=$(cat ${controlfile} | grep -m 1 "^partition=")
 partition_new="$(grep -m 1 "^partition=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 if [ "${batchsystem}" = "SLURM" ]; then
     sed -i "s/--partition=.*/--partition=${partition_new}/g" ../../workflow/job-files/main/${jobline_no}.job
@@ -144,7 +144,6 @@ elif [ "${batchsystem}" = "LSF" ]; then
 fi
 
 # Syncing the job letter
-line=$(cat ${controlfile} | grep -m 1 "^job_letter=")
 job_letter_new="$(grep -m 1 "^job_letter=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
 if [ "${batchsystem}" = "SLURM" ]; then
     sed -i "s/^#SBATCH --job-name=[a-zA-Z]/#SBATCH --job-name=${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
@@ -152,7 +151,50 @@ elif [[ "${batchsystem}" = "TORQUE" ]] || [[ "${batchsystem}" = "PBS" ]]; then
     sed -i "s/^#PBS -N [a-zA-Z]/#PBS -N ${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
 elif [ "${batchsystem}" = "SGE" ]; then
     sed -i "s/^#\\$ -N [a-zA-Z]/#\$ -N ${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
-elif [ "${batchsystem}" = "LSF" ]; then
-    sed -i "s/^#BSUB -J [a-zA-Z]/#BSUB -J ${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
+elif [ "${batchsystem}" = "lsf" ]; then
+    sed -i "s/^#bsub -j [a-za-z]/#bsub -j ${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
 fi
+
+# For AWS Batch we need to populate a few different fields
+if [ "${batchsystem}" = "AWSBATCH" ]; then
+	sed -i "s/#JOBLINE#/${jobline_no}/g" ../../workflow/job-files/main/${jobline_no}.job
+
+	object_store_bucket_new="$(grep -m 1 "^object_store_bucket=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+	object_store_job_data_new="$(grep -m 1 "^object_store_job_data_prefix=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+	object_store_input_path="s3://${object_store_bucket_new}/${object_store_job_data_new}/input/vf_input.tar.gz"
+	batch_prefix_new="$(grep -m 1 "^aws_batch_prefix=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+
+	aws_batch_number_of_queues="$(grep -m 1 "^aws_batch_number_of_queues=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+	aws_batch_prefix="$(grep -m 1 "^aws_batch_prefix=" ${controlfile} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+
+	sed -i "s|#OBJECT_INPUT#|${object_store_input_path}|g" ../../workflow/job-files/main/${jobline_no}.job
+
+	if [ -f "../../workflow/workunits/${jobline_no}" ]; then
+		steps_in_chunk=$(cat ../../workflow/workunits/${jobline_no})
+	else
+		steps_in_chunk=0
+	fi
+
+	jobdef_suffix="16"
+	batch_queue_number=$(( ((${jobline_no} - 1) % ${aws_batch_number_of_queues}) + 1))
+
+	if [ -f "../../workflow/workunits/${jobline_no}.size" ]; then
+		average_size=$(cat ../../workflow/workunits/${jobline_no}.size)
+		echo "average_size=${average_size}"
+		if [ "${average_size}" -le "900" ]; then
+			jobdef_suffix="8"
+			batch_queue_number="${batch_queue_number}s"
+		fi
+	fi
+
+	sed -i "s/#VCPUS#/${jobdef_suffix}/g" ../../workflow/job-files/main/${jobline_no}.job
+	sed -i "s/#STEPS_IN_TASK#/${steps_in_chunk}/g" ../../workflow/job-files/main/${jobline_no}.job
+	sed -i "s/#JOBDEF_SUFFIX#/${jobdef_suffix}/g" ../../workflow/job-files/main/${jobline_no}.job
+	sed -i "s/#JOBLETTER#/${job_letter_new}/g" ../../workflow/job-files/main/${jobline_no}.job
+	sed -i "s/#BATCH_PREFIX#/${batch_prefix_new}/g" ../../workflow/job-files/main/${jobline_no}.job
+
+	sed -i "s/#BATCH_QUEUENUM#/${batch_queue_number}/g" ../../workflow/job-files/main/${jobline_no}.job
+fi
+
+
 

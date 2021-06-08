@@ -4,7 +4,7 @@
 
 Welcome to the VirtualFlow project!
 
-VirtualFlow is a versatile, parallel workflow platform for carrying out virtual screening related tasks on Linux-based computer clusters of any type and size which are managed by a batchsystem (such as SLURM). 
+VirtualFlow ([Homepage](https://virtual-flow.org/)) is a versatile, parallel workflow platform for carrying out virtual screening related tasks on Linux-based computer clusters of any type and size which are managed by a batchsystem (such as SLURM). 
 
 Currently, there exist two versions of VirtualFlow, which are tailored to different types of tasks:
 

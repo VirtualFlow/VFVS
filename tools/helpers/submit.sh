@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright (C) 2019 Christoph Gorgulla
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # This file is part of VirtualFlow.
 #
@@ -33,6 +34,7 @@
 # 2015-12-16  Adaption to version 2.1
 # 2016-07-16  Various improvements
 # 2017-03-18  Removing the partition as an argument (instead including it in the control file)
+# 2020-02-23  Adding AWS Batch support
 #
 # ---------------------------------------------------------------------------
 
@@ -72,6 +74,9 @@ elif [ "${batchsystem}" == "SGE" ]; then
     qsub ${jobfile}
 elif [ "${batchsystem}" == "LSF" ]; then
     bsub < ${jobfile}
+elif [ "${batchsystem}" == "AWSBATCH" ]; then
+    AWS_REGION=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document| grep region | awk '{print $3}' | sed 's/"//g' | sed 's/,//g'`
+    aws batch submit-job --region ${AWS_REGION} --cli-input-json file://${jobfile} --query 'jobId' --output text 
 else
     echo
     echo "Error: The batch system (${batchsystem}) which was specified in the control file (${VF_CONTROLFILE}) is not supported."
