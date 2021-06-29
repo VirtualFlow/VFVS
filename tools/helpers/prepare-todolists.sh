@@ -61,9 +61,9 @@ echo -e "\n * Preparing the to-do lists for jobline ${queue_no_1}\n"
 
 # Standard error response
 error_response_std() {
-    echo "Error has been trapped." | tee /dev/stderr
-    echo "Error in bash script $(basename ${BASH_SOURCE[0]})" | tee /dev/stderr
-    echo "Error on line $1" | tee /dev/stderr
+    echo "Error has been trapped." | tee -a /dev/stderr
+    echo "Error in bash script $(basename ${BASH_SOURCE[0]})" | tee -a /dev/stderr
+    echo "Error on line $1" | tee -a /dev/stderr
 
     #clean_up
     if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]]; then
@@ -476,12 +476,17 @@ for refill_step in $(seq 1 ${no_of_refilling_steps}); do
                     fi
                 fi
 
-                echo "${next_ligand_collection_and_length}" >> ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
                 no_to_add=${next_ligand_collection_and_length//* }
                 if ! [ "${no_to_add}" -eq "${no_to_add}" ]; then
-                    echo " * Warning: Could not get the length of collection ${next_ligand_collection}. Found value is: ${no_to_add}. Exiting."
-                    exit 1
+                    sleep 1
+                    next_ligand_collection_and_length="$(head -n 1 ${todo_file_temp})"
+                    no_to_add=${next_ligand_collection_and_length//* }
+                    if ! [ "${no_to_add}" -eq "${no_to_add}" ]; then
+                        echo " * Warning: Could not get the length of collection ${next_ligand_collection}. Found value is: ${no_to_add}. Exiting."
+                        exit 1
+                    fi
                 fi
+                echo "${next_ligand_collection_and_length}" >> ${todofile_queue_new_temp[${queue_no_2}0000${queue_no_3}]}
                 ligands_todo[${queue_no_2}0000${queue_no_3}]=$(( ${ligands_todo[${queue_no_2}0000${queue_no_3}]} + ${no_to_add} ))
                 queue_collection_numbers[${queue_no_2}0000${queue_no_3}]=$((queue_collection_numbers[${queue_no_2}0000${queue_no_3}] + 1 ))
                 # Removing the new collection from the ligand-collections-to-do file

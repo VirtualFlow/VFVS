@@ -212,6 +212,7 @@ job_line=$(grep -m 1 "nodes=" ../workflow/job-files/main/${VF_JOBLINE_NO}.job)
 export VF_NODES_PER_JOB=${job_line/"#SBATCH --nodes="}
 #export VF_NODES_PER_JOB=${SLURM_JOB_NUM_NODES}
 export LC_ALL=C
+export VF_WD="$PWD"
 
 # Determining the VF_CONTROLFILE to use for this jobline
 VF_CONTROLFILE=""
@@ -289,8 +290,8 @@ elif [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
     echo " * Skipping the todo-list preparation as specified in the control-file."
     echo
 else
-    echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})." | tee /dev/stderr
-    echo | tee /dev/stderr
+    echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})." | tee -a /dev/stderr
+    echo | tee -a /dev/stderr
     false
 fi
 

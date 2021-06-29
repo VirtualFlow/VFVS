@@ -288,7 +288,7 @@ elif [ "${prepare_queue_todolists^^}" == "FALSE" ]; then
     echo " * Skipping the todo-list preparation as specified in the control-file."
     echo
 else
-    echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})." | tee /dev/stderr
+    echo "Error: The variable prepare_queue_todolists in the control file ${VF_CONTROLFILE} has an unsupported value (${prepare_queue_todolists})." | tee -a /dev/stderr
     echo
     false
 fi

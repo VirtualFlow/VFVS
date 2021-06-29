@@ -52,12 +52,12 @@ error_response_std() {
     if [[ "${VF_ERROR_RESPONSE}" == "ignore" ]]; then
 
         # Printing some information
-        echo -e "\n * Ignoring error. Trying to continue..." | tee /dev/stderr
+        echo -e "\n * Ignoring error. Trying to continue..." | tee -a /dev/stderr
 
     elif [[ "${VF_ERROR_RESPONSE}" == "next_job" ]]; then
 
         # Printing some information
-        echo -e "\n * Trying to stop this queue without causing the jobline to fail..." | tee /dev/stderr
+        echo -e "\n * Trying to stop this queue without causing the jobline to fail..." | tee -a /dev/stderr
 
         # Exiting
         exit 0
@@ -65,7 +65,7 @@ error_response_std() {
     elif [[ "${VF_ERROR_RESPONSE}" == "fail" ]]; then
 
         # Printing some information
-        echo -e "\n * Trying to stop this queue and causing the jobline to fail..." | tee /dev/stderr
+        echo -e "\n * Trying to stop this queue and causing the jobline to fail..." | tee -a /dev/stderr
 
         # Exiting
         exit 1

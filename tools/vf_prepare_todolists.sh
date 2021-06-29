@@ -105,6 +105,7 @@ for i in $(seq $start_jobline_no $end_jobline_no); do
 
     # Preparing the todolists
     bash prepare-todolists.sh $i $steps_per_job $queues_per_step;
+    sleep 1
 
 done
 cd ..
