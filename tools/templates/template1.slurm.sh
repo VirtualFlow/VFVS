@@ -339,7 +339,7 @@ sed -i "s/^#SBATCH --job-name=${VF_JOBLETTER}.*/#SBATCH --job-name=${VF_JOBLETTE
 
 # Changing the output filenames
 sed -i "s|^#SBATCH --output=.*|#SBATCH --output=../workflow/output-files/jobs/job-${new_job_no}_%j.out|g" ../workflow/job-files/main/${VF_JOBLINE_NO}.job
-sed -i "s|^#SBATCH --error=.*|#SBATCH --output=../workflow/output-files/jobs/job-${new_job_no}_%j.out|g" ../workflow/job-files/main/${VF_JOBLINE_NO}.job
+sed -i "s|^#SBATCH --error=.*|#SBATCH --output=../workflow/output-files/jobs/job-${new_job_no}_%j.err|g" ../workflow/job-files/main/${VF_JOBLINE_NO}.job
 
 # Checking how much time has passed since the job has been started
 end_time_seconds="$(date +%s)"
