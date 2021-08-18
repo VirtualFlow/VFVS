@@ -244,7 +244,6 @@ clean_up() {
 }
 trap 'clean_up' EXIT
 
-
 # Creating the working directory
 mkdir -p ${VF_TMPDIR_FAST}/${USER}/VFVS/${VF_JOBLETTER}/${VF_JOBLINE_NO}/prepare-todolists/
 

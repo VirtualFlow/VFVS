@@ -217,8 +217,10 @@ prepare_queue_todolists=true
 
 
 *****************************************************************************************************************************************************************
-*****************************************************************    Virtual Screenign Options    ***************************************************************
+*****************************************************************    Virtual Screening Options    ***************************************************************
 *****************************************************************************************************************************************************************
+
+**********************************************************************    Docking Scenarios    ******************************************************************
 
 docking_scenario_names=TBS (to be specified)
 # Names for the docking scenarios, separated by commas
@@ -253,6 +255,18 @@ docking_scenario_inputfolders=TBS
 # The value should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
+************************************************************************    Energy Check    *********************************************************************
+
+energy_check=true
+# Determines whether the potential energy of the best docking pose is checked by obenergy (Open Babel Enegy). This can be useuful to filter out hits with unrealistic/corrupsted docking poses.
+# Only works for ligand_library_format=pdbqt at the moment
+# Possible values:
+#   * true
+#   * false
+
+energy_max=10000
+# Maximum allowed energy value. Recommended: 10000
+# Possible values: Positive integer
 
 *****************************************************************************************************************************************************************
 *******************************************************************    Terminating Variables    *****************************************************************
