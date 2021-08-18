@@ -271,14 +271,14 @@ update_summary() {
     trap 'error_response_std $LINENO' ERR
 
     if [ ! -f ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt ]; then
-        printf "Tranch   Compound   average-score   maximum-score   number-of-dockings" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
+        printf "Tranch   Compound  Smiles Average-score   Maximum-score   Number-of-dockings    Scores" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
         for k in $(seq 1 ${docking_replica_index_end}); do 
             printf "   score-replica-$k" >>  ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
         done
         printf "\n" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
     fi
     if [ "${docking_replica_index}" -eq "1" ]; then
-        printf "${next_ligand_collection} ${next_ligand} %3.1f %3.1f %5s %3.1f\n" "${score_value}" "${score_value}" "1" "${score_value}" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
+        printf "${next_ligand_collection} ${next_ligand} ${next_ligand_smiles} %3.1f %3.1f %5s %3.1f\n" "${score_value}" "${score_value}" "1" "${score_value}" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
     else
         scores_previous=$(grep ${next_ligand} ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt | tr -s " " | cut -d " " -f 6-)
         read -a scores_all <<< "${scores_previous} ${score_value}"
@@ -289,9 +289,9 @@ update_summary() {
         # Computing the new maximum value
         score_maximum=$(echo "${scores_all[@]}" | awk '{m=$1;for(i=1;i<=NF;i++)if($i<m)m=$i;print m}')
         
-        # Upating the line
-        scores_all_expaned="${scores_all[@]}"
-        perl -pi -e "s/${next_ligand_collection} *${next_ligand}\b.*/${next_ligand_collection} ${next_ligand} ${score_average} ${score_maximum} ${docking_replica_index} ${scores_all_expaned}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
+        # Updating the line
+        scores_all_expanded="${scores_all[@]}"
+        perl -pi -e "s/${next_ligand_collection} *${next_ligand}\b.*/${next_ligand_collection} ${next_ligand} ${next_ligand_smiles} ${score_average} ${score_maximum} ${docking_replica_index} ${scores_all_expanded}/g" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
     fi
     column -t ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt > ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt.tmp
     mv ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt.tmp ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt
@@ -1014,6 +1014,9 @@ while true; do
     if [ ${duplicate_count} -ne "0" ]; then
         error_response_ligand_coordinates
     fi
+
+    # Getting the SMILES of the ligand
+    next_ligand_smiles=$(grep -m 1 -i smiles ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format} | awk '{print $NF}')
 
     # Loop for each docking type
     for docking_scenario_index in $(seq ${docking_scenario_index_start} ${docking_scenario_index_end}); do
