@@ -205,13 +205,6 @@ docking_scenario_replicas=TBS
 # The value should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
-docking_scenario_inputfolders=TBS
-# Relative path with respect to the tools folders
-# In each input folder must be the file config.txt which is used by the docking program to specify its options
-# If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder
-# The value should not be changed during runtime, and be the same for all joblines
-# Settable via range control files: Yes
-
 
 *****************************************************************************************************************************************************************
 *******************************************************************    Terminating Variables    *****************************************************************

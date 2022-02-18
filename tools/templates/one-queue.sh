@@ -714,16 +714,10 @@ docking_scenario_replicas_total="$(grep -m 1 "^docking_scenario_replicas=" ${VF_
 IFS=':' read -a docking_scenario_replicas_total <<< "$docking_scenario_replicas_total"
 docking_scenario_replicas_total_length=${#docking_scenario_replicas_total[@]}
 
-# Determining the docking type input folders
-docking_scenario_inputfolders="$(grep -m 1 "^docking_scenario_inputfolders=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
-IFS=':' read -a docking_scenario_inputfolders <<< "$docking_scenario_inputfolders"
-docking_scenario_inputfolders_length=${#docking_scenario_inputfolders[@]}
-
 # Determining the docking scenario receptor files
 for docking_scenario_index in $(seq 0 $((${docking_scenario_index_end} - 1)) ); do
-    docking_scenario_receptor_filenames[${docking_scenario_index}]=$(grep "^receptor" ${docking_scenario_inputfolders[((docking_scenario_index))]}/config.txt | awk -F "/" '{print $NF}')
+    docking_scenario_receptor_filenames[${docking_scenario_index}]="../input-files/"$(grep "^receptor" ${docking_scenario_names[((docking_scenario_index))]}/config.txt | awk -F "/" '{print $NF}')
 done
-
 
 
 # Getting the value for the variable minimum_time_remaining
@@ -742,12 +736,6 @@ elif ! [ "${docking_scenario_index_end}" -eq "${docking_scenario_replicas_total_
     echo " * Some variables specified in the controlfile ${VF_CONTROLFILE_TEMP} are not compatible." | tee -a /dev/stderr
     echo " * The variable docking_scenario_names has ${docking_scenario_index_end} entries." | tee -a /dev/stderr
     echo " * The variable docking_scenario_replicas has ${docking_scenario_replicas_total_length} entries." | tee -a /dev/stderr
-    exit 1
-elif ! [ "${docking_scenario_index_end}" -eq "${docking_scenario_inputfolders_length}" ]; then
-    echo "ERROR:" | tee -a /dev/stderr
-    echo " * Some variables specified in the controlfile ${VF_CONTROLFILE_TEMP} are not compatible." | tee -a /dev/stderr
-    echo " * The variable docking_scenario_names has ${docking_scenario_index_end} entries." | tee -a /dev/stderr
-    echo " * The variable docking_scenario_inputfolders has ${docking_scenario_inputfolders_length} entries." | tee -a /dev/stderr
     exit 1
 fi
 
@@ -958,7 +946,7 @@ while true; do
         # Variables
         docking_scenario_name=${docking_scenario_names[(($docking_scenario_index - 1))]}
         docking_scenario_program=${docking_scenario_programs[(($docking_scenario_index - 1))]}
-        docking_scenario_inputfolder=${docking_scenario_inputfolders[(($docking_scenario_index - 1))]}
+        docking_scenario_inputfolder=../input-files/${docking_scenario_names[(($docking_scenario_index - 1))]}
         docking_replica_index_end=${docking_scenario_replicas_total[(($docking_scenario_index - 1))]}
 
         # Loop for each replica for the current docking type
