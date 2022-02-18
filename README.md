@@ -46,6 +46,8 @@ The use of VirtualFlow or the VirtualFlow ligand libraries in any reports or pub
 - Gorgulla, C., Boeszoermenyi, A., Wang, Z. et al. An open-source drug discovery platform enables ultra-large virtual screens. Nature (2020). https://doi.org/10.1038/s41586-020-2117-z
 
 
-### Contact
+### VirtualFlow Forum
 
-If you have any questions, or would to get in touch with us, please contact Christoph Gorgulla (cgorgulla@g.harvard.edu).
+If you need help or have any questions related to VirtualFlow, please use our forum: 
+
+* https://community.virtual-flow.org/
