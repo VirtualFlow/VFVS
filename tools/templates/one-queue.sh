@@ -142,7 +142,6 @@ error_response_ligand_elements() {
 error_response_ligand_coordinates() {
 
     # Variables
-    element=$1
     ligand_list_entry="failed(ligand_coordinates)"
 
     # Printing some information
@@ -158,6 +157,55 @@ error_response_ligand_coordinates() {
 
     # Continuing with next ligand
     continue
+}
+
+obabel_check_energy() {
+
+    # Checking format
+    # TODO: support for the mol2 format
+    if [[ ${ligand_library_format} == pdbqt ]]; then
+
+        # Variables
+        energy_check_success="false"
+
+        # Printing information
+        echo -e "\n * Starting to check the potential energy of the best docking pose."
+
+        # Attempting the energy check with obabel
+        # Computing the energy
+        ligand_energy=""
+        grep -m 1 ENDMDL -B 10000 ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.${ligand_library_format} > ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.pose1.${ligand_library_format}
+        ligand_energy="$(obenergy ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.pose1.${ligand_library_format} | tail -n 1 | awk '{print $4}')"
+        rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.pose1.${ligand_library_format}
+
+        # Checking if the energy is below threshold
+        if (( $(echo "$ligand_energy <= ${energy_max}" | bc -l) )); then
+            energy_check_success="true"
+        fi
+
+        # Checking if energy check generation attempt has failed and is mandatory
+        if [[ "${energy_check_success}" == "false" ]]; then
+
+            # Adjusting the ligand-list file
+            ligand_list_entry="${ligand_list_entry} energy-check:failed"
+
+            # Printing some information
+            echo "    * Warning: The docking scenario for this ligand will be skipped since the best docking poses it did not pass the energy-check."
+
+            # Updating the ligand list
+            update_ligand_list_end false "during energy check"
+
+            # Removing the pdb file
+            rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.${ligand_library_format} &>/dev/null || true
+
+            # Skipping the ligand
+            continue
+        else
+
+            # Adjusting the ligand-list file
+            ligand_list_entry="${ligand_list_entry} energy-check:success"
+        fi
+    fi
 }
 
 # Time limit close
@@ -339,7 +387,7 @@ prepare_collection_files_tmp() {
     elif  [ -d ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/ ]; then
         rm -r ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/
     fi
-    for docking_scenario_name in ${docking_scenario_names[@]}; do
+    for docking_scenario_name in "${docking_scenario_names[@]}"; do
         if [ ! -d "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}" ]; then
             mkdir -p ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}
         elif [ "$(ls -A "${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/")" ]; then
@@ -391,7 +439,7 @@ prepare_collection_files_tmp() {
     tar -xf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}
 
     # Copying the required old output files if continuing old collection
-    for docking_scenario_name in ${docking_scenario_names[@]}; do
+    for docking_scenario_name in "${docking_scenario_names[@]}"; do
         if [ "${new_collection}" = "false" ]; then
             tar -xzf ../output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar.gz -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/ || true
             zcat ../output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt.gz > ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/summaries/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.txt || true
@@ -437,7 +485,7 @@ clean_collection_files_tmp() {
             echo "    * Storing and cleaning corresponding files..."
 
             # Loop for each docking type
-            for docking_scenario_name in ${docking_scenario_names[@]}; do
+            for docking_scenario_name in "${docking_scenario_names[@]}"; do
 
                 # Results
                 # Compressing the collection and saving in the complete folder
@@ -568,7 +616,7 @@ clean_collection_files_tmp() {
 
         else
             # Loop for each target format
-            for docking_scenario_name in ${docking_scenario_names[@]}; do
+            for docking_scenario_name in "${docking_scenario_names[@]}"; do
 
                 # Results
                 # Compressing the collection
@@ -719,6 +767,18 @@ for docking_scenario_index in $(seq 0 $((${docking_scenario_index_end} - 1)) ); 
     docking_scenario_receptor_filenames[${docking_scenario_index}]="../input-files/"$(grep "^receptor" ${docking_scenario_names[((docking_scenario_index))]}/config.txt | awk -F "/" '{print $NF}')
 done
 
+# Potential energy check
+energy_check="$(grep -m 1 "^energy_check=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+if [ "${energy_check}" == "true" ]; then
+    energy_max="$(grep -m 1 "^energy_max=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+    if ! [[ "${energy_max}" =~ ^[0-9]+$ ]]; then
+        echo -e " Error: The value (${energy_max}) for variable energy_max which was specified in the controlfile is invalid..."
+        error_response_std $LINENO
+    fi
+elif [[ "${energy_check}" != "false" ]]; then
+    echo -e " Error: The value (${energy_check}) for variable energy_check which was specified in the controlfile is invalid..."
+    error_response_std $LINENO
+fi
 
 # Getting the value for the variable minimum_time_remaining
 minimum_time_remaining="$(grep -m 1 "^minimum_time_remaining=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
@@ -1059,6 +1119,13 @@ while true; do
                     error_response_docking_program $docking_scenario_program
             esac
             trap 'error_response_std $LINENO' ERR
+
+            # Checking if the potential energy should be checked
+            if [[ "${energy_check}" == "true" ]]; then
+
+                # Checking the energy
+                obabel_check_energy
+            fi
 
             # Updating the summary
             update_summary

@@ -48,6 +48,47 @@ cpus_per_queue=1
 # Not yet available for SGE (always set to 1)
 # Settable via range control files: Yes
 
+*****************************************************************************************************************************************************************
+********************************************************************    AWS Batch Options    ********************************************************************
+*****************************************************************************************************************************************************************
+
+### To use AWS Batch you must first complete the steps outlined in the user guide for AWS Batch ###
+
+aws_batch_prefix=vf
+# Prefix for the name of the AWS Batch queues. This is normally 'vf'
+
+aws_batch_number_of_queues=1
+# Should be set to the number of queues that are setup for AWS Batch. Generally this number is 1 unless you have a large-scale (200K+ vCPUs)
+# setup
+
+aws_batch_array_job_size=200
+# Target for the number of jobs that should be in a single array job for AWS Batch.
+
+aws_ecr_repository_name=vf-ecr
+# Set it to the name of the Elastic Container Registry (ECR) repository (e.g. vf-ecr) in your AWS account
+
+aws_region=us-east-1
+# Set to the AWS location code where you are running AWS Batch
+
+
+*****************************************************************************************************************************************************************
+**********************************************************************    Object Store    ***********************************************************************
+*****************************************************************************************************************************************************************
+
+object_store_type=none
+# Type of object store being used (none or s3 is currently only one supported). Note that if this is set to anything other than
+# 'none' then ensure that you have followed instructions as part of the user guide for object stores
+
+object_store_bucket=
+# Name of the bucket that will be used for data storage for this run
+
+object_store_job_data_prefix=jobs/a
+# Where to place job-specific data. This includes where VirtualFlow will place the input data needed for jobs
+# as well as the output files
+
+object_store_ligands_prefix=data/real2020
+# Prefix used within the object store to address the tranches
+
 
 *****************************************************************************************************************************************************************
 *********************************************************************    Workflow Options    ********************************************************************
@@ -176,8 +217,10 @@ prepare_queue_todolists=true
 
 
 *****************************************************************************************************************************************************************
-*****************************************************************    Virtual Screenign Options    ***************************************************************
+*****************************************************************    Virtual Screening Options    ***************************************************************
 *****************************************************************************************************************************************************************
+
+**********************************************************************    Docking Scenarios    ******************************************************************
 
 docking_scenario_names=TBS (to be specified)
 # Names for the docking scenarios, separated by commas
@@ -205,6 +248,25 @@ docking_scenario_replicas=TBS
 # The value should not be changed during runtime, and be the same for all joblines
 # Settable via range control files: Yes
 
+docking_scenario_inputfolders=TBS
+# Relative path with respect to the tools folders
+# In each input folder must be the file config.txt which is used by the docking program to specify its options
+# If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder
+# The value should not be changed during runtime, and be the same for all joblines
+# Settable via range control files: Yes
+
+************************************************************************    Energy Check    *********************************************************************
+
+energy_check=true
+# Determines whether the potential energy of the best docking pose is checked by obenergy (Open Babel Enegy). This can be useuful to filter out hits with unrealistic/corrupsted docking poses.
+# Only works for ligand_library_format=pdbqt at the moment
+# Possible values:
+#   * true
+#   * false
+
+energy_max=10000
+# Maximum allowed energy value. Recommended: 10000
+# Possible values: Positive integer
 
 *****************************************************************************************************************************************************************
 *******************************************************************    Terminating Variables    *****************************************************************
