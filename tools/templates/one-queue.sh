@@ -228,7 +228,7 @@ trap 'clean_queue_files_tmp' EXIT RETURN
 update_ligand_list_start() {
 
     # Variables
-    docking_start_time_ms=$(($(date +'%s * 1000 + %-N / 1000000')))
+    docking_start_time_ms=$((10#$(date +'%s') * 1000 + 10#$(date +'%-N') / 1000000))
     ligand_list_entry=""
 
     # Updating the ligand-list file
@@ -239,7 +239,7 @@ update_ligand_list_end() {
 
     # Variables
     success="${1}" # true or false
-    docking_total_time_ms="$(($(date +'%s * 1000 + %-N / 1000000') - ${docking_start_time_ms}))"
+    docking_total_time_ms="$((10#$(date +'%s') * 1000 + 10#$(date +'%-N') / 1000000 - ${docking_start_time_ms}))"
 
     # Updating the ligand-list file
     # Not used currently: ligand_list_entry
@@ -763,9 +763,9 @@ IFS=':' read -a docking_scenario_replicas_total <<< "$docking_scenario_replicas_
 docking_scenario_replicas_total_length=${#docking_scenario_replicas_total[@]}
 
 # Determining the docking scenario receptor files
-for docking_scenario_index in $(seq 0 $((${docking_scenario_index_end} - 1)) ); do
-    docking_scenario_receptor_filenames[${docking_scenario_index}]="../input-files/"$(grep "^receptor" ${docking_scenario_names[((docking_scenario_index))]}/config.txt | awk -F "/" '{print $NF}')
-done
+#for docking_scenario_index in $(seq 0 $((${docking_scenario_index_end} - 1)) ); do
+#    docking_scenario_receptor_filenames[${docking_scenario_index}]="../input-files/"$(grep "^receptor" ${docking_scenario_names[((docking_scenario_index))]}/config.txt | awk -F "/" '{print $NF}')
+#done
 
 # Potential energy check
 energy_check="$(grep -m 1 "^energy_check=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
@@ -1001,10 +1001,10 @@ while true; do
     fi
 
     # Getting the ligand SMILES
-    if [[ ${ligand_library_format} == "pdb" || ${ligand_library_format} == "mol2" ]]; then
+    if [[ ${ligand_library_format} == "pdb" || ${ligand_library_format} == "pdbqt" || ${ligand_library_format} == "mol2" ]]; then
         next_ligand_smiles="$(grep SMILES ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format} | awk '{print $NF}')"
     else
-        next_ligand_smiles="N/A"
+        next_ligand_smiles="NA"
     fi
     # Loop for each docking type
     for docking_scenario_index in $(seq ${docking_scenario_index_start} ${docking_scenario_index_end}); do
@@ -1020,7 +1020,7 @@ while true; do
 
             # Setting up variables
             docking_replica_index_start=1 # Need to reset it in case a new job was started before and set the variable to a value greater than 1
-            start_time_ms=$(($(date +'%s * 1000 + %-N / 1000000')))
+            start_time_ms=$((10#$(date +'%s') * 1000 + 10#$(date +'%-N') / 1000000))
 
             # Checking if there is enough time left for a new ligand
             if [[ "${VF_LITTLE_TIME}" = "true" ]]; then
