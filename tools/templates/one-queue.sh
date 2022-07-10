@@ -96,7 +96,6 @@ error_response_docking() {
 
     # Updating the ligand list
     update_ligand_list_end "false"
-    continue
 }
 
 # Error reponse docking program
@@ -113,7 +112,6 @@ error_response_docking_program() {
 
     # Updating the ligand list
     update_ligand_list_end "false"
-    exit 1
 }
 
 # Error reponse ligand elements
@@ -133,9 +131,6 @@ error_response_ligand_elements() {
 
     # Printing some information
     echo "Ligand ${next_ligand} ${ligand_list_entry} on $(date)."
-
-    # Continuing with next ligand
-    continue
 }
 
 # Error reponse ligand coordinates
@@ -154,9 +149,6 @@ error_response_ligand_coordinates() {
 
     # Printing some information
     echo "Ligand ${next_ligand} ${ligand_list_entry} on $(date)."
-
-    # Continuing with next ligand
-    continue
 }
 
 obabel_check_energy() {
@@ -198,8 +190,6 @@ obabel_check_energy() {
             # Removing the pdb file
             rm ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/results/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.${ligand_library_format} &>/dev/null || true
 
-            # Skipping the ligand
-            continue
         else
 
             # Adjusting the ligand-list file
@@ -988,16 +978,20 @@ while true; do
     # Checking if ligand contains B, Si, Sn
     if grep -q " B " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format}; then
         error_response_ligand_elements "B"
+        continue
     elif grep -i -q " Si " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format}; then
         error_response_ligand_elements "Si"
+        continue
     elif grep -i -q " Sn " ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format}; then
         error_response_ligand_elements "Sn"
+        continue
     fi
 
     # Checking if the ligand contains duplicate coordinates
     duplicate_count=$(grep ATOM ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format} | awk '{print $6, $7, $8}' | sort | uniq -c | grep -v " 1 " | wc -l)
     if [ ${duplicate_count} -ne "0" ]; then
         error_response_ligand_coordinates
+        continue
     fi
 
     # Getting the ligand SMILES
@@ -1117,6 +1111,7 @@ while true; do
                     ;;
                 *)
                     error_response_docking_program $docking_scenario_program
+                    exit 1
             esac
             trap 'error_response_std $LINENO' ERR
 
@@ -1124,7 +1119,7 @@ while true; do
             if [[ "${energy_check}" == "true" ]]; then
 
                 # Checking the energy
-                obabel_check_energy
+                obabel_check_energy || continue
             fi
 
             # Updating the summary
