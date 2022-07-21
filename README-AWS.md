@@ -108,7 +108,7 @@ This output format can be automatically generated from newer versions of VFLP. (
 Login to the main node and execute the following to obtain the latest version of the code.
 
 ```bash
-git clone -b aws_combined https://github.com/mjkoop/VFVS.git
+git clone https://github.com/VirtualFlow/VFVS.git
 cd VFVS
 ```
 

@@ -43,7 +43,7 @@ As noted later, you will want to include this virtualenv as part of the Slurm sc
 Login to a node that is part of your cluster (generally the login node) and execute the following to obtain the latest version of the code. This should be placed in a location that is on a shared filesystem that is available on all of the compute nodes.
 
 ```bash
-git clone -b aws_combined https://github.com/mjkoop/VFVS.git
+git clone https://github.com/VirtualFlow/VFVS.git
 cd VFVS
 ```
 
