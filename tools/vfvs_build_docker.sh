@@ -17,11 +17,11 @@
 # You should have received a copy of the GNU General Public License
 # along with VirtualFlow.  If not, see <https://www.gnu.org/licenses/>.
 
-export VF_CONTROLFILE="../workflow/control/all.ctrl"
+export VFLP_CONFIG_JSON="../workflow/config.json"
 
 AWS_REGION=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document| grep region | awk '{print $3}' | sed 's/"//g' | sed 's/,//g'` 
 ACCOUNT_ID=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | grep accountId | awk '{print $3}' | sed 's/"//g' | sed 's/,//g'` 
-REPOSITORY_NAME="$(grep -m 1 "^aws_ecr_repository_name=" ${VF_CONTROLFILE} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+REPOSITORY_NAME=$(jq -r .aws_ecr_repository_name ${VFLP_CONFIG_JSON})
 
 docker build -t ${REPOSITORY_NAME} -f docker/Dockerfile .
 aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
