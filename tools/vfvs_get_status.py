@@ -37,7 +37,11 @@ import re
 import tempfile
 import gzip
 import time
+import pprint
+import hashlib
 from botocore.config import Config
+from pathlib import Path
+import argparse
 
 
 batch_job_statuses = {
@@ -87,18 +91,22 @@ batch_job_statuses = {
 
 
 def parse_config(filename):
-
-    config = {}
-
     with open(filename, "r") as read_file:
-        for index, line in enumerate(read_file):
-            match = re.search(
-                r'^(?P<parameter>.*?)\s*=\s*(?P<parameter_value>.*?)\s*$', line)
-            if(match):
-                matches = match.groupdict()
-                config[matches['parameter']] = matches['parameter_value']
+        config = json.load(read_file)
+
+    if('object_store_job_addressing_mode' not in config):
+        config['object_store_job_addressing_mode'] = "metatranche"
 
     return config
+
+def get_formatted_collection_number(collection_number):
+    return f"{int(collection_number):07}"
+
+
+def get_collection_hash(collection_name, collection_number):
+    formatted_collection_number = get_formatted_collection_number(collection_number)
+    string_to_hash = f"{collection_name}/{formatted_collection_number}"
+    return hashlib.sha256(string_to_hash.encode()).hexdigest()
 
 
 def process(config):
@@ -107,17 +115,35 @@ def process(config):
         region_name=config['aws_region']
     )
 
+
+    parser = argparse.ArgumentParser()
+       
+    parser.add_argument('--detailed', action='store_true', 
+        help="Get detailed ligand information (this can take a long time!)")
+
+    parser.add_argument('--ignore_arrayproperties', action='store_true', 
+        help="Always get subjob information")
+
+
+    args = parser.parse_args()
+
     client = boto3.client('batch', config=aws_config)
 
     # load the status file that is keeping track of the data
     with open("../workflow/status.json", "r") as read_file:
         status = json.load(read_file)
 
-    collections = status['collections']
+
+    collections = {}
+    if os.path.exists("../workflow/collections_status.json"):
+        with open("../workflow/collections_status.json", "r") as read_file:
+            collections = json.load(read_file)
+
     workunits = status['workunits']
 
     workunits_to_check = []
 
+    not_yet_submitted = 0;
     for workunit_key in workunits:
         current_workunit = workunits[workunit_key]
 
@@ -126,6 +152,11 @@ def process(config):
             if('aws_batch_status' not in current_workunit['status']
                or batch_job_statuses[current_workunit['status']['aws_batch_status']]['check_parent'] == 1):
                 workunits_to_check.append(workunit_key)
+        else:
+            not_yet_submitted += 1
+
+    if not_yet_submitted > 0:
+        print(f"** There are {not_yet_submitted} not yet submitted workunits out of {len(workunits)}")
 
     # Check the parent status of each one to see if anything has changed.
     # AWS Batch can handle up to 100 at a time
@@ -159,10 +190,13 @@ def process(config):
                     # If we have never checked it before or it's different than what it was the
                     # last time we checked
                     if(('aws_batch_status' not in current_workunit['status'] or
-                            job['arrayProperties']['statusSummary'] != current_workunit['status']['aws_batch_status_array'])
+                            job['arrayProperties']['statusSummary'] != current_workunit['status']['aws_batch_status_array'] or 
+                            args.ignore_arrayproperties)
                        ):
                         workunit_subjobs_to_check.append(
                             job_key_mapping[job['jobId']])
+
+                        
 
                 # Update the status
                 current_workunit['status']['aws_batch_status'] = job['status']
@@ -188,6 +222,7 @@ def process(config):
             if(subjob['status'] != "SUCCEEDED" and subjob['status'] != "FAILED"):
                 subjobids_to_check.append(
                     {'workunit_key': workunit_key, 'subjob_key': subjob_key})
+
 
     # Lookup status in batches of 100
     counter = 0
@@ -216,9 +251,20 @@ def process(config):
                 subjob = workunit['subjobs'][subjob_key]
 
                 subjob['status'] = job['status']
+
+                vcpus = 0;
+                if('container' in job):
+                    if('vcpus' in job['container']):
+                        vcpus = job['container']['vcpus']
+                    elif('resourceRequirements' in job['container']):
+                        for resource in job['container']['resourceRequirements']:
+                            if(resource['type'] == "VCPU"):
+                                vcpus = resource['value']
+                                break
+
                 subjob['detailed_status'] = {
                     'container': {
-                        'vcpus': job['container']['vcpus']
+                        'vcpus': int(vcpus)
                     },
                     'attempts': job['attempts']
                 }
@@ -272,8 +318,8 @@ def process(config):
 
             # How many ligands are there in this subjob
             total_ligands_in_subjob = 0
-            for collection_record in subjob['collections']:
-                collection_key, collection_count = collection_record
+            for collection_key in subjob['collections']:
+                collection_count = subjob['collections'][collection_key]['ligand_count']
                 total_ligands_in_subjob += collection_count
 
             # What status is it in?
@@ -387,148 +433,170 @@ def process(config):
 
     # Now get the data from each of the runs and see how successful we have been
 
-    print("Processing results files")
+    if(args.detailed):
 
-    storage_workdir = "../workflow/completed_status"
-    os.makedirs(storage_workdir, exist_ok=True)
+        print("Detailed Results: Processing results files")
 
-    s3 = boto3.client('s3')
+        storage_workdir = "../workflow/completed_status"
+        os.makedirs(storage_workdir, exist_ok=True)
 
-    # Start by getting the completed collection information
+        s3 = boto3.client('s3')
 
-    ligands_removed = 0
-    ligands_failed_docking = 0
-    ligands_succeeded_docking = 0
-    unknown_event = 0
+        # Start by getting the completed collection information
 
-    counter = 0
+        ligands_removed = 0
+        ligands_failed_docking = 0
+        ligands_succeeded_docking = 0
+        unknown_event = 0
 
-    for workunit_key in workunits:
-        workunit = workunits[workunit_key]
+        counter = 0
 
-        counter += 1
+        for workunit_key in workunits:
+            workunit = workunits[workunit_key]
 
-        if(counter % 10 == 0):
-            percent = (counter / len(workunits)) * 100
-            print(f".... {percent: .2f}%")
+            counter += 1
 
-        if 'status' not in workunit:
-            continue
+            if(counter % 10 == 0):
+                percent = (counter / len(workunits)) * 100
+                print(f".... {percent: .2f}%")
 
-        # Look at each subjob
-        for subjob_key in workunit['subjobs']:
-
-            subjob = workunit['subjobs'][subjob_key]
-
-            if('status' not in subjob):
+            if 'status' not in workunit:
                 continue
 
-            if(subjob['status'] == "SUCCEEDED" or subjob['status'] == "FAILED"):
+            # Look at each subjob
+            for subjob_key in workunit['subjobs']:
 
-                if('processed' not in subjob or subjob['processed'] == 0):
+                subjob = workunit['subjobs'][subjob_key]
 
-                    for collection_string in subjob['collections']:
+                if('status' not in subjob):
+                    continue
 
-                        collection_full_name, collection_count = collection_string
+                if(subjob['status'] == "SUCCEEDED" or subjob['status'] == "FAILED"):
 
-                        collection_tranche = collection_full_name[:2]
-                        collection_name, collection_number = collection_full_name.split(
-                            "_", 1)
+                    if('processed' not in subjob or subjob['processed'] == 0):
 
-                        collection = collections[collection_full_name]
-                        if('status' not in collection):
-                            collection['status'] = {
-                                'ligands_removed': 0,
-                                'ligands_failed_docking': 0,
-                                'ligands_succeeded_docking': 0,
-                                'unknown_event': 0,
-                            }
+                        for collection_key in subjob['collections']:
 
-                        collection_status_path = os.path.join(
-                            storage_workdir, collection_tranche, collection_name, f"{collection_number}.json.gz")
+                            collection_tranche = subjob['collections'][collection_key]['collection_tranche']
+                            collection_name = subjob['collections'][collection_key]['collection_name']
+                            collection_number = subjob['collections'][collection_key]['collection_number']
 
-                        # Have we already downloaded the file?
-                        if(not os.path.exists(collection_status_path)):
+                            if collection_key not in collections:
+                                collections[collection_key] = {}
 
-                            os.makedirs(os.path.join(
-                                storage_workdir, collection_tranche, collection_name), exist_ok=True)
-                            src_location = f"{config['object_store_job_data_prefix']}/output/ligand-lists/{collection_tranche}/{collection_name}/{collection_number}.json.gz"
+                            collection = collections[collection_key]
+                            if('status' not in collection):
+                                collection['status'] = {
+                                    'ligands_removed': 0,
+                                    'ligands_failed_docking': 0,
+                                    'ligands_succeeded_docking': 0,
+                                    'unknown_event': 0,
+                                }
+
+                            collection_status_path = os.path.join(
+                                storage_workdir, collection_tranche, collection_name, f"{collection_number}.json.gz")
+
+                            # Have we already downloaded the file?
+                            if(not os.path.exists(collection_status_path)):
+
+                                os.makedirs(os.path.join(
+                                    storage_workdir, collection_tranche, collection_name), exist_ok=True)
+
+                                if(config['object_store_job_addressing_mode'] == "hash"):
+                                    hash_string = get_collection_hash(collection_name, collection_number)
+                                    collection_number_formatted = get_formatted_collection_number(collection_number)
+
+                                    object_path = [
+                                        config['object_store_job_prefix'],
+                                        hash_string[0:2],
+                                        hash_string[2:4],
+                                        config['job_letter'],
+                                        "output",
+                                        "ligand-lists",
+                                        collection_name,
+                                        f"{collection_number_formatted}.json.gz"
+                                    ]
+
+                                    src_location = "/".join(object_path)
+
+                                else:
+                                    src_location = f"{config['object_store_job_prefix_full']}/output/ligand-lists/{collection_tranche}/{collection_name}/{collection_number}.json.gz"
+
+                                try:
+                                    with open(collection_status_path, 'wb') as f:
+                                        s3.download_fileobj(
+                                            config['object_store_job_bucket'], src_location, f)
+                                except Exception as err:
+                                    print(
+                                        f"Error downloading {src_location} [this is likely temporary]")
+                                    print(
+                                        f"--> jobline: {workunit_key}, subjob_index: {subjob_key}, jobid: {workunit['status']['job_id']}:{subjob_key}")
+
+                                    if os.path.exists(collection_status_path):
+                                        os.remove(collection_status_path)
+
+                                    continue
 
                             try:
-                                with open(collection_status_path, 'wb') as f:
-                                    s3.download_fileobj(
-                                        config['object_store_bucket'], src_location, f)
+                                with gzip.open(collection_status_path, 'rt') as f:
+                                    log_events = json.load(f)
+
+                                    for event in log_events:
+                                        if(event['status'] == "failed"):
+                                            collection['status']['ligands_removed'] += 1
+                                        elif(event['status'] == "failed(docking)"):
+                                            collection['status']['ligands_failed_docking'] += 1
+                                        elif(event['status'] == "succeeded"):
+                                            collection['status']['ligands_succeeded_docking'] += 1
+                                        else:
+                                            collection['status']['unknown_event'] += 1
+
+                                subjob['processed'] = 1
+
                             except Exception as err:
-                                print(
-                                    f"Error downloading {src_location} [this is likely temporary]")
+                                print(f"Error opening {collection_status_path}")
                                 print(
                                     f"--> jobline: {workunit_key}, subjob_index: {subjob_key}, jobid: {workunit['status']['job_id']}:{subjob_key}")
-
                                 if os.path.exists(collection_status_path):
                                     os.remove(collection_status_path)
 
-                                continue
+        # Roll up information from all collections
 
-                        try:
-                            with gzip.open(collection_status_path, 'rt') as f:
-                                log_events = json.load(f)
+        total_collections = {
+            'status': {
+                'ligands_removed': 0,
+                'ligands_failed_docking': 0,
+                'ligands_succeeded_docking': 0,
+                'unknown_event': 0,
+            },
+            'status_percent': {}
+        }
 
-                                for event in log_events:
-                                    if(event['status'] == "failed"):
-                                        collection['status']['ligands_removed'] += 1
-                                    elif(event['status'] == "failed(docking)"):
-                                        collection['status']['ligands_failed_docking'] += 1
-                                    elif(event['status'] == "succeeded"):
-                                        collection['status']['ligands_succeeded_docking'] += 1
-                                    else:
-                                        collection['status']['unknown_event'] += 1
+        for collection_key in collections:
+            collection = collections[collection_key]
+            if('status' in collection):
+                for event_type in collection['status']:
+                    total_collections['status'][event_type] += collection['status'][event_type]
 
-                            subjob['processed'] = 1
+        total_events = 0
+        for event_type in total_collections['status']:
+            total_events += total_collections['status'][event_type]
 
-                        except Exception as err:
-                            print(f"Error opening {collection_status_path}")
-                            print(
-                                f"--> jobline: {workunit_key}, subjob_index: {subjob_key}, jobid: {workunit['status']['job_id']}:{subjob_key}")
-                            if os.path.exists(collection_status_path):
-                                os.remove(collection_status_path)
+        # Get the percentages
+        for event_type in total_collections['status']:
+            if(total_events > 0):
+                metric = (total_collections['status']
+                          [event_type] / total_events) * 100
+                total_collections['status_percent'][event_type] = f"{metric: .2f}"
+            else:
+                total_collections['status_percent'][event_type] = "--"
 
-    # Roll up information from all collections
-
-    total_collections = {
-        'status': {
-            'ligands_removed': 0,
-            'ligands_failed_docking': 0,
-            'ligands_succeeded_docking': 0,
-            'unknown_event': 0,
-        },
-        'status_percent': {}
-    }
-
-    for collection_key in collections:
-        collection = collections[collection_key]
-        if('status' in collection):
-            for event_type in collection['status']:
-                total_collections['status'][event_type] += collection['status'][event_type]
-
-    total_events = 0
-    for event_type in total_collections['status']:
-        total_events += total_collections['status'][event_type]
-
-    # Get the percentages
-    for event_type in total_collections['status']:
-        if(total_events > 0):
-            metric = (total_collections['status']
-                      [event_type] / total_events) * 100
-            total_collections['status_percent'][event_type] = f"{metric: .2f}"
-        else:
-            total_collections['status_percent'][event_type] = "--"
-
-    print("")
-    for category in ['ligands_succeeded_docking', 'ligands_removed', 'ligands_failed_docking', 'unknown_event']:
-        metric = total_collections['status'][category]
-        metric_percent = total_collections['status_percent'][category]
-        print(f"{category}: {metric} ({metric_percent}%)")
-    print("")
+        print("")
+        for category in ['ligands_succeeded_docking', 'ligands_removed', 'ligands_failed_docking', 'unknown_event']:
+            metric = total_collections['status'][category]
+            metric_percent = total_collections['status_percent'][category]
+            print(f"{category}: {metric} ({metric_percent}%)")
+        print("")
 
 
 #	vcpu_seconds = total_stats_by_status['vcpu_min']['SUCCEEDED'] * 60 / ligands_succeeded_docking
@@ -538,14 +606,56 @@ def process(config):
     print("Writing the json status file out")
 
     # Output all of the information about the workunits into JSON so we can easily grab this data in the future
-    with open("../workflow/status.json", "w") as json_out:
+    with open("../workflow/status.json.tmp", "w") as json_out:
         json.dump(status, json_out)
+
+    with open("../workflow/collections_status.json.tmp", "w") as json_out:
+        json.dump(collections, json_out)
+
+
+    print("*** Going to move files -- do not interrupt! ***\n")
+    time.sleep(1)
+    Path("../workflow/status.json.tmp").rename("../workflow/status.json")
+    Path("../workflow/collections_status.json.tmp").rename("../workflow/collections_status.json")
+    print("Done")
+
+
+def process_shared_fs(config):
+
+    # load the status file that is keeping track of the data
+    with open("../workflow/status.json", "r") as read_file:
+        status = json.load(read_file)
+
+    workunits = status['workunits']
+    workunits_to_check = []
+
+    not_yet_submitted = 0;
+    for workunit_key in workunits:
+        current_workunit = workunits[workunit_key]
+
+        # Has this even been submitted?
+        if 'status' in current_workunit and current_workunit['status']['vf_job_status'] == "SUBMITTED":
+            workunits_to_check.append(workunit_key)
+        else:
+            not_yet_submitted += 1
+
+    if not_yet_submitted > 0:
+        print(f"** There are {not_yet_submitted} not yet submitted workunits out of {len(workunits)}")
+
+
+
+
 
 
 def main():
 
-    config = parse_config("../workflow/control/all.ctrl")
-    process(config)
+    config = parse_config("../workflow/config.json")
+
+
+    if(config['job_storage_mode'] == "s3" and config['batchsystem'] == "awsbatch"):
+        process(config)
+    else:
+        print(f"Configuration with job_storage_mode={config['job_storage_mode']} and batchsystem={config['batchsystem']} is not supported")
 
 
 if __name__ == '__main__':
