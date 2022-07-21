@@ -1,301 +1,242 @@
-*****************************************************************************************************************************************************************
-***************************************************************    Job Resource Configuration    ****************************************************************
-*****************************************************************************************************************************************************************
+****** Job Resource Configuration 
 
-job_letter=t
-# One alphabetic character (i.e. a letter from a-z or A-Z)
-# Should not be changed during runtime, and be the same for all joblines
-# Required when running VF several times on the same cluster to distinguish the jobs in the batchsystem
-# Settable via range control files: No
+job_name=testing
+# alphabetic characters (i.e. letters from a-z or A-Z)
+# Used to describe distinct runs (using the same name will
+# overwrite data if using S3!)
 
-batchsystem=SLURM
-# Possible values: SLURM, TORQUE, PBS, LSF, SGE
-# Settable via range control files: No
+threads_per_docking=1
+# How many threads should be used for each docking program. 
 
-partition=shared
-# Partitions are also called queues in some batchsystems
-# Settable via range control files: Yes
+threads_to_use=8
+# This sets how many processes the main execution loop should be using
+# to process. This is generally 2x the number of vCPUs or hyperthreads
+# available on the system it is being run on
 
-timelimit=7-00:00:00
-# Format for slurm: dd-hh:mm:ss
-# Format for TORQUE and PBS: hh:mm:ss
-# Format for SGE: hh:mm:ss
-# Format for LSF: hh:mm
-# For all batchsystems: always fill up with two digits per field (used be the job scripts)
-# Settable via range control files: Yes
+program_timeout=90
+# How many seconds to wait for each ligand to be processed by a program
 
-steps_per_job=1
-# Not (yet) available for LSF and SGE (is always set to 1)
-# Should not be changed during runtime, and be the same for all joblines
-# Settable via range control files: Yes
 
-cpus_per_step=8
-# Sets the slurm cpus-per-task variable (task = step) in SLURM
-# In LSF this corresponds to the number of slots per node
-# Should not be changed during runtime, and be the same for all joblines
-# Not yet available for SGE (always set to 1)
-# Settable via range control files: Yes
+************************************************
+** Batch system configuration
+************************************************
 
-queues_per_step=8
-# Sets the number of queues/processes per step
-# Should not be changed during runtime, and be the same for all joblines
-# Not yet available for SGE (always set to 1)
-# Settable via range control files: Yes
+batchsystem=awsbatch
+# Possible values: awsbatch, slurm
 
-cpus_per_queue=1
-# Should be equal or higher than <cpus-per-step/queues-per-step>
-# Should not be changed during runtime, and be the same for all joblines
-# Not yet available for SGE (always set to 1)
-# Settable via range control files: Yes
+****** AWS Batch Options (if batchsystem=awsbatch)
 
-*****************************************************************************************************************************************************************
-********************************************************************    AWS Batch Options    ********************************************************************
-*****************************************************************************************************************************************************************
-
-### To use AWS Batch you must first complete the steps outlined in the user guide for AWS Batch ###
+### To use AWS Batch you must first complete the steps outlined 
+### in the user guide for AWS Batch 
 
 aws_batch_prefix=vf
 # Prefix for the name of the AWS Batch queues. This is normally 'vf'
+# if you used the CloudFormation template
 
-aws_batch_number_of_queues=1
-# Should be set to the number of queues that are setup for AWS Batch. Generally this number is 1 unless you have a large-scale (200K+ vCPUs)
+aws_batch_number_of_queues=2
+# Should be set to the number of queues that are setup for AWS Batch. 
+# Generally this number is 2 unless you have a large-scale (100K+ vCPUs)
 # setup
+
+aws_batch_jobdef=vf-jobdef-vfvs
+# Generally this is [aws_batch_prefix]-jobdef-vfvs
+# (e.g. if aws_batch_prefix=vf, then aws_batch_jobdef=vf-jobdef-vfvs
 
 aws_batch_array_job_size=200
 # Target for the number of jobs that should be in a single array job for AWS Batch.
 
-aws_ecr_repository_name=vf-ecr
-# Set it to the name of the Elastic Container Registry (ECR) repository (e.g. vf-ecr) in your AWS account
+aws_ecr_repository_name=vf-vfvs-ecr
+# Set it to the name of the Elastic Container Registry (ECR) 
+# repository (e.g. vf-vfvs-ecr) in your AWS account
+# (If you used the template it is generally vf-vfvs-ecr)
 
 aws_region=us-east-1
 # Set to the AWS location code where you are running AWS Batch
+# (e.g. us-east-1 for North America, Northern Virginia)
+
+aws_batch_subjob_vcpus=8
+# Set to the number of vCPUs that should be launched per subjob. 
+# 'threads_to_use' above should be >= to this value. 
+
+aws_batch_subjob_memory=15000
+# Memory per subjob to setup for the container in MB
+
+aws_batch_subjob_timeout=10800
+# Maximum amount of time (in seconds) that a single AWS Batch job should 
+# ever run before being terminated.
+
+****** Slurm Options (if batchsystem=slurm)
+
+slurm_template=./templates/template1.slurm.sh
+# Template for the slurm job
+# Additional slurm attributes can be added directly to this
+# template file if they are not available as pass throughs from
+# VFVS
+
+slurm_array_job_throttle=100
+# Maximum number of jobs running within a single slurm array job
+
+slurm_partition=partition
+# Partition to submit the job
+
+slurm_cpus=18
+# Number of CPUs that are being used
+
+slurm_array_job_size=100
+# Maximum number of concurrent jobs from a single array job
+# that should be run
 
 
-*****************************************************************************************************************************************************************
-**********************************************************************    Object Store    ***********************************************************************
-*****************************************************************************************************************************************************************
+************************************************
+** Storage configuration
+************************************************
 
-object_store_type=none
-# Type of object store being used (none or s3 is currently only one supported). Note that if this is set to anything other than
-# 'none' then ensure that you have followed instructions as part of the user guide for object stores
-
-object_store_bucket=
-# Name of the bucket that will be used for data storage for this run
-
-object_store_job_data_prefix=jobs/a
-# Where to place job-specific data. This includes where VirtualFlow will place the input data needed for jobs
-# as well as the output files
-
-object_store_ligands_prefix=data/real2020
-# Prefix used within the object store to address the tranches
+job_storage_mode=s3
+# This mode determines where data is retrieved and stored from as part of 
+# VFVS. Valid modes:
+#   * s3: Job data is stored on S3 object store, which is the required
+#         mode if using AWS Batch. Items under the "S3 Object Store" 
+#         heading in the configuration are required if this mode is used
+#   * sharedfs: This mode requires that all running jobs have access to the
+#         same shared filesystem that will allow for both input and output
+#         of data. This is required if using Slurm
 
 
-*****************************************************************************************************************************************************************
-*********************************************************************    Workflow Options    ********************************************************************
-*****************************************************************************************************************************************************************
+data_collection_addressing_mode=metatranche
+# If input is placed with the hash addressing mode, then use 'hash'.
+# otherwise use "metatranche" for the classic addressing mode
 
-central_todo_list_splitting_size=10000
-# When the folders are initially prepared the first time, the central todo list will be split into pieces of size <central_todo_list_splitting_size>. One task corresponds to one collection.
-# Recommended value: < 100000, e.g. 10000
-# Possible values: Positive integer
-# The smaller the value, the faster the ligand collections can be distributed.
-# For many types of clusters it is recommended if the total number of splitted todo lists stays below 10000.
-# Settable via range control files: Yes
+data_collection_identifier=
+# This is only used if object_store_data_collection_addressing_mode=hash
+# Generally this is the dataset name (e.g. Enamine_REAL_Space_2021q12)
 
-ligands_todo_per_queue=100000
-# Used as a limit of ligands for the to-do lists
-# This value should be divisible by the next setting "ligands_todo_per_refilling_step"
-# Settable via range control files: Yes
+job_addressing_mode=metatranche
+# If job output is to be placed with the hash addressing mode, then use 'hash'.
+# otherwise use "metatranche" for the classic addressing mode
 
-ligands_per_refilling_step=10000
-# The to-do files of the queues are filled with <ligands_per_refilling_step> ligands per refill step
-# A number roughly equal to the average of number of ligands per collection is recommended
-# Settable via range control files: Yes
 
-collection_folder=../input-files/ligand-library
+****** Object Store Settings (S3)
+
+object_store_job_bucket=
+# Bucket name for the job data (output and job files)
+
+object_store_job_prefix=jobs
+# Where to place job-specific data. This includes where VirtualFlow will place 
+# the input data needed for jobs as well as the output files. 
+#
+# Data be be placed:
+# if object_store_job_addressing_mode=hash
+#	in object_store_job_prefix/XX/YY/<job_letter>
+#       (where 'XX', and 'YY' are hash values that will vary for 
+#        different files)
+# else
+# 	in object_store_job_prefix/<job_letter>
+
+object_store_data_bucket=
+# Bucket name for the input collection data (often the same as the job one)
+
+object_store_data_collection_prefix=
+# Prefix used within the object store to address the collections
+
+
+
+
+****** Shared Filesystem Settings
+
+collection_folder=/home/ec2-user/collections
+# Path to where the collection file are stored
+#  * This is used when job_storage_mode=sharedfs or
+#    when the uploader helper script is being used
+#
 # Slash at the end is not required (optional)
-# Relative pathname is required w.r.t. the folder tools/
-# Settable via range control files: Yes
+# Either pathname is required w.r.t. the folder tools/
+#     or absolute path (e.g. /home/vfuser/collections)
+
+
+************************************************
+** Run configuration
+************************************************
+
+****** Output information
+
+summary_formats=parquet
+# Format for summary files that are generated with the score data.
+# Supported values:
+#  * txt.gz (space delimited files)
+#  * parquet
+# Multiple formats can be generated by placing a comma
+# (e.g. summary_formats=parquet,txt.gz)
+
+print_smi_in_summary=1
+# Whether or not the SMILES string should be printed in 
+# the summary file (works for pdbqt and mol2)
+# Supported values:
+#  * 0 : Do not provide
+#  * 1 : SMILES string in the summary file
+
+
+****** Workflow Options
+
+ligands_todo_per_queue=1000
+# Used as a limit of ligands for the to-do lists. 
+# A reasonable number for this is generally 1000. The length of time
+#     to process will depend on the docking scenarios run
 
 ligand_library_format=pdbqt
 # Supported values:
 #  * pdbqt
 #  * mol2
 # This value is case sensitive
-# All AutoDock based docking programs require the library to be in the pdbqt format. When the docking program PLANTS is used, both libraries in the pdbqt and the mol2 format are supported.
+# All AutoDock based docking programs require the library to
+#     be in the pdbqt format.
+# When the docking program PLANTS is used, both libraries in the
+#     pdbqt and the mol2 format are supported.
 
-minimum_time_remaining=10
-# In minutes
-# A new job if the time left until the end of the walltime is smaller than the timelimit
-# This is checked before each ligand is screened
-# Thus the timelimit should be larger than the maximum time which is needed to process one ligand
-# Settable via range control files: Yes
-
-dispersion_time_min=3
-# One positive integer, resembling the time in seconds
-dispersion_time_max=10
-# One positive integer, resembling the time in seconds
-# The dispersion time is used when jobs try to access the central task list.
-# Each job has to wait a random amount of time in the dispersion interval.
-# The effect of this is that when two jobs arrive at the same time at the central task list, the random waiting time will disperse their access on the central task list in time
-# Settable via range control files: Yes
-
-verbosity_commands=standard
-# Possible values: standard, debug
-# This option mainly effects the screen output and the logfiles
-# Settable via range control files: No
-
-verbosity_logfiles=standard
-# Possible values:
-#   * standard
-#   * debug : activates the set -x option. Increases size of log-files in average by nearly a factor of 10
-# This option affects the preparation scripts for setting up the basic workflow files (before the workflow is running)
-# Settable via range control files: Yes
-
-store_queue_log_files=all_compressed_error_uncompressed
-# Supported values (experimental)
-#   * all_uncompressed: requires most memory any and storage, but is recommending for test runs and debugging purposes
-#   * all_compressed: requires less memory and storage than uncompressed, but during the last part of the log files might get lost (in particular during crashes) due to the on-the-fly compression
-#   * only_error_uncompressed: only stderr is logged
-#   * only_error_compressed: only stderr is logged and compressed. The last part of the log might get lost (in particular during crashes) due to the on-the-fly compression.
-#   * std_compressed_error_uncompressed
-#   * all_compressed_error_uncompressed
-#   * none: reduces required memory and storage
-# Settable via range control files: Yes
-
-keep_ligand_summary_logs=true
-# Summary log files which show for each ligand the success status of conversion and the conversion time.
-# If the conversion failed, a reason is stated.
-# If the transformation succeeded, the conversion programs which were used are stated.
-# Possible values:
-#   * false
-#   * true
-# Settable via range control files: Yes
-
-error_sensitivity=normal
-# Possible values: normal, high
-# high sets the shell options "-uo pipefail". Not recommended for production runs, useful mainly for debugging. Pipefails often occur with tar combined with head/tail in pipes, which are not an actual problem.
-# The u-option will always lead to a direct exit of the shell script when an unset variable is going to be used.
-# Settable via range control files: Yes
-
-error_response=fail
-# Affects most errors, but not all (e.g. not the u-option of the shell)
-# Possible values:
-#   * ignore    : ignore error and continue
-#   * next_job  : end this job and start new job
-#   * fail      : exit workflow with failure (exit code 1)
-# Settable via range control files: Yes
-
-tempdir_default=/tmp
+tempdir_default=/dev/shm
 # The directory which is used for the temporary workflow files which need a normal performance
-# Is normally a local SSD or HDD
-# The directory does only need to be available on the node on which the job step/queue is running
-# In the tempdir, a subfolder named ${USER} will automatically be created
-# Settable via range control files: Yes
+# Is normally a local SSD or HDD. A temporary directory will be created underneath this dir
+
 
 tempdir_fast=/dev/shm
 # The directory which is used for the temporary workflow files which need a fast perfomance
-# Should be a a local ram filesystem/ramdisk
-# The directory does only need to be available on the node on which the job step/queue is running
-# In the tempdir, a subfolder named ${USER} will automatically be created
-# Settable via range control files: Yes
+# Should be a a local ram filesystem/ramdisk. A temporary directory will be created underneath this dir
 
-outputfiles_level=collection
-# Possible values:
-#   * collection  : The collection output files are stored in tar.gz format. They are stored in subfolders named by metatranch and tranch to reduce the number of files per folder.
-#                   Advantages:
-#                       * Less I/O on the shared cluster file system (as existing tranch archives don't have to be read during storage of completed collectionsds)
-#                       * No risk of output-file clashes when two queues want to store completed collections on the shared filesystem
-#   * tranche      : For each tranch a tar archive is created, which contains the gzipped collection output files.
-#                   Advantages:
-#                       * Less output files (only for each tranch) for each of the output file types (e.g. results, summaries, logfiles, ...)
+****** Virtual Screening Options
 
-prepare_queue_todolists=true
-# Possible values:
-#   * false The todo lists will not be prepared/refilled at the beginning of the jobs. Useful mainly when the todolists are prepared in advance before the workflow is started.
-#   * true: The todo lists for each queue will be prepared/refilled during the beginning of each job.
-
-
-*****************************************************************************************************************************************************************
-*****************************************************************    Virtual Screening Options    ***************************************************************
-*****************************************************************************************************************************************************************
-
-**********************************************************************    Docking Scenarios    ******************************************************************
-
-docking_scenario_names=TBS (to be specified)
-# Names for the docking scenarios, separated by commas
-# Each docking scenario has one value. Multiple docking scenarios/names have to be separated by colons ":" and without spaces
+docking_scenario_names=qvina02_rigid_receptor1
+# Names for the docking scenarios, separated by colons
+# Each docking scenario has one value. Multiple docking scenarios/names have
+#    to be separated by colons ":" and without spaces
+#
 # Example: docking_scenario_names=receptor1_vina_rigid:receptor1_smina_flexible
-# The docking scenario names are for exapmle used for the folder names in which the output files are stored
-# The value should not be changed during runtime, and be the same for all joblines
-# Settable via range control files: Yes
+# The docking scenario names are used for the folder names in which the output files are stored
 
-docking_scenario_programs=TBS
+docking_scenario_programs=qvina02
 # For each docking scenario name, a docking program has to be specified
 # Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, gwovina, adfr
 # Values have to be separated by colons ":" and without spaces, e.g: docking_scenario_programs=vina:smina
 # smina_rigid has to be used for rigid docking with smina, while smine_flexible for flexible receptor docking
-# The value should not be changed during runtime, and be the same for all joblines
-# Settable via range control files: Yes
 
-docking_scenario_replicas=TBS
+docking_scenario_replicas=1
 # Series of integers separated by colons ":"
-# The number of values has to equal the number of docking programs specified in the variable "docking_programs"
-# The values are in the same order as the docking programs specified in the variable "docking_scenario_programs
-# e.g.: docking_scenario_replicas=1:1
+# The number of values has to equal the number of docking programs
+#     specified in the variable "docking_programs"
+# The values are in the same order as the docking programs specified in the
+#     variable "docking_scenario_programs
+#     e.g.: docking_scenario_replicas=1:1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
-# The value should not be changed during runtime, and be the same for all joblines
-# Settable via range control files: Yes
 
-docking_scenario_inputfolders=TBS
-# Relative path with respect to the tools folders
-# In each input folder must be the file config.txt which is used by the docking program to specify its options
-# If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder
-# The value should not be changed during runtime, and be the same for all joblines
-# Settable via range control files: Yes
 
-************************************************************************    Energy Check    *********************************************************************
+docking_scenario_basefolder=../input-files
+# Relative path to tools directory
+# Base directory for where the docking scenarios are held. Nothing other 
+# than the required files for the docking scenario should be placed here
 
-energy_check=true
-# Determines whether the potential energy of the best docking pose is checked by obenergy (Open Babel Enegy). This can be useuful to filter out hits with unrealistic/corrupsted docking poses.
-# Only works for ligand_library_format=pdbqt at the moment
-# Possible values:
-#   * true
-#   * false
+docking_scenario_inputfolders=qvina02_rigid_receptor1
+# folder names inside 'docking_scenario_basefolder' 
+# In each input folder must be the file config.txt which is used by the
+#     docking program to specify its options
+# If other input files are required by the docking type, usually
+#     specified in the config.txt file, they have to be in the same folder
 
-energy_max=10000
-# Maximum allowed energy value. Recommended: 10000
-# Possible values: Positive integer
-
-*****************************************************************************************************************************************************************
-*******************************************************************    Terminating Variables    *****************************************************************
-*****************************************************************************************************************************************************************
-
-stop_after_next_check_interval=false
-# Determines whether the queue is stopped after the ligand batch currenty in progress. The size of the ligand batches is determined by the <ligand_check_interval> variable.
-# Possible values:
-#   * false : The queue will continue to process ligands as long as there are ligands remaining for the queue
-#   * true : No new ligand will be started after the current ligand is completed
-# Settable via range control files: Yes
-
-ligand_check_interval=10
-# Determines after how many ligands the controlfile which should be used is determined and checked for termination flags
-# For large scale production runs a value of > 100 is recommended
-# Possible values
-#   * Positive integer
-
-stop_after_collection=false
-# Determines whether the queue is stopped after the current collection is completed
-# Settable via range control files: Yes
-# Possible values:
-#   * false : A new collection will be started if the current collection is completed and if there are collections remaining
-#   * true : No new collection will be started after the current collection is completed
-# Settable via range control files: Yes
-
-stop_after_job=false
-# Determines whether the queue is stopped after the current job is completed
-# Possible values:
-#   * false : A new job will be submitted if there are more ligands in the current collection or unprocessed collections remaining
-#   * true : No new job is submitted after the current job has ended
-# Settable via range control files: Yes

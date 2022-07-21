@@ -18,7 +18,7 @@
 FROM amazonlinux:2
 
 RUN yum update -y && yum -y install python3
-RUN pip3 install boto3
+RUN pip3 install boto3 pandas pyarrow
 
 ADD . /opt/vf/tools
 

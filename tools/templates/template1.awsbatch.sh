@@ -33,5 +33,8 @@
 
 df -h
 
+export VFVS_WORKUNIT_SUBJOB=${AWS_BATCH_JOB_ARRAY_INDEX}
+
 cd /opt/vf/tools/templates/
-./vf_aws_run.py
+./vfvs_run.py
+
