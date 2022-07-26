@@ -1,0 +1,23 @@
+[
+  {
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "virtual-flow"
+  },
+  {
+    "ParameterKey": "VpcCidr0",
+    "ParameterValue": "10.0.0.0/16"
+  },
+  {
+    "ParameterKey": "VpcCidr1",
+    "ParameterValue": "10.1.0.0/16"
+  },
+  {
+    "ParameterKey": "VpcCidr2",
+    "ParameterValue": "10.2.0.0/16"
+  },
+  {
+    "ParameterKey": "VpcCidr3",
+    "ParameterValue": "10.3.0.0/16"
+  }
+]
+
