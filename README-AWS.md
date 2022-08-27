@@ -192,7 +192,7 @@ AWS Batch will use 200 subjobs per workunit, so this will submit 2x200 (400) sub
 How long each job takes will be dependent on the parameters that were set as part of the `all.ctrl` and the docking scenarios themselves.
 
 ```bash
-./vfvs_submit_jobs_awsbatch.py 1 2
+./vfvs_submit_jobs.py 1 2
 ```
 
 Once submitted, AWS Batch will start scaling up resources to meet the requirements of the jobs and begin executing.
