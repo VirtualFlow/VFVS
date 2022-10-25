@@ -213,7 +213,7 @@ def process(config):
         workunit = workunits[workunit_key]
 
         # Ignore ones that we already know are complete (SUCCEEDED and FAILED) from a previous run
-        for subjob_key in current_workunit['subjobs']:
+        for subjob_key in workunit['subjobs']:
             subjob = workunit['subjobs'][subjob_key]
 
             if 'status' not in subjob:
