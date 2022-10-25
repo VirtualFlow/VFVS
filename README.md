@@ -36,7 +36,7 @@ If you are interested in contributing to VirtualFlow, whether it is to report a 
 
 ### License
 
-The project ist distributed under the GNU GPL v3.0. Please see the file [LICENSE](LICENSE) for more details. 
+The project ist distributed under the GNU GPL v2.0. Please see the file [LICENSE](LICENSE) for more details. 
 
 
 ### Citation
