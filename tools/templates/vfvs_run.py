@@ -7,7 +7,7 @@
 #
 # VirtualFlow is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 2 of the License, or
+# the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
 # VirtualFlow is distributed in the hope that it will be useful,
@@ -43,12 +43,17 @@ import subprocess
 import botocore
 import logging
 import time
+import uuid
 import shutil
 import hashlib
 import pandas as pd
 from pathlib import Path
 from botocore.config import Config
 
+
+def read_config_line(line):
+    key, sep, value = line.strip().partition("=")
+    return key, value
 
 
 def process_config(ctx):
@@ -201,6 +206,7 @@ def program_runstring_array(task):
             or task['program'] == "vina_carb"
             or task['program'] == "vina_xb"
             or task['program'] == "gwovina"
+            or task['program'] == "AutodockVina_1.2"
        ):
         cmd = [
             f"{task['tools_path']}/{task['program']}",
@@ -216,31 +222,158 @@ def program_runstring_array(task):
             '--config', task['config_path'],
             '--ligand', task['ligand_path'],
             '--out', task['output_path'],
-            '--log', f"{task['output_path_base']}.flexres.pdb",
-            '--atom_terms', f"{task['output_path_base']}.atomterms"
+            '--log', f"task['output_path_base'].flexres.pdb",
+            '--atom_terms', f"task['output_path_base'].atomterms"
         ]
+    elif(task['program'] == "adfr"):
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        cmd = ['adfr', 
+               '-t', '{}'.format(config_['receptor']), 
+               '-l', '{}'.format(task['ligand_path']), 
+               '--jobName', '{}'.format(task['output_path'])
+               ]
+    elif(task['program'] == "plants"):
+        cmd = ['{}/PLANTS'.format(task['tools_path']), 
+               '--mode', 'screen', 
+                '{}.txt'.format(str(uuid.uuid4()))]
+    elif(task['program'] == "AutodockZN"):
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+            else: continue 
+        cmd = ['{}/AutodockVina_1.2'.format(task['tools_path']), 
+               '--ligand', '{}'.format(task['ligand_path']), 
+               '--maps', config_['afinit_maps_name'], 
+               '--scoring', 'ad4', 
+               '--exhaustiveness', '{}'.format(config_['exhaustiveness']), 
+               '--out', '{}'.format(task['output_path'])]
+    elif(task['program'] == "gnina"):
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+            else: continue 
+        cmd = ['{}/gnina'.format(task['tools_path']), 
+               '-r', config_['receptor'], 
+               '-l', '{}'.format(task['ligand_path']), 
+               '--exhaustiveness', '{}'.format(config_['exhaustiveness']), 
+               '--center_x', '{}'.format(config_['center_x']),
+               '--center_y', '{}'.format(config_['center_y']),
+               '--center_z', '{}'.format(config_['center_z']),
+               '--size_x',   '{}'.format(config_['size_x']),
+               '--size_y',   '{}'.format(config_['size_y']),
+               '--size_z',   '{}'.format(config_['size_z']),  
+               '--out', '{}'.format(task['output_path'])]
+    elif(task['program'] == "rDock"):
+        
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+            else: continue 
+        cmd = [ 'rbdock', 
+                '-i', task['ligand_path'], 
+                '-o', task['output_path'],
+                '-r', config_['rdock_config'], 
+                '-p', config_['dock_prm'],
+                '-n', config_['runs']]
+        
+    elif(task['program'] == "M-Dock"):
+        
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+        cmd = ['{}/MDock_Linux'.format(task['tools_path']), 
+                config_['protein_name'], 
+                task['ligand_path'],
+               '-param', config_['mdock_config']
+              ]
+    elif(task['program'] == "MCDock"):
+    
+        cmd = ['{}/mcdock'.format(task['tools_path']), 
+                '--target', config_['protein_name'], 
+                '--ligand', task['ligand_path']]
+    
+    elif(task['program'] == "LigandFit"): 
+        
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+        
+        cmd = ['{}/ligandfit'.format(task['tools_path']), 
+               'data=', config_['receptor_mtz'], 
+               'model=', config_['receptor'], 
+               'ligand', task['ligand_path'],
+               'search_center=', config_['center_x'], config_['center_y'], config_['center_z']]
+    
+    elif(task['program'] == "ledock"): 
+        cmd = ['{}/ledock'.format(task['tools_path']), '{}.in'.format(str(uuid.uuid4()))]
+        
+    elif(task['program'] == "gold"): 
+        cmd = ['{}/gold_auto'.format(task['tools_path']), '{}.conf'.format(str(uuid.uuid4()))]
+
+    elif(task['program'] == "iGemDock"): 
+                
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+        
+        cmd = ['{}/mod_ga'.format(task['tools_path']), 
+               config_['exhaustiveness'], 
+               config_['receptor'], 
+               task['ligand_path'], 
+               '-d', str(uuid.uuid4())]
+
+    elif(task['program'] == "idock"): 
+                
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+        
+        cmd = ['{}/idock'.format(task['tools_path']), 
+               '--receptor', config_['receptor'], 
+               '--ligand', task['ligand_path'], 
+               '--center_x', config_['center_x'],
+               '--center_y', config_['center_y'],
+               '--center_z', config_['center_z'],
+               '--size_x', config_['size_x'],
+               '--size_y', config_['size_y'],
+               '--size_z', config_['size_z'], 
+               '--out', '{}'.format(task['output_path'])]        
+    
+    elif(task['program'] == "GalaxyDock3"): 
+        cmd = ['{}/GalaxyDock3'.format(task['tools_path']), 
+               '{}.in'.format(str(uuid.uuid4()))]
+        
+    elif(task['program'] == "autodock_cpu"):
+        
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+        
+        cmd = ['{}/autodock_cpu'.format(task['tools_path']), 
+               '--ffile', config_['receptor'], 
+               '--lfile', task['ligand_path']]
+        
+    elif(task['program'] == "autodock_gpu"):
+        with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+        for item in config_: 
+            if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+        
+        cmd = ['{}/autodock_gpu'.format(task['tools_path']), 
+               '--ffile', config_['receptor'], 
+               '--lfile', task['ligand_path']]
+        
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
-
-    #elif(task['program'] == "adfr"):
-    #    # TODO: convert config.txt and remove all newlines and pass in
-    #
-    #    adfr_config_options = ""
-    #
-    #    cmd = [
-    #        'adfr',
-    #        '-l', task['ligand_path'],
-    #        '--jobName', 'adfr',
-    #        adfr_config_options
-    #    ]
-        #                     adfr_configfile_options=$(cat ${docking_scenario_inputfolder}/config.txt | tr -d "\n")
-    #            { bin/time_bin -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" adfr -l ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format} --jobName adfr ${adfr_configfile_options} 2> >(tee ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output.tmp 1>&2) ; } 2>&1
-    #            rename "_adfr_adfr.out" "" ${next_ligand}_replica-${docking_replica_index} ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}*
-    #
-    #            score_value=$(grep -m 1 "FEB" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.${ligand_library_format} | awk -F ': ' '{print $(NF)}')
-    #elif(task['program'] == "plants"):
-    #    # TODO implement plants
-    #    adfr_config_options = ""
 
     return cmd
 
@@ -267,6 +400,157 @@ def process_ligand(task):
 
     try:
         cmd = program_runstring_array(task)
+        
+        if(task['program'] == "plants"):
+            temp_file = cmd[-1]
+            os.system('cp {} {}'.format(task['config_path'], temp_file))
+            with open(temp_file, 'a+') as f: 
+                f.writelines('ligand_file {}\n'.format(task['ligand_path']))
+                f.writelines('output_dir {}\n'.format(task['output_path'])) 
+                
+        if(task['program'] == "M-Dock"):
+            os.system('cp ./mdock_dock.mol2 {}'.format(task['output_path']))
+            os.system('rm ./mdock_dock.mol2')
+        
+        if(task['program'] == 'LigandFit'): 
+            os.system('rm -rf PDS')
+            os.system('cp ./LigandFit_run_1_/ligand_fit_1.pdb {}'.format(task['output_path']))
+        
+        if(task['program'] == 'ledock'):
+            
+            with open(task['config_path']) as fd:
+                config_ = dict(read_config_line(line) for line in fd)
+            for item in config_: 
+                if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+            
+            docking_file = cmd[-1]
+            ligand_list_file = docking_file.split('.')[0] + '.list'
+            
+            with open(docking_file, 'w') as f: 
+                f.writelines(['Receptor'])
+                f.writelines([config_['receptor'] + '\n'])
+                f.writelines(['RMSD'])
+                f.writelines([config_['rmsd'] + '\n'])
+                f.writelines(['Binding pocket'])
+                f.writelines(['{} {}'.format( config_['min_x'], config_['max_x']) ])
+                f.writelines(['{} {}'.format( config_['min_y'], config_['max_y']) ])
+                f.writelines(['{} {}\n'.format( config_['min_z'], config_['max_z']) ])
+                f.writelines(['Number of binding poses'])
+                f.writelines([config_['n_poses'] + '\n'])
+                f.writelines(['Ligands list'])
+                f.writelines([ligand_list_file + '\n'])
+                f.writelines(['END'])
+                
+            with open(ligand_list_file, 'w') as f: 
+                f.writelines(task['ligand_path'])
+                
+        if(task['program'] == 'gold'):
+            
+            with open(task['config_path']) as fd:
+                config_ = dict(read_config_line(line) for line in fd)
+            for item in config_: 
+                if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+            
+            conf_file = cmd[-1]
+            
+            with open(conf_file, 'a+') as f: 
+                f.writelines(['  GOLD CONFIGURATION FILE\n'])        
+                f.writelines(['  AUTOMATIC SETTINGS'])        
+                f.writelines(['autoscale = 1\n'])        
+                f.writelines(['  POPULATION']) 
+                f.writelines(['popsiz = auto'])        
+                f.writelines(['select_pressure = auto'])        
+                f.writelines(['n_islands = auto'])        
+                f.writelines(['maxops = auto'])        
+                f.writelines(['niche_siz = auto\n'])        
+                f.writelines(['  GENETIC OPERATORS'])        
+                f.writelines(['pt_crosswt = auto'])        
+                f.writelines(['allele_mutatewt = auto'])        
+                f.writelines(['migratewt = auto\n'])        
+                f.writelines(['  FLOOD FILL'])        
+                f.writelines(['radius = {}'.format(config_['radius'])])        
+                f.writelines(['origin = {}   {}   {}'.format(config_['center_x'], config_['center_y'], config_['center_z'])])
+                f.writelines(['do_cavity = 0'])        
+                f.writelines(['floodfill_center = point\n'])        
+                f.writelines(['   DATA FILES'])        
+                f.writelines(['ligand_data_file {} 10'.format(task['ligand_path'])])        
+                f.writelines(['param_file = DEFAULT'])        
+                f.writelines(['set_ligand_atom_types = 1'])        
+                f.writelines(['set_protein_atom_types = 0'])        
+                f.writelines(['directory = {}'.format(conf_file.split('.')[0])])        
+                f.writelines(['tordist_file = DEFAULT'])        
+                f.writelines(['make_subdirs = 0'])        
+                f.writelines(['save_lone_pairs = 1'])        
+                f.writelines(['fit_points_file = fit_pts.mol2'])        
+                f.writelines(['read_fitpts = 0'])        
+                f.writelines(['bestranking_list_filename = bestranking.lst\n'])        
+                f.writelines(['   FLAGS'])        
+                f.writelines(['internal_ligand_h_bonds = 1'])        
+                f.writelines(['flip_free_corners = 1'])        
+                f.writelines(['match_ring_templates = 1'])        
+                f.writelines(['flip_amide_bonds = 0'])        
+                f.writelines(['flip_planar_n = 1 flip_ring_NRR flip_ring_NHR'])        
+                f.writelines(['flip_pyramidal_n = 0'])        
+                f.writelines(['rotate_carboxylic_oh = flip'])        
+                f.writelines(['use_tordist = 1'])        
+                f.writelines(['postprocess_bonds = 1'])        
+                f.writelines(['rotatable_bond_override_file = DEFAULT'])        
+                f.writelines(['solvate_all = 1\n'])        
+                f.writelines(['   TERMINATION'])        
+                f.writelines(['early_termination = 1'])        
+                f.writelines(['n_top_solutions = 3'])        
+                f.writelines(['rms_tolerance = 1.5\n'])        
+                f.writelines(['   CONSTRAINTS'])        
+                f.writelines(['force_constraints = 0\n']) 
+                f.writelines(['   COVALENT BONDING'])        
+                f.writelines(['covalent = 0\n']) 
+                f.writelines(['   SAVE OPTIONS'])        
+                f.writelines(['save_score_in_file = 1'])        
+                f.writelines(['save_protein_torsions = 1\n'])        
+                f.writelines(['  FITNESS FUNCTION SETTINGS'])        
+                f.writelines(['initial_virtual_pt_match_max = 4'])        
+                f.writelines(['relative_ligand_energy = 1'])        
+                f.writelines(['gold_fitfunc_path = goldscore'])        
+                f.writelines(['score_param_file = DEFAULT\n'])        
+                f.writelines(['  PROTEIN DATA'])    
+                f.writelines(['protein_datafile = {}'.format(conf_file['receptor'])])  
+
+        if(task['program'] == 'GalaxyDock3'):
+            
+            with open(task['config_path']) as fd:
+                config_ = dict(read_config_line(line) for line in fd)
+            for item in config_: 
+                if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+                            
+            with open(cmd[-1], 'w') as f: 
+                f.writelines(['!=============================================='])
+                f.writelines(['! I/O Parameters'])
+                f.writelines(['!=============================================='])
+                f.writelines(['data_directory    ./'])
+                f.writelines(['infile_pdb        {}'.format(config_['receptor'])])
+                f.writelines(['infile_ligand        {}'.format(task['ligand_path'])])
+                f.writelines(['top_type          polarh'])
+                f.writelines(['fix_type          all'])
+                f.writelines(['ligdock_prefix    {}'.format(cmd[-1].split('.')[0] )])
+                f.writelines(['!=============================================='])
+                f.writelines(['! Grid Options'])
+                f.writelines(['!=============================================='])
+                f.writelines(['grid_box_cntr     {} {} {}'.format(config_['grid_box_cntr'].split(' ')[0], config_['grid_box_cntr'].split(' ')[1], config_['grid_box_cntr'].split(' ')[2])])
+                f.writelines(['grid_n_elem       {} {} {}'.format(config_['grid_n_elem'].split(' ')[0], config_['grid_n_elem'].split(' ')[1], config_['grid_n_elem'].split(' ')[2])]) 
+                f.writelines(['grid_width        {}'.format(config_['grid_width'])])   
+                f.writelines(['!=============================================='])
+                f.writelines(['! Energy Parameters'])
+                f.writelines(['!=============================================='])
+                f.writelines(['weight_type              GalaxyDock3'])
+                f.writelines(['!=============================================='])
+                f.writelines(['! Initial Bank Parameters'])
+                f.writelines(['!=============================================='])    
+                f.writelines(['first_bank               rand'])
+                f.writelines(['max_trial                {}'.format(config_['max_trial'])])
+                f.writelines(['e0max                    1000.0'])
+                f.writelines(['e1max                    1000000.0'])
+                f.writelines(['n_proc 1'])
+
     except RuntimeError as err:
         logging.error(f"Invalid cmd generation for {task['ligand_key']} (program: '{task['program']}')")
         raise(err)
@@ -274,11 +558,16 @@ def process_ligand(task):
     try:
         ret = subprocess.run(cmd, capture_output=True,
                          text=True, cwd=task['input_files_dir'], timeout=task['timeout'])
+        
     except subprocess.TimeoutExpired as err:
         logging.error(f"timeout on {task['ligand_key']}")
         end_time = time.perf_counter()
         completion_event['seconds'] = end_time - start_time
         return completion_event
+
+    # Delete any temporary files generated for docking: 
+    if(task['program'] == "plants"):
+        os.system('rm {}'.format(cmd[-1]))
 
     if ret.returncode == 0:
 
@@ -288,6 +577,8 @@ def process_ligand(task):
                 or task['program'] == "vina_carb"
                 or task['program'] == "vina_xb"
                 or task['program'] == "gwovina"
+                or task['program'] == "AutodockVina_1.2"
+                or task['program'] == "AutodockZN"
            ):
 
             match = re.search(
@@ -300,7 +591,7 @@ def process_ligand(task):
                 logging.error(
                     f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
 
-        elif(task['program'] == "smina"):
+        elif(task['program'] == "smina" or task['program'] == "gnina"):
             found = 0
             for line in reversed(ret.stdout.splitlines()):
                 match = re.search(r'^1\s{4}\s*(?P<value>[-0-9.]+)\s*', line)
@@ -315,11 +606,199 @@ def process_ligand(task):
                     f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
 
         elif(task['program'] == "adfr"):
-            logging.error(
-                f"adfr not implemented {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+            try: 
+                docking_out = ret.stdout.decode("utf-8")
+                docking_scores = []
+                for item in docking_out: 
+                    A = item.split(' ')
+                    A = [x for x in A if x != '']
+                    try: 
+                        _, a_2, _ = float(A[0]), float(A[1]), float(A[2])
+                    except: 
+                        continue
+                    docking_scores.append(float(a_2))
+                completion_event['score'] = min(docking_scores)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+                
         elif(task['program'] == "plants"):
-            logging.error(
-                f"plants not implemented {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+            try: 
+                plants_cmd = ret.stdout.decode("utf-8").split('\n')[-6]
+                score_     = float(plants_cmd.split(' ')[-1])
+                completion_event['score'] = score_
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+        elif(task['program'] == "rDOCK"):
+            try:
+                with open(task['output_path'], 'r') as f: 
+                    lines = f.readlines()
+                score = []
+                for i,item in enumerate(lines):
+                    if item.strip() == '>  <SCORE>': 
+                        score.append(float(lines[i+1]))
+                completion_event['score'] = min(score)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+        elif(task['program'] == "M-Dock"):
+            try:
+                docking_scores = []
+                with open('./mdock_dock.out', 'r') as f: 
+                    lines = f.readlines()
+                for item in lines: 
+                    docking_scores.append( float([x for x in item.split(' ') if x != ''][4]))
+                completion_event['score'] = min(docking_scores)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+            os.system('rm ./mdock_dock.out')
+        elif(task['program'] == "MCDock"):
+            
+            try: 
+                with open('./out.xyz', 'r') as f: 
+                    lines = f.readlines()
+                lines = [x for x in lines if 'Binding Energy' in x]
+                binding_energies = []
+                for item in lines: 
+                    binding_energies.append(float(item.split(' ')[2].split('\t')[0]))    
+                completion_event['score'] = min(binding_energies)
+                completion_event['status'] = "success"    
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+            # Delete/move auxillary files: 
+            os.system('rm min.xyz')
+            os.system('cp out.xyz {}'.format(task['output_path']))
+            os.system('rm out.xyz conformers.xyz')
+            
+        elif(task['program'] == "LigandFit"): 
+
+            try: 
+                with open('./LigandFit_run_1_/ligand_1_1.log', 'r') as f: 
+                    lines = f.readlines()
+                lines = [x for x in lines if 'Best score' in x]
+                scores = []
+                for item in lines: 
+                    scores.append( float([x for x in item.split(' ') if x != ''][-2]) )
+                completion_event['score'] = min(scores)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+            os.system('rm -rf LigandFit_run_1_')
+        
+        elif(task['program'] == "ledock"): 
+            try: 
+                os.system('cp ./ligands/{}.dok {}'.format(task['ligand_path'].split('.')[0], task['output_path']))
+                with open('{}.dok'.format(task['ligand_path'].split('.')[0]), 'r') as f: 
+                    lines = f.readlines()
+                lines = [x for x in lines if 'Score' in x]
+                scores = []
+                for item in lines: 
+                    A = item.split('Score')[-1].strip().split(': ')[1].split(' ')[0]
+                    scores.append(float(A))
+                completion_event['score'] = min(scores)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+            os.system('rm {} {}'.format(cmd[-1], cmd[-1].split('.')[0]+'.list'))
+        
+        elif(task['program'] == "gold"): 
+            
+            try: 
+                os.system('cp {}/gold_ligand_m1.mol2 {}'.format(cmd[-1].split('.')[0], task['output_path']))
+                with open('./{}/ligand_m1.rnk'.format(cmd[-1].split('.')[0]), 'r') as f: 
+                    lines = f.readlines()
+                docking_score = float([x for x in lines[-1].split(' ') if x!=''][1])
+                completion_event['score'] = min(docking_score)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+            os.system('rm -rf {} {}'.format(cmd[-1].split('.')[0], cmd[-1]))
+
+        elif(task['program'] == "gold"): 
+            try: 
+                docked_pose = os.listdir('./{}/'.format(cmd[-1]))[0]
+                os.system('cp {} {}'.format(docked_pose, task['output_path']))
+                with open(task['output_path'], 'r') as f: 
+                    lines = f.readlines()
+                docking_score = lines[4]
+                docking_score = float([x for x in docking_score.split(' ') if x!=''][1])
+                
+                os.system('rm -rf {}'.format(cmd[-1]))
+                    
+                completion_event['score'] = min(docking_score)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+    
+        elif(task['program'] == "idock"): 
+            try: 
+                docking_out = ret.stdout.decode("utf-8")
+                docking_out = float([x for x in docking_out.split(' ') if x != ''][-2])
+                completion_event['score'] = min(docking_out)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+        
+        elif(task['program'] == "GalaxyDock3"): 
+            
+            try: 
+                prefix = cmd[-1].split('.')[0]
+                with open('./{}_fb.E.info'.format(prefix), 'r') as f: 
+                    lines = f.readlines()
+                lines = lines[3: ]
+                docking_scores = []
+                for item in lines: 
+                    try: 
+                        A = item.split(' ')
+                        A = [x for x in A if x != '']
+                        docking_scores.append(float(A[5]))
+                    except: 
+                        continue
+                
+                # Remove auxillary files
+                os.system('rm log {}_cl.E.info merged_ligand.mol2 {}_cl.size.info {}_co.info {}_fb.E.info {}_cl.mol2 {}_ib.E.info {}_ib.mol2'.format(prefix, prefix, prefix, prefix, prefix, prefix, prefix))
+                # Transfer out_fb.mol2
+                os.system('cp {} {}'.format('{}_fb.mol2'.format(prefix), task['output_path']))
+                os.system('rm {}_fb.mol2'.format(prefix))
+                completion_event['score'] = min(docking_scores)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+        
+        elif(task['program'] == "autodock_cpu"): 
+            try : 
+                output = ret.stdout.decode("utf-8").split('\n')[-6]
+                lines = [x.strip() for x in output if 'best energy' in x][0]
+                docking_score = float(lines.split(',')[1].split(' ')[-2])
+                completion_event['score'] = min(docking_scores)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+            
+        elif(task['program'] == "autodock_gpu"): 
+            try : 
+                output = ret.stdout.decode("utf-8").split('\n')[-6]
+                lines = [x.strip() for x in output if 'best energy' in x][0]
+                docking_score = float(lines.split(',')[1].split(' ')[-2])
+                completion_event['score'] = min(docking_scores)
+                completion_event['status'] = "success"
+            except: 
+                logging.error(
+                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
 
     else:
         logging.error(
@@ -684,7 +1163,7 @@ def create_summary_file(ctx, scenario, collection, scenario_result, output_forma
                 for replica_index in range(scenario['replicas']):
                     record[f"score_replica_{replica_index}"] = ligand['scores'][replica_index]
 
-                df = df.append(record, ignore_index = True)
+            df = df.append(record, ignore_index = True)
 
         df.to_parquet(output_filename, compression='snappy')
 
@@ -767,7 +1246,6 @@ def process(ctx):
 
     for collection_key in collections:
         collection = collections[collection_key]
-        collection_full_name = collection['collection_full_name']
 
         ligands_to_skip = []
 
@@ -784,16 +1262,17 @@ def process(ctx):
             # Check to see if ligand contains B, Si, Sn or has duplicate coordinates
             with open(ligand['path'], "r") as read_file:
                 for index, line in enumerate(read_file):
-
-                    match = re.search(r'(?P<letters>\s+(B|Si|Sn)\s+)', line)
-                    if(match):
-                        matches = match.groupdict()
-                        logging.error(
-                            f"Found {matches['letters']} in {collection_full_name}/{ligand_key}. Skipping.")
-                        skip_reason = f"failed(ligand_elements:{matches['letters']})"
-                        skip_reason_json = f"ligand includes elements: {matches['letters']})"
-                        skip_ligand = 1
-                        break
+                    
+                    if ctx['config']['run_atom_check']: 
+                        match = re.search(r'(?P<letters>\s+(B|Si|Sn)\s+)', line)
+                        if(match):
+                            matches = match.groupdict()
+                            logging.error(
+                                f"Found {matches['letters']} in {collection_full_name}/{ligand_key}. Skipping.")
+                            skip_reason = f"failed(ligand_elements:{matches['letters']})"
+                            skip_reason_json = f"ligand includes elements: {matches['letters']})"
+                            skip_ligand = 1
+                            break
 
                     match = re.search(r'^ATOM', line)
                     if(match):
@@ -867,7 +1346,7 @@ def process(ctx):
                         'timeout': int(ctx['main_config']['program_timeout']),
                         'tools_path': ctx['tools_path'],
                         'threads_per_docking': int(ctx['main_config']['threads_per_docking']),
-                        'get_smi': get_smi
+                        'get_smi': get_smi,
                     }
 
                     tasklist.append(task)
