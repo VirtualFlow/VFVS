@@ -84,7 +84,7 @@ def publish_workunit(ctx, index, workunit_subjobs, status):
 
 
     # We need to add in the input-files directory
-    shutil.copytree(f"{ctx['base_dir']}/{ctx['config']['docking_scenario_basefolder']}", f"{temp_dir.name}/input-files")
+    shutil.copytree(f"{ctx['config']['docking_scenario_basefolder']}", f"{temp_dir.name}/input-files")
 
 
     # Generate the tarball

@@ -216,8 +216,8 @@ def program_runstring_array(task):
             '--config', task['config_path'],
             '--ligand', task['ligand_path'],
             '--out', task['output_path'],
-            '--log', f"task['output_path_base'].flexres.pdb",
-            '--atom_terms', f"task['output_path_base'].atomterms"
+            '--log', f"{task['output_path_base']}.flexres.pdb",
+            '--atom_terms', f"{task['output_path_base']}.atomterms"
         ]
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
@@ -684,7 +684,7 @@ def create_summary_file(ctx, scenario, collection, scenario_result, output_forma
                 for replica_index in range(scenario['replicas']):
                     record[f"score_replica_{replica_index}"] = ligand['scores'][replica_index]
 
-            df = df.append(record, ignore_index = True)
+                df = df.append(record, ignore_index = True)
 
         df.to_parquet(output_filename, compression='snappy')
 
@@ -767,6 +767,7 @@ def process(ctx):
 
     for collection_key in collections:
         collection = collections[collection_key]
+        collection_full_name = collection['collection_full_name']
 
         ligands_to_skip = []
 
