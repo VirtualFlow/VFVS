@@ -407,14 +407,6 @@ def process_ligand(task):
             with open(temp_file, 'a+') as f: 
                 f.writelines('ligand_file {}\n'.format(task['ligand_path']))
                 f.writelines('output_dir {}\n'.format(task['output_path'])) 
-                
-        if(task['program'] == "M-Dock"):
-            os.system('cp ./mdock_dock.mol2 {}'.format(task['output_path']))
-            os.system('rm ./mdock_dock.mol2')
-        
-        if(task['program'] == 'LigandFit'): 
-            os.system('rm -rf PDS')
-            os.system('cp ./LigandFit_run_1_/ligand_fit_1.pdb {}'.format(task['output_path']))
         
         if(task['program'] == 'ledock'):
             
@@ -513,7 +505,7 @@ def process_ligand(task):
                 f.writelines(['gold_fitfunc_path = goldscore'])        
                 f.writelines(['score_param_file = DEFAULT\n'])        
                 f.writelines(['  PROTEIN DATA'])    
-                f.writelines(['protein_datafile = {}'.format(conf_file['receptor'])])  
+                f.writelines(['protein_datafile = {}'.format(config_['receptor'])])  
 
         if(task['program'] == 'GalaxyDock3'):
             
@@ -564,6 +556,17 @@ def process_ligand(task):
         end_time = time.perf_counter()
         completion_event['seconds'] = end_time - start_time
         return completion_event
+
+    # Extra file handling for M-Dock: 
+    if(task['program'] == "M-Dock"):
+        os.system('cp ./mdock_dock.mol2 {}'.format(task['output_path']))
+        os.system('rm ./mdock_dock.mol2')
+
+    # Extra file handling for LigandFit: 
+    if(task['program'] == 'LigandFit'): 
+        os.system('rm -rf PDS')
+        os.system('cp ./LigandFit_run_1_/ligand_fit_1.pdb {}'.format(task['output_path']))
+
 
     # Delete any temporary files generated for docking: 
     if(task['program'] == "plants"):
