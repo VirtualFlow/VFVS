@@ -213,7 +213,10 @@ docking_scenario_names=qvina02_rigid_receptor1
 
 docking_scenario_programs=qvina02
 # For each docking scenario name, a docking program has to be specified
-# Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, gwovina, adfr
+# Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, gwovina, adfr, AutodockVina_1.2, AutodockZN
+#                  gnina, rDock, M-Dock, MCDock, LigandFit, ledock, gold, iGemDock, idock, GalaxyDock3, autodock_gpu
+#                  autodock_cpu
+
 # Values have to be separated by colons ":" and without spaces, e.g: docking_scenario_programs=vina:smina
 # smina_rigid has to be used for rigid docking with smina, while smine_flexible for flexible receptor docking
 
@@ -240,3 +243,8 @@ docking_scenario_inputfolders=qvina02_rigid_receptor1
 # If other input files are required by the docking type, usually
 #     specified in the config.txt file, they have to be in the same folder
 
+
+run_atom_check=True
+# a check is performed to ensure there are no Si/Sn/B atoms within the ligand
+# if so, the ligand is skipped. This is predominantly done as AutoDock Vina & QuickVina
+# do no support these atom types. 
