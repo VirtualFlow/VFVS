@@ -7,7 +7,7 @@
 #
 # VirtualFlow is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
+# the Free Software Foundation, either version 2 of the License, or
 # (at your option) any later version.
 #
 # VirtualFlow is distributed in the hope that it will be useful,
@@ -724,7 +724,7 @@ def process_ligand(task):
                     f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
             os.system('rm -rf {} {}'.format(cmd[-1].split('.')[0], cmd[-1]))
 
-        elif(task['program'] == "gold"): 
+        elif(task['program'] == "iGemDock"): 
             try: 
                 docked_pose = os.listdir('./{}/'.format(cmd[-1]))[0]
                 os.system('cp {} {}'.format(docked_pose, task['output_path']))
@@ -1163,7 +1163,7 @@ def create_summary_file(ctx, scenario, collection, scenario_result, output_forma
                 for replica_index in range(scenario['replicas']):
                     record[f"score_replica_{replica_index}"] = ligand['scores'][replica_index]
 
-            df = df.append(record, ignore_index = True)
+        df = df.append(record, ignore_index = True)
 
         df.to_parquet(output_filename, compression='snappy')
 
