@@ -49,6 +49,12 @@ def parse_config(filename):
 
     return config
 
+def get_collection_list(filename):
+    with open(filename, "r") as read_file:
+        collections = json.load(read_file)
+
+    return collections
+
 
 def get_formatted_collection_number(collection_number):
     return f"{int(collection_number):07}"
@@ -60,7 +66,7 @@ def get_collection_hash(collection_name, collection_number):
     return hashlib.sha256(string_to_hash.encode()).hexdigest()
 
 
-def publish_workunit(ctx, index, workunit_subjobs, status):
+def publish_workunit(ctx, index, workunit_subjobs):
 
     temp_path = ctx['config']['tempdir_default']
     if(temp_path and temp_path != ""):
@@ -130,7 +136,7 @@ def publish_workunit(ctx, index, workunit_subjobs, status):
         temp_dir.cleanup()
         temp_dir_tar.cleanup()
 
-        return {'subjobs': workunit_subjobs, 's3_download_path': object_name}
+        return {'subjobs': compress_subjobs(ctx, workunit_subjobs), 's3_download_path': object_name}
 
     elif(ctx['config']['job_storage_mode'] == "sharedfs"):
         
@@ -142,8 +148,22 @@ def publish_workunit(ctx, index, workunit_subjobs, status):
         temp_dir.cleanup()
         temp_dir_tar.cleanup()
 
-        return {'subjobs': workunit_subjobs, 'download_path': sharedfs_workunit_path.as_posix()}
+        return {'subjobs': compress_subjobs(ctx, workunit_subjobs), 'download_path': sharedfs_workunit_path.as_posix()}
 
+
+def compress_subjobs(ctx, subjobs):
+    new_subjobs = {}
+    completions_per_ligand = get_dockings_per_ligand(ctx['config'])
+
+    for subjob_id, subjob in subjobs.items():
+        new_subjobs[subjob_id] = {
+            'ligands_expected': 0
+        }
+
+        for collection_key, collection in subjob['collections'].items():
+            new_subjobs[subjob_id]['ligands_expected'] += (collection['count'] * completions_per_ligand)
+
+    return new_subjobs
 
 def generate_subjob_init():
 
@@ -155,7 +175,7 @@ def generate_subjob_init():
     return subjob_init
 
 
-def gen_s3_download_path(ctx, tranche, collection_name, collection_number):
+def gen_s3_download_path(ctx, collection_name, collection_number):
 
     # Two different structures (hash-based on meta-tranche based)
     if(ctx['config']['object_store_data_collection_addressing_mode'] == "hash"):
@@ -189,7 +209,6 @@ def gen_s3_download_path(ctx, tranche, collection_name, collection_number):
 
         object_path = [
             ctx['config']['object_store_data_collection_prefix'],
-            tranche,
             collection_name,
             f"{collection_number}.tar.gz"
         ]
@@ -198,7 +217,7 @@ def gen_s3_download_path(ctx, tranche, collection_name, collection_number):
         return object_name
 
 
-def gen_sharedfs_path(ctx, tranche, collection_name, collection_number):
+def gen_sharedfs_path(ctx, collection_name, collection_number):
 
     # Two different structures (hash-based on meta-tranche based)
     if(ctx['config']['object_store_data_collection_addressing_mode'] == "hash"):
@@ -232,7 +251,6 @@ def gen_sharedfs_path(ctx, tranche, collection_name, collection_number):
 
         sharedfs_path = [
             ctx['config']['sharedfs_collection_path'],
-            tranche,
             collection_name,
             f"{collection_number}.tar.gz"
         ]
@@ -240,39 +258,51 @@ def gen_sharedfs_path(ctx, tranche, collection_name, collection_number):
         return sharedfs_path_file
 
 
-def add_collection_to_subjob(ctx, subjob, collection_key, collection_count, collection_tranche, collection_name, collection_number):
+def add_collection_to_subjob(ctx, subjob, collection_key, collection_obj):
 
-    subjob['collections'][collection_key] = {
-        'collection_full_name': collection_key,
-        'collection_tranche': collection_tranche,
-        'collection_name': collection_name,
-        'collection_number': collection_number,
-        'ligand_count': collection_count,
-    }
+    dockings_per_ligand = get_dockings_per_ligand(ctx['config'])
+
+    subjob['collections'][collection_key] = collection_obj
+
+    collection_name, collection_number = collection_key.split("_", maxsplit=1)
+
 
     if(ctx['config']['job_storage_mode'] == "s3"):
         subjob['collections'][collection_key]['s3_bucket'] = ctx['config']['object_store_data_bucket']
-        subjob['collections'][collection_key]['s3_download_path'] = gen_s3_download_path(ctx, collection_tranche, collection_name, collection_number)
+        subjob['collections'][collection_key]['s3_download_path'] = gen_s3_download_path(ctx, collection_name, collection_number)
 
     elif(ctx['config']['job_storage_mode'] == "sharedfs"):
-        subjob['collections'][collection_key]['sharedfs_path'] = gen_sharedfs_path(ctx, collection_tranche, collection_name, collection_number)
+        subjob['collections'][collection_key]['sharedfs_path'] = gen_sharedfs_path(ctx, collection_name, collection_number)
 
     else:
         print(f"job_storage_mode must be either s3 or sharedfs (currently: {ctx['config']['job_storage_mode']})")
         exit(1)
+
+    subjob['collections'][collection_key]['dockings'] = dockings_per_ligand * collection_obj['count']
 
 
 def process(ctx):
 
     config = ctx['config']
 
-    status = {
-        'overall': {},
-        'workunits': {},
-        'collections': {}
+    condense = {
+        'summary': {
+           'total_dockings' : 0,
+           'docking_succeeded' : 0,
+           'docking_failed' : 0,
+           'skipped_ligands' : 0,
+           'vcpu_seconds': 0,
+           'vcpu_seconds_interrupted': 0,
+           'failed_downloads': 0,
+           'failed_downloads_dockings': 0
+        },
+        'workunits': {}
     }
 
-    workunits = status['workunits']
+
+    dockings_per_ligand = get_dockings_per_ligand(config)
+
+    workunits = condense['workunits']
 
     current_workunit_index = 1
     current_workunit_subjobs = {}
@@ -282,11 +312,8 @@ def process(ctx):
     leftover_subjob = generate_subjob_init()
 
     counter = 0
-
-    total_lines = 0
-    with open('../workflow/todo.all') as fp:
-        for index, line in enumerate(fp):
-            total_lines += 1
+    collections = get_collection_list("../workflow/collections.json")
+    total_lines = len(collections)
 
     print("Generating jobfiles....")
 
@@ -297,63 +324,53 @@ def process(ctx):
     elif(config['batchsystem'] == "slurm"):
         max_array_job_size = int(config['slurm_array_job_size'])
 
-    with open('../workflow/todo.all') as fp:
-        for index, line in enumerate(fp):
 
-            collection_full_name, collection_count = line.split()
-            collection_tranche = collection_full_name[:2]
-            collection_name, collection_number = collection_full_name.split("_", 1)
-            collection_count = int(collection_count)
+    for collection_key, collection_obj in collections.items():
 
-            if(collection_count >= int(config['ligands_todo_per_queue'])):
-                current_workunit_subjobs[current_subjob_index] = generate_subjob_init()
-                add_collection_to_subjob(
-                    ctx,
-                    current_workunit_subjobs[current_subjob_index],
-                    collection_full_name,
-                    collection_count,
-                    collection_tranche,
-                    collection_name,
-                    collection_number
-                    )
+        collection_count = collection_obj['count'] * dockings_per_ligand
+
+        if(collection_count >= int(config['dockings_per_subjob'])):
+            current_workunit_subjobs[current_subjob_index] = generate_subjob_init()
+            add_collection_to_subjob(
+                ctx,
+                current_workunit_subjobs[current_subjob_index],
+                collection_key,
+                collection_obj
+                )
+
+            current_subjob_index += 1
+        else:
+            # add it to the 'leftover pile'
+            leftover_count += collection_count
+
+            add_collection_to_subjob(
+                ctx,
+                leftover_subjob,
+                collection_key,
+                collection_obj
+                )
+
+            if(leftover_count >= int(config['dockings_per_subjob'])):
+                # current_workunit.append(leftover_subjob)
+                current_workunit_subjobs[current_subjob_index] =  leftover_subjob
 
                 current_subjob_index += 1
-            else:
-                # add it to the 'leftover pile'
-                leftover_count += collection_count
+                leftover_subjob = generate_subjob_init()
+                leftover_count = 0
 
-                add_collection_to_subjob(
-                    ctx,
-                    leftover_subjob,
-                    collection_full_name,
-                    collection_count,
-                    collection_tranche,
-                    collection_name,
-                    collection_number
-                    )
+        if(len(current_workunit_subjobs) == max_array_job_size):
+            workunits[current_workunit_index] = publish_workunit(ctx, current_workunit_index,
+                             current_workunit_subjobs)
 
+            current_workunit_index += 1
+            current_subjob_index = 0
+            current_workunit_subjobs = {}
 
-                if(leftover_count >= int(config['ligands_todo_per_queue'])):
-                    # current_workunit.append(leftover_subjob)
-                    current_workunit_subjobs[current_subjob_index] =  leftover_subjob
-                  
-                    current_subjob_index += 1
-                    leftover_subjob = generate_subjob_init()
-                    leftover_count = 0
+        counter += 1
 
-            if(len(current_workunit_subjobs) == max_array_job_size):
-                workunits[current_workunit_index] = publish_workunit(ctx, current_workunit_index,
-                                 current_workunit_subjobs, status)
-
-                current_workunit_index += 1
-                current_subjob_index = 0
-                current_workunit_subjobs = {}
-
-            counter += 1
-
-            if(counter % 50 == 0):
-                percent = (counter / total_lines) * 100
-                print(f"* {percent: .2f}% ({counter}/{total_lines})", file=sys.stderr)
+        if(counter % 50 == 0):
+            percent = (counter / total_lines) * 100
+            print(f"* {percent: .2f}% ({counter}/{total_lines})", file=sys.stderr)
 
     # If we have leftovers -- process them
     if(leftover_count > 0):
@@ -361,21 +378,34 @@ def process(ctx):
 
     # If the current workunit has any items in it, we need to publish it
     if(len(current_workunit_subjobs) > 0):
-        workunits[current_workunit_index] = publish_workunit(ctx,current_workunit_index, current_workunit_subjobs, status)
+        workunits[current_workunit_index] = publish_workunit(ctx,current_workunit_index, current_workunit_subjobs)
     else:
         # This is so we print the number of completed workunits at the end
         current_workunit_index -= 1
 
 
+
+    # Condense to only what we need
     print("Writing json")
+
 
     # Output all of the information about the workunits into JSON so we can easily grab this data in the future
     with open("../workflow/status.json", "w") as json_out:
-        json.dump(status, json_out)
+        json.dump(condense, json_out)
 
     os.system('cp ../workflow/status.json ../workflow/status.todolists.json')
 
     print(f"Generated {current_workunit_index} workunits")
+
+
+def get_dockings_per_ligand(config):
+
+    completions_per_ligand = 0
+    for scenario_key, scenario in config['docking_scenarios_internal'].items():
+        for replica_index in range(scenario['replicas']):
+            completions_per_ligand += 1
+
+    return completions_per_ligand
 
 
 def main():

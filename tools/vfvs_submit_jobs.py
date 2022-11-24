@@ -218,11 +218,13 @@ def submit_aws_batch(config, client, current_workunit, jobline):
             }
         )
 
-        current_workunit['status'] = {
-            'vf_job_status': 'SUBMITTED',
-            'job_name': response['jobName'],
-            'job_id': response['jobId']
-        }
+        current_workunit['status'] = "SUBMITTED"
+        current_workunit['job_id'] = response['jobId']
+
+        for subjob_id, subjob in current_workunit['subjobs'].items():
+            subjob['status'] = "SUBMITTED"
+
+
 
     except botocore.exceptions.ClientError as error: 
         print("invalid")
@@ -246,7 +248,6 @@ def process(config, start, stop):
     # load the status file that is keeping track of the data
     with open("../workflow/status.json", "r") as read_file:
         status = json.load(read_file)
-        collections = status['collections']
         workunits = status['workunits']
 
     for jobline in range(start, stop + 1):
