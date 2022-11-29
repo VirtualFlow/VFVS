@@ -20,11 +20,13 @@ FROM amazonlinux:2
 RUN yum update -y && yum -y install python3
 RUN pip3 install boto3 pandas pyarrow
 
-ADD . /opt/vf/tools
+ADD ./bin /opt/vf/tools/bin
+ADD ./templates/*.py /opt/vf/tools/templates/
+ADD ./templates/*.sh /opt/vf/tools/templates/
 
 ENV USER ec2-user
 
-RUN chmod +x -R /opt/vf/tools/*.sh /opt/vf/tools/*.py /opt/vf/tools/templates/*.sh /opt/vf/tools/templates/*.py
+RUN chmod +x -R /opt/vf/tools/templates/*.sh /opt/vf/tools/templates/*.py
 
 WORKDIR /
 
