@@ -134,7 +134,7 @@ def process(config):
     use_list_jobs_status = ['SUBMITTED', 'PENDING']
     final_states = ['SUCCEEDED', 'FAILED']
 
-    vcpus_per_job = 8
+    vcpus_per_job = int(config['aws_batch_subjob_vcpus'])
 
     # Which ones do we need to check
     workunits_to_check = []
