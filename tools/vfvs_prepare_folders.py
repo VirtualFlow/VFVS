@@ -88,6 +88,9 @@ def parse_config(filename):
 
     config['tempdir_default'] = os.path.join(config['tempdir_default'], '')
 
+    if 'use_optimized_binaries' not in config:
+        config['use_optimized_binaries'] = 0
+
     return config
 
 
@@ -251,6 +254,12 @@ def check_parameters(config):
             config['sensor_screen_count'] = int(config['sensor_screen_count'])
     else:
         config['sensor_screen_count'] = 0
+
+    if(config['use_optimized_binaries'] != "0" and config['use_optimized_binaries'] != "1"):
+        print("* 'use_optimized_binaries' must be either 0 or 1")
+        error = 1
+    else:
+        config['use_optimized_binaries'] = int(config['use_optimized_binaries'])
 
     return error
 

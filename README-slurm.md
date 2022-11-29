@@ -20,7 +20,7 @@ python3 -m virtualenv $HOME/vfvs_env
 Enter the virtualenv and install needed packages
 ```bash
 source $HOME/vfvs_env/bin/activate
-python3 -m pip install boto3 pandas pyarrow jinja2
+python3 -m pip install boto3 pandas pyarrow jinja2 cpufeature
 ```
 
 To exit a virtual environment:

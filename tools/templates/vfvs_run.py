@@ -54,7 +54,7 @@ from multiprocessing import Queue
 from queue import Empty
 import math
 import sys
-import uuid
+import cpufeature
 
 
 # Download
@@ -375,7 +375,8 @@ def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, coll
                 'threads_per_docking': int(ctx['main_config']['threads_per_docking']),
                 'temp_dir': temp_dir,
                 'attrs': ligand_attrs,
-                'output_dir': str(ligand_directory_directory)
+                'output_dir': str(ligand_directory_directory),
+                'use_optimized_binaries': ctx['main_config']['use_optimized_binaries']
             }
 
             docking_queue.put(docking_item)
@@ -868,6 +869,8 @@ def process_config(ctx):
             'replicas': int(ctx['main_config']['docking_scenario_replicas'][index])
         }
 
+    if 'use_optimized_binaries' not in ctx['main_config']:
+        ctx['main_config']['use_optimized_binaries'] = 0
 
 
 def get_workunit_from_s3(ctx, workunit_id, subjob_id, job_bucket, job_object, download_dir):
@@ -1054,10 +1057,15 @@ def program_runstring_array(task):
 ## *vina
 
 def docking_start_vina(task):
+
+    program_path = f"{task['tools_path']}/{task['program']}"
+    if(task['use_optimized_binaries'] == 1 and supports_avx512() and os.path.exists(f"{program_path}_avx512")):
+        program_path = f"{program_path}_avx512"
+
     cpus_per_program = str(task['threads_per_docking'])
 
     cmd = [
-            f"{task['tools_path']}/{task['program']}",
+            f"{program_path}",
             '--cpu', cpus_per_program,
             '--config', task['config_path'],
             '--ligand', task['ligand_path'],
@@ -1704,6 +1712,15 @@ def docking_finish_autodock(item, ret):
         logging.error("failed parsing")
 
 
+def supports_avx512():
+    attrs = ['AVX512f', 'AVX512dq', 'ADX', 'AVX512cd',
+                'AVX512bw', 'AVX512vl']
+
+    for attr in attrs:
+        if attr not in cpufeature.CPUFeature or cpufeature.CPUFeature[attr] == False:
+            return False
+
+    return True
 
 def get_workunit_information():
 
@@ -1856,7 +1873,7 @@ def process(ctx):
             download_item = {
                 'collection_key': collection_key,
                 'collection': collection,
-                'ext': "tar.gz",
+                'ext': "tar.gz"
             }
 
             download_queue.put(download_item)

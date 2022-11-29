@@ -286,6 +286,9 @@ sensor_screen_count=1
 run_atom_check=1
 # Remove ligands when certain atoms B, Si, Sn are found
 
+use_optimized_binaries=0
+# If available, use a processor-optimized binary
+
 ************************************************
 ** Query configuration
 ************************************************
