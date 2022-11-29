@@ -58,7 +58,7 @@ export VFVS_WORKUNIT_SUBJOB=$SLURM_ARRAY_TASK_ID
 export VFVS_TMP_PATH=/dev/shm
 export VFVS_CONFIG_JOB_TGZ={{job_tgz}}
 export VFVS_TOOLS_PATH=${PWD}/bin
-export VFVS_VCPUS=${SLURM_CPUS_PER_TASK}
+export VFVS_VCPUS={{threads_to_use}}
 
 ##################################################################################
 
