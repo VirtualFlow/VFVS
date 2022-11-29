@@ -81,6 +81,8 @@ def submit_slurm(config, client, current_workunit, jobline):
     #
     template_values = {
         "job_letter": config['job_letter'],
+        "job_name": config['job_name'],
+        "threads_to_use": config['threads_to_use'],
         "array_start": "0",
         "array_end": (subjobs_count - 1),
         "slurm_cpus": config['slurm_cpus'],
