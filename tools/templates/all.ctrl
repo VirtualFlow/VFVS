@@ -144,7 +144,8 @@ object_store_data_collection_prefix=
 ****** Shared Filesystem Settings
 
 collection_folder=/home/ec2-user/collections
-# Path to where the collection file (processed ligands) are stored
+# Path to where the collection file (processed ligands/docking requirement files) 
+# are stored
 #  * This is used when job_storage_mode=sharedfs or
 #    when the uploader helper script is being used
 #
