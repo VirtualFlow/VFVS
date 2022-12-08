@@ -69,7 +69,7 @@ Slurm-specific Configuration:
 
 Job-sizing:
 
-- `ligands_todo_per_queue`: This determines how many ligands should be processed at a minimum per job. A value of '10000' would mean that each subjob with `slurm_cpus` number of CPUs should dock this number of ligands prior to completing. In general jobs should run for approximately 30 minutes or more. How long each docking takes depends on the receptor, ligand being docked, and docking program-specific settings (such as `exhaustiveness`). Submitting a small job to determine how long a docking will take is often a good idea to size these before large runs.
+- `dockings_todo_per_queue`: This determines how many ligands should be processed at a minimum per job. A value of '10000' would mean that each subjob with `slurm_cpus` number of CPUs should dock this number of ligands prior to completing. In general jobs should run for approximately 30 minutes or more. How long each docking takes depends on the receptor, ligand being docked, and docking program-specific settings (such as `exhaustiveness`). Submitting a small job to determine how long a docking will take is often a good idea to size these before large runs.
 
 
 The ligands to be processed should be included in the file within `tools/templates/todo.all`. This file can be automatically generated from the VirtualFlow website.
@@ -77,7 +77,7 @@ The ligands to be processed should be included in the file within `tools/templat
 
 ### Data for Virtual Screening
 
-The location of the collection files to be used in the screening should be located in `collection_folder` (defined in `all.ctrl`).
+The location of the collection files (containing the list of processed ligands) to be used in the screening should be located in `collection_folder` (defined in `all.ctrl`). Typically, this is set to the input folder (`../input-files/ligand-library`).
 
 
 VFVS expects that collection data will be stored in one of two different directory structures, defined as ``hash`` or ``metatranche``. Typically this will be the `metatranche` setting.
@@ -140,12 +140,14 @@ Once submitted, the jobs will be visible in the Slurm queue (`squeue`)
 
 #### Monitor Progress
 
-At present, the only way to monitor progress of jobs will be to check status through the Slurm scheduler commands. This will be extended in the future to more natively track progress towards completion.
+The progress of the jobs can be monitored using the Slurm scheduler commands. 
+For debugging, the slurm errors are contained within `/VFVS/workflow/workunits`.
 
 
 ## Viewing Results
 
 The results of the job will be placed in the location specified within the `all.ctrl`.
+By default, this is saved in: `/VFVS/output-files/{workunit-number}`. 
 
 #### `metatranche` addressing
 

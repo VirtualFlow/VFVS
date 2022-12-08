@@ -144,13 +144,14 @@ object_store_data_collection_prefix=
 ****** Shared Filesystem Settings
 
 collection_folder=/home/ec2-user/collections
-# Path to where the collection file are stored
+# Path to where the collection file (processed ligands) are stored
 #  * This is used when job_storage_mode=sharedfs or
 #    when the uploader helper script is being used
 #
 # Slash at the end is not required (optional)
 # Either pathname is required w.r.t. the folder tools/
 #     or absolute path (e.g. /home/vfuser/collections)
+# We suggest setting this to: ../input-files/ligand-library
 
 
 ************************************************
