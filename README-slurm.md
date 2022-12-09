@@ -77,8 +77,8 @@ The ligands to be processed should be included in the file within `tools/templat
 
 ### Data for Virtual Screening
 
-The location of the collection files (containing the list of processed ligands) to be used in the screening should be located in `collection_folder` (defined in `all.ctrl`). Typically, this is set to the input folder (`../input-files/ligand-library`).
-Apart from the input ligands, all other inputs used for docking (such as the receptor file and docking config file) are located as subdirectories within the `collection_folder`.
+The location of the collection files (containing the list of ready-to-dock ligands) to be used in the screening should be located in `collection_folder` (defined in `all.ctrl`). 
+Apart from the input ligands, all other inputs used for docking (such as the receptor file and docking config file) are located as subdirectories within the `docking_scenario_basefolder`.
 
 VFVS expects that collection data will be stored in one of two different directory structures, defined as ``hash`` or ``metatranche``. Typically this will be the `metatranche` setting.
 
@@ -141,13 +141,13 @@ Once submitted, the jobs will be visible in the Slurm queue (`squeue`)
 #### Monitor Progress
 
 The progress of the jobs can be monitored using the Slurm scheduler commands. 
-For debugging, the slurm errors are contained within `/VFVS/workflow/workunits`.
+For debugging, the slurm errors are contained within `../workflow/workunits`.
 
 
 ## Viewing Results
 
 The results of the job will be placed in the location specified within the `all.ctrl`.
-By default, this is saved in: `/VFVS/output-files/{workunit-number}`. 
+By default, this is saved in: `/output-files/{workunit-number}`. 
 
 #### `metatranche` addressing
 
