@@ -1733,7 +1733,7 @@ def docking_finish_galaxydock3(item, ret):
 
 ## Autodock
 
-def docking_start_autodoc(item, arch_type):
+def docking_start_autodock(item, arch_type):
 
     with open(item['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
