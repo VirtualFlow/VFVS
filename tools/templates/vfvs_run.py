@@ -992,6 +992,10 @@ def process_docking_completion(item, ret):
         or item['program'] == "autodock_gpu"
         ):
         docking_finish_autodock(item, ret)
+    
+    elif(item['program'] == "autodock_koto"):
+        docking_finish_autodock_koto(item, ret)
+        
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1042,6 +1046,9 @@ def program_runstring_array(task):
         cmd = docking_start_autodock(task, "cpu")
     elif(task['program'] == "autodock_gpu"):
         cmd = docking_start_autodock(task, "gpu")
+    elif(task['program'] == "autodock_koto"):
+        cmd = docking_start_autodock_koto(task)    
+    
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1050,6 +1057,53 @@ def program_runstring_array(task):
 
 ####### Docking program configurations
 
+## Autodock koto
+def docking_start_autodock_koto(task): 
+    cpus_per_program = str(task['threads_per_docking'])
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = [
+            f"{task['tools_path']}/AutoDock-Koto",
+            '--receptor', config_['receptor'],
+            '--ligand', task['ligand_path'],
+            '--exhaustiveness', config_['exhaustiveness'],
+            '--center_x', '{}'.format(config_['center_x']),
+            '--center_y', '{}'.format(config_['center_y']),
+            '--center_z', '{}'.format(config_['center_z']),
+            '--size_x',   '{}'.format(config_['size_x']),
+            '--size_y',   '{}'.format(config_['size_y']),
+            '--size_z',   '{}'.format(config_['size_z']),
+            '--out', task['output_path']
+        ]
+    return cmd
+
+def docking_finish_autodock_koto(item, ret): 
+    try: 
+        docking_out = ret.stdout.decode("utf-8")
+        A = docking_out.split('\n')
+        docking_score = []
+        for item in A: 
+            line_split = item.split(' ')
+            line_split = [x for x in line_split if x != '']
+            if len(line_split) == 4: 
+                try: 
+                    vr_1 = float(line_split[0])
+                    vr_2 = float(line_split[1])
+                    vr_3 = float(line_split[2])
+                    vr_4 = float(line_split[3])
+                    docking_score.append(vr_2)
+                except: continue
+            item['score'] = min(docking_score)
+            item['status'] = "success"        
+    except: 
+        logging.error("failed parsing")
+    
+    return 
 
 ## *vina
 

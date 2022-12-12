@@ -182,8 +182,18 @@ The config.txt file should contain:
     receptor=./protein.maps.fld # The prepared receptor file
 ```
 
-
-    
+### Running with AutoDock-Koto
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
 
 
 
