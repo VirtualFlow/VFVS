@@ -216,5 +216,7 @@ The config.txt file should contain:
     exhaustiveness=10
 ```
 
+### Running with LightDock
+
 
 

@@ -999,7 +999,8 @@ def process_docking_completion(item, ret):
         docking_finish_rldock(item, ret)
     elif(item['program'] == "PSOVina"):
         docking_finish_PSOVina(item, ret)
-    
+    elif(item['program'] == "LightDock"):
+        docking_finish_LightDock(item, ret)
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1056,6 +1057,8 @@ def program_runstring_array(task):
         cmd = docking_start_rldock(task)     
     elif(task['program'] == "PSOVina"):
         cmd = docking_start_PSOVina(task)     
+    elif(task['program'] == "LightDock"):
+        cmd = docking_start_LightDock(task)     
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1063,6 +1066,15 @@ def program_runstring_array(task):
 
 
 ####### Docking program configurations
+
+## LightDock
+def docking_start_LightDock(task): 
+    # TODO
+    return 
+
+def docking_finish_LightDock(item, ret): 
+    # TODO
+    return 
 
 ## RLDock
 def docking_start_rldock(task): 
@@ -1416,15 +1428,13 @@ def docking_finish_mdock(item, ret):
             docking_scores.append( float([x for x in item.split(' ') if x != ''][4]))
 
         shutil.move(output_file, item['output_dir'])
+        mol_output_file = os.path.join(item['tmp_run_dir_input'], "mdock_dock.mol2")
+        shutil.move(mol_output_file, item['output_path'])
 
         item['score'] = min(docking_scores)
         item['status'] = "success"
     except:
         logging.error("failed parsing")
-
-    mol_output_file = os.path.join(item['tmp_run_dir_input'], "mdock_dock.mol2")
-    shutil.move(mol_output_file, item['output_path'])
-
 
 ## MCDock
 
