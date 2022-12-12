@@ -997,7 +997,9 @@ def process_docking_completion(item, ret):
         docking_finish_autodock_koto(item, ret)
     elif(item['program'] == "RLDock"):
         docking_finish_rldock(item, ret)
-        
+    elif(item['program'] == "PSOVina"):
+        docking_finish_PSOVina(item, ret)
+    
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1052,6 +1054,8 @@ def program_runstring_array(task):
         cmd = docking_start_autodock_koto(task)    
     elif(task['program'] == "RLDock"):
         cmd = docking_start_rldock(task)     
+    elif(task['program'] == "PSOVina"):
+        cmd = docking_start_PSOVina(task)     
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1148,6 +1152,32 @@ def docking_finish_autodock_koto(item, ret):
         logging.error("failed parsing")
     
     return 
+
+## *vina
+
+def docking_start_PSOVina(task):
+    cpus_per_program = str(task['threads_per_docking'])
+
+    cmd = [
+            f"{task['tools_path']}/{task['program']}",
+            '--cpu', cpus_per_program,
+            '--config', task['config_path'],
+            '--ligand', task['ligand_path'],
+            '--out', task['output_path']
+        ]
+    return cmd
+
+def docking_finish_PSOVina(item, ret):
+    match = re.search(r'^\s+1\s+(?P<value>[-0-9.]+)\s+', ret.stdout, flags=re.MULTILINE)
+    if(match):
+        matches = match.groupdict()
+        item['score'] = float(matches['value'])
+        item['status'] = "success"
+    else:
+        item['log']['reason'] = f"Could not find score"
+        logging.error(item['log']['reason'])
+
+## smina
 
 ## *vina
 
