@@ -162,12 +162,14 @@ The config.txt file should contain:
 ### Running with GalaxyDock3
 A GalaxyDock3 executable (of name 'GalaxyDock3') should be placed in directory: /tools/bin <br>
 The config.txt file should contain: 
+```
     receptor=./receptor.pdb 
     grid_box_cntr=15 12 0
     grid_n_elem=61 61 61
     grid_width=0.375
     max_trial=10
-    
+```
+ 
 ### Running with autodock_gpu
 A autodock_cpu executable (of name 'autodock_gpu') should be placed in directory: /tools/bin <br>
 The config.txt file should contain: 
@@ -223,5 +225,13 @@ The config.txt file should contain:
     exhaustiveness=10
 ```
 
+### Running with FitDock
+A FitDock executable (of name 'FitDock') should be placed in directory: /tools/bin <br>
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb 
+    receptor_template=./receptor_template.pdb
+    ligand_reference=./ref_ligand.mol2 
+```
 
 

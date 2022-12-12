@@ -1001,6 +1001,8 @@ def process_docking_completion(item, ret):
         docking_finish_PSOVina(item, ret)
     elif(item['program'] == "LightDock"):
         docking_finish_LightDock(item, ret)
+    elif(item['program'] == "FitDock"):
+        docking_finish_FitDock(item, ret)
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1058,7 +1060,9 @@ def program_runstring_array(task):
     elif(task['program'] == "PSOVina"):
         cmd = docking_start_PSOVina(task)     
     elif(task['program'] == "LightDock"):
-        cmd = docking_start_LightDock(task)     
+        cmd = docking_start_LightDock(task)   
+    elif(task['program'] == "FitDock"):
+        cmd = docking_start_FitDock(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1067,9 +1071,50 @@ def program_runstring_array(task):
 
 ####### Docking program configurations
 
+## LigandFit
+def docking_start_FitDock(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+    
+    cmd = [
+            f"{task['tools_path']}/FitDock",
+            '-Tprot', config_['receptor_template'],
+            '-Tlig', config_['ligand_reference'],
+            '-Qprot', config_['receptor'],
+            '-Qlig', task['ligand_path'], 
+            '-ot', 'ot.mol2', 
+            '-os', 'os.mol2', 
+            '-o', 'o.mol2'
+          ]
+        
+    return cmd
+
+def docking_finish_FitDock(item, ret): 
+    try: 
+        
+        docking_score_file = os.path.join(item['tmp_run_dir'], "out.log")
+        docking_out_file = os.path.join(item['tmp_run_dir'], "o.mol2")
+                
+        with open(docking_score_file, 'r') as f: 
+            lines = f.readlines()
+        lines = [x for x in lines if 'Binding Score after  EM' in x]
+        docking_score = float(lines[0].split(' ')[-2])
+        item['score'] = min(docking_score)
+
+        shutil.move(docking_out_file, item['output_dir'])             
+        item['status'] = "success"
+        
+    except: 
+        logging.error("failed parsing")
+    return 
+
+
 ## LightDock
 def docking_start_LightDock(task): 
-    cpus_per_program = str(task['threads_per_docking'])
 
     with open(task['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
