@@ -195,5 +195,13 @@ The config.txt file should contain:
     exhaustiveness=10
 ```
 
+### Running with RLDock
+The config.txt file should contain: 
+```
+    receptor=./receptor.mol2 # Location of receptor file
+    exhaustiveness=10
+    spheres_file_path=./sphere.dat # Path to spheres file (required for RLDock)
+```
+
 
 

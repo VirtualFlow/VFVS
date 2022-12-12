@@ -995,6 +995,8 @@ def process_docking_completion(item, ret):
     
     elif(item['program'] == "autodock_koto"):
         docking_finish_autodock_koto(item, ret)
+    elif(item['program'] == "RLDock"):
+        docking_finish_rldock(item, ret)
         
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
@@ -1048,7 +1050,8 @@ def program_runstring_array(task):
         cmd = docking_start_autodock(task, "gpu")
     elif(task['program'] == "autodock_koto"):
         cmd = docking_start_autodock_koto(task)    
-    
+    elif(task['program'] == "RLDock"):
+        cmd = docking_start_rldock(task)     
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1056,6 +1059,46 @@ def program_runstring_array(task):
 
 
 ####### Docking program configurations
+
+## RLDock
+def docking_start_rldock(task): 
+    cpus_per_program = str(task['threads_per_docking'])
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = [
+            f"{task['tools_path']}/RLDOCK",
+            '--i', config_['receptor'],
+            '--l', task['ligand_path'],
+            '-c', config_['exhaustiveness'],
+            '-n', cpus_per_program, 
+            '-s', config_['spheres_file_path']
+        ]
+    return cmd
+
+def docking_finish_rldock(item, ret): 
+    try: 
+        docking_pose = os.path.join(item['tmp_run_dir_input'], "output_cluster.mol2")
+
+        with open(docking_pose, 'r') as f: 
+            lines = f.readlines()
+        lines = [x for x in lines if '# Total_Energy:' in x]
+        docking_scores = []
+        for item in lines: 
+            docking_scores.append(float(item.split(' ')[-1]))
+
+        item['score'] = min(docking_scores)
+        item['status'] = "success"
+        shutil.move(docking_pose, item['output_dir'])        
+
+    except: 
+        logging.error("failed parsing")
+    
+    return 
 
 ## Autodock koto
 def docking_start_autodock_koto(task): 
@@ -1071,6 +1114,7 @@ def docking_start_autodock_koto(task):
             f"{task['tools_path']}/AutoDock-Koto",
             '--receptor', config_['receptor'],
             '--ligand', task['ligand_path'],
+            '--cpu', cpus_per_program,
             '--exhaustiveness', config_['exhaustiveness'],
             '--center_x', '{}'.format(config_['center_x']),
             '--center_y', '{}'.format(config_['center_y']),
