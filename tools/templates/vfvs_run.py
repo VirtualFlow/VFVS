@@ -987,7 +987,7 @@ def process_docking_completion(item, ret):
     elif(item['program'] == "idock"):
         docking_finish_idock(item, ret)
     elif(item['program'] == "GalaxyDock3"):
-        docking_finish_igalaxydock3(item, ret)
+        docking_finish_galaxydock3(item, ret)
     elif(item['program'] == "autodock_cpu"
         or item['program'] == "autodock_gpu"
         ):
@@ -1706,7 +1706,6 @@ def docking_start_galaxydock3(task):
 
 def docking_finish_galaxydock3(item, ret):
     try:
-        prefix = cmd[-1].split('.')[0]
 
         info_file = os.path.join(item['tmp_run_dir_input'], f"{item['ligdock_prefix']}_fb.E.info")
         mol_file = os.path.join(item['tmp_run_dir_input'], f"{item['ligdock_prefix']}_fb.mol2")
