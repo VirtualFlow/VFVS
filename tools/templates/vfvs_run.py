@@ -1153,18 +1153,31 @@ def docking_finish_autodock_koto(item, ret):
     
     return 
 
-## *vina
+## PSOvina
 
 def docking_start_PSOVina(task):
     cpus_per_program = str(task['threads_per_docking'])
 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
     cmd = [
-            f"{task['tools_path']}/{task['program']}",
-            '--cpu', cpus_per_program,
-            '--config', task['config_path'],
+            f"{task['tools_path']}/PSOVina",
+            '--receptor', config_['receptor'],
             '--ligand', task['ligand_path'],
+            '--cpu', cpus_per_program,
+            '--exhaustiveness', config_['exhaustiveness'],
+            '--center_x', '{}'.format(config_['center_x']),
+            '--center_y', '{}'.format(config_['center_y']),
+            '--center_z', '{}'.format(config_['center_z']),
+            '--size_x',   '{}'.format(config_['size_x']),
+            '--size_y',   '{}'.format(config_['size_y']),
+            '--size_z',   '{}'.format(config_['size_z']),
             '--out', task['output_path']
-        ]
+         ]
     return cmd
 
 def docking_finish_PSOVina(item, ret):
@@ -1176,8 +1189,6 @@ def docking_finish_PSOVina(item, ret):
     else:
         item['log']['reason'] = f"Could not find score"
         logging.error(item['log']['reason'])
-
-## smina
 
 ## *vina
 
