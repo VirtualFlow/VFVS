@@ -217,6 +217,11 @@ The config.txt file should contain:
 ```
 
 ### Running with LightDock
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    exhaustiveness=10
+```
 
 
 
