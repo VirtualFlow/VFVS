@@ -1003,6 +1003,8 @@ def process_docking_completion(item, ret):
         docking_finish_LightDock(item, ret)
     elif(item['program'] == "FitDock"):
         docking_finish_FitDock(item, ret)
+    elif(item['program'] == "Molegro"):
+        docking_finish_Molegro(item, ret)
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1063,6 +1065,8 @@ def program_runstring_array(task):
         cmd = docking_start_LightDock(task)   
     elif(task['program'] == "FitDock"):
         cmd = docking_start_FitDock(task)   
+    elif(task['program'] == "Molegro"):
+        cmd = docking_start_Molegro(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1070,6 +1074,60 @@ def program_runstring_array(task):
 
 
 ####### Docking program configurations
+
+## LigandFit
+def docking_start_Molegro(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    mvdscript_loc = os.path.join(task['tmp_run_dir'], "docking.mvdscript")
+    
+    with open(mvdscript_loc, 'a+') as f: 
+        f.writelines(['// Molegro Script Job.\n\n'])
+        f.writelines(['IMPORT Proteins;Waters;Cofactors FROM {}\n\n'.format(config_['receptor'])])
+        f.writelines(['PREPARE Bonds=IfMissing;BondOrders=IfMissing;Hydrogens=IfMissing;Charges=Always; TorsionTrees=Always\n\n'])
+        f.writelines(['IMPORT All FROM ligands.mol2\n\n'])
+        f.writelines(['SEARCHSPACE radius=12;center=Ligand[0]\n\n'])
+        f.writelines(['DOCK Ligand[1]\n\n\n'])
+        f.writelines(['EXIT'])
+            
+            
+    task['molegro_tmp_file'] = os.path.join(task['tmp_run_dir'], "run_.sh")
+    
+    with open(task['molegro_tmp_file'], 'w') as f: 
+        f.writelines('export Molegro={}\n'.format(config_['molegro_location']))
+        f.writelines('cat {} {} > ligands.mol2\n'.format(config_['ref_ligand'], task['ligand_path']))
+        f.writelines('$Molegro/bin/mvd docking.mvdscript -nogui\n')
+
+    os.system('chmod 0700 {}'.format(task['molegro_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['molegro_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_Molegro(item, ret): 
+    try: 
+        
+        cmd_run = ret.stdout.decode("utf-8").split('\n')[-2]
+        cmd_run = [x for x in cmd_run if 'Pose:' in x]
+        scores = []
+        for item in cmd_run: 
+            scores.append( float(item.split('Energy')[-1].split(' ')[1][:-2]) )
+        item['score'] = min(scores)
+        
+        docking_out_file = os.path.join(item['tmp_run_dir'])
+        docking_out_file = [x for x in os.listdir(docking_out_file) if 'mol2' in x][0]
+        docking_out_file = os.path.join(item['tmp_run_dir'], docking_out_file)
+
+        shutil.move(docking_out_file, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
 
 ## LigandFit
 def docking_start_FitDock(task): 
@@ -1107,9 +1165,9 @@ def docking_finish_FitDock(item, ret):
 
         shutil.move(docking_out_file, item['output_dir'])             
         item['status'] = "success"
-        
     except: 
         logging.error("failed parsing")
+        
     return 
 
 

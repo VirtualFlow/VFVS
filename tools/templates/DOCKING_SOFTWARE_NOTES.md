@@ -235,3 +235,10 @@ The config.txt file should contain:
 ```
 
 
+### Running with Molegro
+The config.txt file should contain: 
+```
+    ref_ligand=./ref_ligand.mol2 # Location for reference ligand 
+    receptor=./receptor.pdb
+    molegro_location=$HOME/MVD  # Location of Molegro installation (containing a valid licence)
+```
