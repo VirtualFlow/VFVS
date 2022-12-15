@@ -962,36 +962,53 @@ def process_docking_completion(item, ret):
         or item['program'] == "AutodockZN"
     ):
         docking_finish_vina(item, ret)
-    elif(task['program'] == "smina"
+    elif(item['program'] == "smina"
         or item['program'] == "gnina"
     ):
         docking_finish_smina(item, ret)
-    elif(task['program'] == "adfr"):
+    elif(item['program'] == "adfr"):
         docking_finish_adfr(item, ret)
-    elif(task['program'] == "plants"):
+    elif(item['program'] == "plants"):
         docking_finish_plants(item, ret)
-    elif(task['program'] == "rDOCK"):
+    elif(item['program'] == "rDOCK"):
         docking_finish_rdock(item, ret)
-    elif(task['program'] == "M-Dock"):
+    elif(item['program'] == "M-Dock"):
         docking_finish_mdock(item, ret)
-    elif(task['program'] == "MCDock"):
+    elif(item['program'] == "MCDock"):
         docking_finish_mcdock(item, ret)
-    elif(task['program'] == "LigandFit"):
+    elif(item['program'] == "LigandFit"):
         docking_finish_ligandfit(item, ret)
-    elif(task['program'] == "ledock"):
+    elif(item['program'] == "ledock"):
         docking_finish_ledock(item, ret)
-    elif(task['program'] == "gold"):
+    elif(item['program'] == "gold"):
         docking_finish_gold(item, ret)
-    elif(task['program'] == "iGemDock"):
+    elif(item['program'] == "iGemDock"):
         docking_finish_igemdock(item, ret)
-    elif(task['program'] == "idock"):
+    elif(item['program'] == "idock"):
         docking_finish_idock(item, ret)
-    elif(task['program'] == "GalaxyDock3"):
-        docking_finish_igalaxydock3(item, ret)
-    elif(task['program'] == "autodock_cpu"
+    elif(item['program'] == "GalaxyDock3"):
+        docking_finish_galaxydock3(item, ret)
+    elif(item['program'] == "autodock_cpu"
         or item['program'] == "autodock_gpu"
         ):
         docking_finish_autodock(item, ret)
+    
+    elif(item['program'] == "autodock_koto"):
+        docking_finish_autodock_koto(item, ret)
+    elif(item['program'] == "RLDock"):
+        docking_finish_rldock(item, ret)
+    elif(item['program'] == "PSOVina"):
+        docking_finish_PSOVina(item, ret)
+    elif(item['program'] == "LightDock"):
+        docking_finish_LightDock(item, ret)
+    elif(item['program'] == "FitDock"):
+        docking_finish_FitDock(item, ret)
+    elif(item['program'] == "Molegro"):
+        docking_finish_Molegro(item, ret)
+    elif(item['program'] == "rosetta-ligand"):
+        docking_finish_rosetta_ligand(item, ret) 
+    elif(item['program'] == "SEED"):
+        docking_finish_SEED(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1042,6 +1059,22 @@ def program_runstring_array(task):
         cmd = docking_start_autodock(task, "cpu")
     elif(task['program'] == "autodock_gpu"):
         cmd = docking_start_autodock(task, "gpu")
+    elif(task['program'] == "autodock_koto"):
+        cmd = docking_start_autodock_koto(task)    
+    elif(task['program'] == "RLDock"):
+        cmd = docking_start_rldock(task)     
+    elif(task['program'] == "PSOVina"):
+        cmd = docking_start_PSOVina(task)     
+    elif(task['program'] == "LightDock"):
+        cmd = docking_start_LightDock(task)   
+    elif(task['program'] == "FitDock"):
+        cmd = docking_start_FitDock(task)   
+    elif(task['program'] == "Molegro"):
+        cmd = docking_start_Molegro(task)   
+    elif(task['program'] == "rosetta-ligand"):
+        cmd = docking_start_rosetta_ligand(task)   
+    elif(task['program'] == "SEED"):
+        cmd = docking_start_SEED(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1050,6 +1083,375 @@ def program_runstring_array(task):
 
 ####### Docking program configurations
 
+## SEED
+def docking_start_SEED(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['seed_tmp_file'] = os.path.join(task['tmp_run_dir'], "seed_run.sh")
+    
+    with open(task['seed_tmp_file'], 'a+') as f: 
+        f.writelines(["charge=`{}/bin/chimera --nogui --silent {} charges.py`\n".format(config_['chimera_path'], task['ligand_path'])])
+        f.writelines(["antechamber -i {} -fi mol2 -o ligand_gaff.mol2 -fo mol2 -at gaff2 -c gas -rn LIG -nc $charge -pf y\n".format(task['ligand_path'])])
+        f.writelines(["python {} ligand_gaff.mol2 ligand_gaff.mol2 ligand_seed.mol2\n".format(task['mol2seed4_receptor_script'])])
+        f.writelines(["{}/bin/chimera --nogui {} dockprep.py \n".format(config_['chimera_path'], config_['receptor'])])
+        f.writelines(["python {} receptor.mol2 receptor.mol2 receptor_seed.mol2\n".format(task['mol2seed4_receptor_script'])])
+        f.writelines(["\t\t-out:suffix out\n"])
+        f.writelines(['{}/seed4 {} > log'.format(task['tools_path'], config_['seed_inp_file'])])
+        
+    os.system('chmod 0700 {}'.format(task['seed_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['seed_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_SEED(item, ret): 
+    try: 
+        score_path = os.path.join(item['tmp_run_dir'], "seed_best.dat")
+        with open(score_path, 'r') as f: 
+            lines = f.readlines()
+        docking_score = float([x for x in lines[1].split(' ') if x != ''][4])
+        item['score'] = min(docking_score)   
+ 
+        pose_path = os.path.join(item['tmp_run_dir'], "ligand_seed_best.mol2")
+        shutil.move(pose_path, item['output_dir'])  
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
+        
+
+## rosetta-ligand
+def docking_start_rosetta_ligand(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['rosetta_tmp_file'] = os.path.join(task['tmp_run_dir'], "rosetta_run.sh")
+    
+    with open(task['rosetta_tmp_file'], 'a+') as f: 
+        f.writelines(['export ROSETTA={}\n'.format(config_['ROSETTA_location'])])
+        f.writelines(['obabel {} -O conformers.sdf --conformer --score rmsd --writeconformers --nconf 30\n'.format(task['ligand_path'])])
+        f.writelines(['$ROSETTA/source/scripts/python/public/molfile_to_params.py -n LIG -p LIG --conformers-in-one-file conformers.sdf\n'])
+        f.writelines(['cat {} LIG.pdb > complex.pdb\n'.format(task['receptor'])])
+        f.writelines(['echo "END" >> complex.pdb\n'])
+        f.writelines(["$ROSETTA/source/bin/rosetta_scripts.default.linuxgccrelease  \\\n"])
+        f.writelines(["	-database $ROSETTA/database \\\n"])
+        f.writelines(["\t@ options \\\n"])
+        f.writelines(["\t\t-parser:protocol {} \\\n".format(config_['dock_xml_file_loc'])])
+        f.writelines(["\t\t-parser:script_vars X={} Y={} Z={} \\\n".format(config_['center_x'], config_['center_y'], config_['center_z'])])
+        f.writelines(["\t\t-in:file:s complex.pdb \\\n"])
+        f.writelines(["\t\t-in:file:extra_res_fa LIG.params \\\n"])
+        f.writelines(["\t\t-out:nstruct 10 \\\n"])
+        f.writelines(["\t\t-out:level {} \\\n".format(config_['exhaustiveness'])])
+        f.writelines(["\t\t-out:suffix out\n"])
+        
+
+    os.system('chmod 0700 {}'.format(task['rosetta_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['rosetta_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_rosetta_ligand(item, ret): 
+    try: 
+        
+        docking_score_path = os.path.join(item['tmp_run_dir'], "scoreout.sc")
+
+        with open(docking_score_path, 'r') as f: 
+            lines = f.readlines()
+        lines = lines[2: ]
+        docking_scores = []
+        for item in lines: 
+            A = item.split(' ')
+            A = [x for x in A if x!='']
+            docking_scores.append(float(A[44]))
+        
+        item['score'] = min(docking_scores)   
+        
+        out_files = [x for x in os.listdir(item['tmp_run_dir']) if 'complexout' in x][0] 
+        docking_out_path = os.path.join(item['tmp_run_dir'], out_files)
+        shutil.move(docking_out_path, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
+
+## LigandFit
+def docking_start_Molegro(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    mvdscript_loc = os.path.join(task['tmp_run_dir'], "docking.mvdscript")
+    
+    with open(mvdscript_loc, 'a+') as f: 
+        f.writelines(['// Molegro Script Job.\n\n'])
+        f.writelines(['IMPORT Proteins;Waters;Cofactors FROM {}\n\n'.format(config_['receptor'])])
+        f.writelines(['PREPARE Bonds=IfMissing;BondOrders=IfMissing;Hydrogens=IfMissing;Charges=Always; TorsionTrees=Always\n\n'])
+        f.writelines(['IMPORT All FROM ligands.mol2\n\n'])
+        f.writelines(['SEARCHSPACE radius=12;center=Ligand[0]\n\n'])
+        f.writelines(['DOCK Ligand[1]\n\n\n'])
+        f.writelines(['EXIT'])
+            
+            
+    task['molegro_tmp_file'] = os.path.join(task['tmp_run_dir'], "run_.sh")
+    
+    with open(task['molegro_tmp_file'], 'w') as f: 
+        f.writelines('export Molegro={}\n'.format(config_['molegro_location']))
+        f.writelines('cat {} {} > ligands.mol2\n'.format(config_['ref_ligand'], task['ligand_path']))
+        f.writelines('$Molegro/bin/mvd docking.mvdscript -nogui\n')
+
+    os.system('chmod 0700 {}'.format(task['molegro_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['molegro_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_Molegro(item, ret): 
+    try: 
+        
+        cmd_run = ret.stdout.decode("utf-8").split('\n')[-2]
+        cmd_run = [x for x in cmd_run if 'Pose:' in x]
+        scores = []
+        for item in cmd_run: 
+            scores.append( float(item.split('Energy')[-1].split(' ')[1][:-2]) )
+        item['score'] = min(scores)
+        
+        docking_out_file = os.path.join(item['tmp_run_dir'])
+        docking_out_file = [x for x in os.listdir(docking_out_file) if 'mol2' in x][0]
+        docking_out_file = os.path.join(item['tmp_run_dir'], docking_out_file)
+
+        shutil.move(docking_out_file, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
+## LigandFit
+def docking_start_FitDock(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+    
+    cmd = [
+            f"{task['tools_path']}/FitDock",
+            '-Tprot', config_['receptor_template'],
+            '-Tlig', config_['ligand_reference'],
+            '-Qprot', config_['receptor'],
+            '-Qlig', task['ligand_path'], 
+            '-ot', 'ot.mol2', 
+            '-os', 'os.mol2', 
+            '-o', 'o.mol2'
+          ]
+        
+    return cmd
+
+def docking_finish_FitDock(item, ret): 
+    try: 
+        
+        docking_score_file = os.path.join(item['tmp_run_dir'], "out.log")
+        docking_out_file = os.path.join(item['tmp_run_dir'], "o.mol2")
+                
+        with open(docking_score_file, 'r') as f: 
+            lines = f.readlines()
+        lines = [x for x in lines if 'Binding Score after  EM' in x]
+        docking_score = float(lines[0].split(' ')[-2])
+        item['score'] = min(docking_score)
+
+        shutil.move(docking_out_file, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
+
+## LightDock
+def docking_start_LightDock(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+    
+    task['lightdock_tmp_file'] = os.path.join(task['tmp_run_dir'], "run_.sh")
+    
+    with open(task['lightdock_tmp_file'], 'w') as f: 
+        f.writelines('./lightdock/bin/lightdock3_setup.py {} {} --noxt --noh --now -anm\n'.format(config_['receptor'], task['ligand_path']))
+        f.writelines('./lightdock/bin/lightdock3.py setup.json 100 -c 1 -l 0\n')
+        f.writelines('./lightdock/bin/lgd_generate_conformations.py {} {} swarm_0/gso_100.out {}\n'.format(config_['receptor'], task['ligand_path'], config_['exhaustiveness']))
+
+    os.system('chmod 0700 {}'.format(task['lightdock_tmp_file'])) # Assign execution permisions on script
+    
+    cmd = ['./{}'.format(task['lightdock_tmp_file'])]
+    
+    return cmd
+
+def docking_finish_LightDock(item, ret): 
+    try: 
+        
+        docking_score_file = os.path.join(item['tmp_run_dir'], "swarm_0", "gso_100.out")
+        
+        with open(docking_score_file, 'r') as f: 
+            lines = f.readlines()
+        lines = lines[1: ]
+        scoring = []
+        for item in lines: 
+            A = item.split(' ')
+            scoring.append(float(A[-1]))
+
+        docking_pose_file = os.path.join(item['tmp_run_dir'], "swarm_0")
+        complex_file = [x for x in os.listdir(docking_pose_file) if '.pdb' in x][0]
+        docking_pose_file = os.path.join(item['tmp_run_dir'], "swarm_0", complex_file)
+        shutil.move(docking_pose_file, item['output_dir'])     
+        
+        item['score'] = min(scoring)
+        item['status'] = "success"
+        
+    except: 
+        logging.error("failed parsing")
+    return 
+
+## RLDock
+def docking_start_rldock(task): 
+    cpus_per_program = str(task['threads_per_docking'])
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = [
+            f"{task['tools_path']}/RLDOCK",
+            '--i', config_['receptor'],
+            '--l', task['ligand_path'],
+            '-c', config_['exhaustiveness'],
+            '-n', cpus_per_program, 
+            '-s', config_['spheres_file_path']
+        ]
+    return cmd
+
+def docking_finish_rldock(item, ret): 
+    try: 
+        docking_pose = os.path.join(item['tmp_run_dir_input'], "output_cluster.mol2")
+
+        with open(docking_pose, 'r') as f: 
+            lines = f.readlines()
+        lines = [x for x in lines if '# Total_Energy:' in x]
+        docking_scores = []
+        for item in lines: 
+            docking_scores.append(float(item.split(' ')[-1]))
+
+        shutil.move(docking_pose, item['output_dir'])        
+        item['score'] = min(docking_scores)
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
+    
+    return 
+
+## Autodock koto
+def docking_start_autodock_koto(task): 
+    cpus_per_program = str(task['threads_per_docking'])
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = [
+            f"{task['tools_path']}/AutoDock-Koto",
+            '--receptor', config_['receptor'],
+            '--ligand', task['ligand_path'],
+            '--cpu', cpus_per_program,
+            '--exhaustiveness', config_['exhaustiveness'],
+            '--center_x', '{}'.format(config_['center_x']),
+            '--center_y', '{}'.format(config_['center_y']),
+            '--center_z', '{}'.format(config_['center_z']),
+            '--size_x',   '{}'.format(config_['size_x']),
+            '--size_y',   '{}'.format(config_['size_y']),
+            '--size_z',   '{}'.format(config_['size_z']),
+            '--out', task['output_path']
+        ]
+    return cmd
+
+def docking_finish_autodock_koto(item, ret): 
+    try: 
+        docking_out = ret.stdout.decode("utf-8")
+        A = docking_out.split('\n')
+        docking_score = []
+        for item in A: 
+            line_split = item.split(' ')
+            line_split = [x for x in line_split if x != '']
+            if len(line_split) == 4: 
+                try: 
+                    vr_1 = float(line_split[0])
+                    vr_2 = float(line_split[1])
+                    vr_3 = float(line_split[2])
+                    vr_4 = float(line_split[3])
+                    docking_score.append(vr_2)
+                except: continue
+            item['score'] = min(docking_score)
+            item['status'] = "success"        
+    except: 
+        logging.error("failed parsing")
+    
+    return 
+
+## PSOvina
+
+def docking_start_PSOVina(task):
+    cpus_per_program = str(task['threads_per_docking'])
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = [
+            f"{task['tools_path']}/PSOVina",
+            '--receptor', config_['receptor'],
+            '--ligand', task['ligand_path'],
+            '--cpu', cpus_per_program,
+            '--exhaustiveness', config_['exhaustiveness'],
+            '--center_x', '{}'.format(config_['center_x']),
+            '--center_y', '{}'.format(config_['center_y']),
+            '--center_z', '{}'.format(config_['center_z']),
+            '--size_x',   '{}'.format(config_['size_x']),
+            '--size_y',   '{}'.format(config_['size_y']),
+            '--size_z',   '{}'.format(config_['size_z']),
+            '--out', task['output_path']
+         ]
+    return cmd
+
+def docking_finish_PSOVina(item, ret):
+    match = re.search(r'^\s+1\s+(?P<value>[-0-9.]+)\s+', ret.stdout, flags=re.MULTILINE)
+    if(match):
+        matches = match.groupdict()
+        item['score'] = float(matches['value'])
+        item['status'] = "success"
+    else:
+        item['log']['reason'] = f"Could not find score"
+        logging.error(item['log']['reason'])
 
 ## *vina
 
@@ -1079,8 +1481,8 @@ def docking_finish_vina(item, ret):
 
 def docking_start_smina(task):
     cpus_per_program = str(task['threads_per_docking'])
-    log_file = os.path.join(item['output_dir'], "out.flexres.pdb")
-    atomterms_file = os.path.join(item['output_dir'], "out.atomterms")
+    log_file = os.path.join(task['output_dir'], "out.flexres.pdb")
+    atomterms_file = os.path.join(task['output_dir'], "out.atomterms")
 
     cmd = [
         f"{task['tools_path']}/smina",
@@ -1112,17 +1514,17 @@ def docking_finish_smina(item, ret):
 
 def docking_start_plants(task):
 
-    item['plants_tmp_file'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.txt")
-    shutil.copy(task['config_path'], item['plants_tmp_file'])
+    task['plants_tmp_file'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.txt")
+    shutil.copy(task['config_path'], task['plants_tmp_file'])
 
-    with open(item['plants_tmp_file'], 'a+') as f:
+    with open(task['plants_tmp_file'], 'a+') as f:
         f.writelines('ligand_file {}\n'.format(task['ligand_path']))
         f.writelines('output_dir {}\n'.format(task['output_path']))
 
 
     cmd = ['{}/PLANTS'.format(task['tools_path']),
             '--mode', 'screen',
-            item['plants_tmp_file']
+            task['plants_tmp_file']
     ]
 
     return cmd
@@ -1140,7 +1542,7 @@ def docking_finish_plants(item, ret):
 ## adfr
 
 def docking_start_adfr(item):
-    with open(task['config_path']) as fd:
+    with open(item['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
 
     cmd = ['adfr',
@@ -1276,16 +1678,14 @@ def docking_finish_mdock(item, ret):
         for item in lines:
             docking_scores.append( float([x for x in item.split(' ') if x != ''][4]))
 
-        shutil.move(output_file, task['output_dir'])
+        shutil.move(output_file, item['output_dir'])
+        mol_output_file = os.path.join(item['tmp_run_dir_input'], "mdock_dock.mol2")
+        shutil.move(mol_output_file, item['output_path'])
 
         item['score'] = min(docking_scores)
         item['status'] = "success"
     except:
         logging.error("failed parsing")
-
-    mol_output_file = os.path.join(item['tmp_run_dir_input'], "mdock_dock.mol2")
-    shutil.move(mol_output_file, task['output_path'])
-
 
 ## MCDock
 
@@ -1316,7 +1716,7 @@ def docking_finish_mcdock(item, ret):
         item['score'] = min(binding_energies)
         item['status'] = "success"
 
-        shutil.move(output_file, task['output_path'])
+        shutil.move(output_file, item['output_path'])
     except:
         logging.error("failed parsing")
 
@@ -1355,8 +1755,8 @@ def docking_finish_ligandfit(item, ret):
         item['score'] = min(scores)
         item['status'] = "success"
 
-        shutil.move(run_pdb, task['output_path'])
-        shutil.move(run_log, task['output_dir'])
+        shutil.move(run_pdb, item['output_path'])
+        shutil.move(run_log, item['output_dir'])
     except:
         logging.error("failed parsing")
 
@@ -1367,15 +1767,15 @@ def docking_finish_ligandfit(item, ret):
 
 def docking_start_ledock(item):
 
-    item['ledock_tmp_file'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.in")
-    item['ledock_tmp_file_list'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.list")
+    item['ledock_tmp_file'] = os.path.join(item['tmp_run_dir'], "vfvs_tmp.in")
+    item['ledock_tmp_file_list'] = os.path.join(item['tmp_run_dir'], "vfvs_tmp.list")
 
     cmd = [
-        '{}/ledock'.format(task['tools_path']),
+        '{}/ledock'.format(item['tools_path']),
         '{}'.format(item['ledock_tmp_file'])
     ]
 
-    with open(task['config_path']) as fd:
+    with open(item['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
     for item in config_:
         if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
@@ -1399,7 +1799,7 @@ def docking_start_ledock(item):
         f.writelines(['END'])
 
     with open(item['ledock_tmp_file_list'], 'w') as f:
-        f.writelines(task['ligand_path'])
+        f.writelines(item['ligand_path'])
 
     return cmd
 
@@ -1431,10 +1831,10 @@ def docking_finish_ledock(item, ret):
 
 def docking_start_gold(item):
 
-    item['gold_tmp_file'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.conf")
-    item['gold_tmp_dir'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp")
+    item['gold_tmp_file'] = os.path.join(item['tmp_run_dir'], "vfvs_tmp.conf")
+    item['gold_tmp_dir'] = os.path.join(item['tmp_run_dir'], "vfvs_tmp")
 
-    with open(task['config_path']) as fd:
+    with open(item['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
     for item in config_:
         if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
@@ -1459,7 +1859,7 @@ def docking_start_gold(item):
         f.writelines(['do_cavity = 0'])
         f.writelines(['floodfill_center = point\n'])
         f.writelines(['   DATA FILES'])
-        f.writelines(['ligand_data_file {} 10'.format(task['ligand_path'])])
+        f.writelines(['ligand_data_file {} 10'.format(item['ligand_path'])])
         f.writelines(['param_file = DEFAULT'])
         f.writelines(['set_ligand_atom_types = 1'])
         f.writelines(['set_protein_atom_types = 0'])
@@ -1502,7 +1902,7 @@ def docking_start_gold(item):
         f.writelines(['protein_datafile = {}'.format(config_['receptor'])])
 
 
-    cmd = ['{}/gold_auto'.format(task['tools_path']), '{}'.format(item['gold_tmp_file'])]
+    cmd = ['{}/gold_auto'.format(item['tools_path']), '{}'.format(item['gold_tmp_file'])]
 
     return cmd
 
@@ -1520,8 +1920,8 @@ def docking_finish_gold(item, ret):
             item['score'] = min(docking_score)
             item['status'] = "success"
 
-        shutil.move(run_pose, task['output_dir'])
-        shutil.move(run_output, task['output_dir'])
+        shutil.move(run_pose, item['output_dir'])
+        shutil.move(run_output, item['output_dir'])
 
     except:
         logging.error("failed parsing")
@@ -1531,7 +1931,7 @@ def docking_finish_gold(item, ret):
 
 def docking_start_igemdock(task):
 
-    item['igemdock_temp_dir'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp")
+    task['igemdock_temp_dir'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp")
 
     with open(task['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
@@ -1554,7 +1954,7 @@ def docking_finish_igemdock(task, ret):
 
     try:
 
-        docked_pose = os.listdir(os.path.join(item['igemdock_temp_dir'], ''))[0]
+        docked_pose = os.listdir(os.path.join(task['igemdock_temp_dir'], ''))[0]
         with open(docked_pose, 'r') as f:
             lines = f.readlines()
 
@@ -1563,8 +1963,8 @@ def docking_finish_igemdock(task, ret):
 
         shutil.move(docked_pose, task['output_path'])
 
-        completion_event['score'] = min(docking_score)
-        completion_event['status'] = "success"
+        task['score'] = min(docking_score)
+        task['status'] = "success"
     except:
         logging.error("failed parsing")
 
@@ -1572,23 +1972,23 @@ def docking_finish_igemdock(task, ret):
 
 def docking_start_idock(item):
 
-    with open(task['config_path']) as fd:
+    with open(item['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
 
     for item in config_:
         if '#' in config_[item]:
             config_[item] = config_[item].split('#')[0]
 
-    cmd = ['{}/idock'.format(task['tools_path']),
+    cmd = ['{}/idock'.format(item['tools_path']),
            '--receptor', config_['receptor'],
-           '--ligand', task['ligand_path'],
+           '--ligand', item['ligand_path'],
            '--center_x', config_['center_x'],
            '--center_y', config_['center_y'],
            '--center_z', config_['center_z'],
            '--size_x', config_['size_x'],
            '--size_y', config_['size_y'],
            '--size_z', config_['size_z'],
-           '--out', '{}'.format(task['output_path'])]
+           '--out', '{}'.format(item['output_path'])]
 
     return cmd
 
@@ -1652,7 +2052,6 @@ def docking_start_galaxydock3(task):
 
 def docking_finish_galaxydock3(item, ret):
     try:
-        prefix = cmd[-1].split('.')[0]
 
         info_file = os.path.join(item['tmp_run_dir_input'], f"{item['ligdock_prefix']}_fb.E.info")
         mol_file = os.path.join(item['tmp_run_dir_input'], f"{item['ligdock_prefix']}_fb.mol2")
@@ -1680,16 +2079,16 @@ def docking_finish_galaxydock3(item, ret):
 
 ## Autodock
 
-def docking_start_autodoc(item, arch_type):
+def docking_start_autodock(item, arch_type):
 
-    with open(task['config_path']) as fd:
+    with open(item['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
     for item in config_:
         if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
 
-    cmd = ['{}/autodock_{}'.format(task['tools_path'], arch_type),
+    cmd = ['{}/autodock_{}'.format(item['tools_path'], arch_type),
            '--ffile', config_['receptor'],
-           '--lfile', task['ligand_path']]
+           '--lfile', item['ligand_path']]
 
     return cmd
 
@@ -1698,7 +2097,7 @@ def docking_finish_autodock(item, ret):
         output = ret.stdout.decode("utf-8").split('\n')[-6]
         lines = [x.strip() for x in output if 'best energy' in x][0]
         docking_score = float(lines.split(',')[1].split(' ')[-2])
-        item['score'] = min(docking_scores)
+        item['score'] = min(docking_score)
         item['status'] = "success"
     except:
         logging.error("failed parsing")
