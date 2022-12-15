@@ -256,3 +256,16 @@ Please ensure that obabel is loaded into the environment (module load openbabel 
     exhaustiveness=10
 ```
 
+### Running with SEED
+A SEED executable (of name 'seed4') should be placed in directory: /tools/bin <br>
+AmberTools needs to be loaded in for using SEED. 
+The config.txt file should contain: 
+```
+    chimera_path=/home/chimera
+    receptor=./receptor.mol2 
+    seed4_gaff_file=./seed4_gaff.par
+    seed4_kw_par_file=./seed4_kw.par
+    seed_inp_file=./seed.inp
+    mol2seed4_receptor_script=./mol2seed4_receptor.py
+```
+

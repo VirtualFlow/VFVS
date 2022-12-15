@@ -1006,7 +1006,9 @@ def process_docking_completion(item, ret):
     elif(item['program'] == "Molegro"):
         docking_finish_Molegro(item, ret)
     elif(item['program'] == "rosetta-ligand"):
-        cmd = docking_finish_rosetta_ligand(task)   
+        docking_finish_rosetta_ligand(item, ret) 
+    elif(item['program'] == "SEED"):
+        docking_finish_SEED(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1071,6 +1073,8 @@ def program_runstring_array(task):
         cmd = docking_start_Molegro(task)   
     elif(task['program'] == "rosetta-ligand"):
         cmd = docking_start_rosetta_ligand(task)   
+    elif(task['program'] == "SEED"):
+        cmd = docking_start_SEED(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1078,6 +1082,47 @@ def program_runstring_array(task):
 
 
 ####### Docking program configurations
+
+## SEED
+def docking_start_SEED(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['seed_tmp_file'] = os.path.join(task['tmp_run_dir'], "seed_run.sh")
+    
+    with open(task['seed_tmp_file'], 'a+') as f: 
+        f.writelines(["charge=`{}/bin/chimera --nogui --silent {} charges.py`\n".format(config_['chimera_path'], task['ligand_path'])])
+        f.writelines(["antechamber -i {} -fi mol2 -o ligand_gaff.mol2 -fo mol2 -at gaff2 -c gas -rn LIG -nc $charge -pf y\n".format(task['ligand_path'])])
+        f.writelines(["python {} ligand_gaff.mol2 ligand_gaff.mol2 ligand_seed.mol2\n".format(task['mol2seed4_receptor_script'])])
+        f.writelines(["{}/bin/chimera --nogui {} dockprep.py \n".format(config_['chimera_path'], config_['receptor'])])
+        f.writelines(["python {} receptor.mol2 receptor.mol2 receptor_seed.mol2\n".format(task['mol2seed4_receptor_script'])])
+        f.writelines(["\t\t-out:suffix out\n"])
+        f.writelines(['{}/seed4 {} > log'.format(task['tools_path'], config_['seed_inp_file'])])
+        
+    os.system('chmod 0700 {}'.format(task['seed_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['seed_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_SEED(item, ret): 
+    try: 
+        score_path = os.path.join(item['tmp_run_dir'], "seed_best.dat")
+        with open(score_path, 'r') as f: 
+            lines = f.readlines()
+        docking_score = float([x for x in lines[1].split(' ') if x != ''][4])
+        item['score'] = min(docking_score)   
+ 
+        pose_path = os.path.join(item['tmp_run_dir'], "ligand_seed_best.mol2")
+        shutil.move(pose_path, item['output_dir'])  
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
+        
 
 ## rosetta-ligand
 def docking_start_rosetta_ligand(task): 
