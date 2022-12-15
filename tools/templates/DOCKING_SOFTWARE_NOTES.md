@@ -242,3 +242,17 @@ The config.txt file should contain:
     receptor=./receptor.pdb
     molegro_location=$HOME/MVD  # Location of Molegro installation (containing a valid licence)
 ```
+
+### Running with rosetta-ligand
+The config.txt file should contain: 
+Please ensure that obabel is loaded into the environment (module load openbabel for Slurm)
+```
+    receptor=./receptor.pdb
+    ROSETTA_location=$HOME/rosetta_src_3.13_bundle/rosetta_src_2021.16.61629_bundle/main  # Location of Rosetta installation (containing a valid licence)
+    dock_xml_file_loc=./dock.xml
+    center_x=10
+    center_y=10
+    center_z=10
+    exhaustiveness=10
+```
+

@@ -1005,6 +1005,8 @@ def process_docking_completion(item, ret):
         docking_finish_FitDock(item, ret)
     elif(item['program'] == "Molegro"):
         docking_finish_Molegro(item, ret)
+    elif(item['program'] == "rosetta-ligand"):
+        cmd = docking_finish_rosetta_ligand(task)   
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1067,6 +1069,8 @@ def program_runstring_array(task):
         cmd = docking_start_FitDock(task)   
     elif(task['program'] == "Molegro"):
         cmd = docking_start_Molegro(task)   
+    elif(task['program'] == "rosetta-ligand"):
+        cmd = docking_start_rosetta_ligand(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1074,6 +1078,66 @@ def program_runstring_array(task):
 
 
 ####### Docking program configurations
+
+## rosetta-ligand
+def docking_start_rosetta_ligand(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['rosetta_tmp_file'] = os.path.join(task['tmp_run_dir'], "rosetta_run.sh")
+    
+    with open(task['rosetta_tmp_file'], 'a+') as f: 
+        f.writelines(['export ROSETTA={}\n'.format(config_['ROSETTA_location'])])
+        f.writelines(['obabel {} -O conformers.sdf --conformer --score rmsd --writeconformers --nconf 30\n'.format(task['ligand_path'])])
+        f.writelines(['$ROSETTA/source/scripts/python/public/molfile_to_params.py -n LIG -p LIG --conformers-in-one-file conformers.sdf\n'])
+        f.writelines(['cat {} LIG.pdb > complex.pdb\n'.format(task['receptor'])])
+        f.writelines(['echo "END" >> complex.pdb\n'])
+        f.writelines(["$ROSETTA/source/bin/rosetta_scripts.default.linuxgccrelease  \\\n"])
+        f.writelines(["	-database $ROSETTA/database \\\n"])
+        f.writelines(["\t@ options \\\n"])
+        f.writelines(["\t\t-parser:protocol {} \\\n".format(config_['dock_xml_file_loc'])])
+        f.writelines(["\t\t-parser:script_vars X={} Y={} Z={} \\\n".format(config_['center_x'], config_['center_y'], config_['center_z'])])
+        f.writelines(["\t\t-in:file:s complex.pdb \\\n"])
+        f.writelines(["\t\t-in:file:extra_res_fa LIG.params \\\n"])
+        f.writelines(["\t\t-out:nstruct 10 \\\n"])
+        f.writelines(["\t\t-out:level {} \\\n".format(config_['exhaustiveness'])])
+        f.writelines(["\t\t-out:suffix out\n"])
+        
+
+    os.system('chmod 0700 {}'.format(task['rosetta_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['rosetta_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_rosetta_ligand(item, ret): 
+    try: 
+        
+        docking_score_path = os.path.join(item['tmp_run_dir'], "scoreout.sc")
+
+        with open(docking_score_path, 'r') as f: 
+            lines = f.readlines()
+        lines = lines[2: ]
+        docking_scores = []
+        for item in lines: 
+            A = item.split(' ')
+            A = [x for x in A if x!='']
+            docking_scores.append(float(A[44]))
+        
+        item['score'] = min(docking_scores)   
+        
+        out_files = [x for x in os.listdir(item['tmp_run_dir']) if 'complexout' in x][0] 
+        docking_out_path = os.path.join(item['tmp_run_dir'], out_files)
+        shutil.move(docking_out_path, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
 
 ## LigandFit
 def docking_start_Molegro(task): 
