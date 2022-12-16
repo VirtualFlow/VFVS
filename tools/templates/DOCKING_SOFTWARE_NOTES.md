@@ -269,3 +269,15 @@ The config.txt file should contain:
     mol2seed4_receptor_script=./mol2seed4_receptor.py
 ```
 
+### Running with MpSDockZN
+A MpSDockZN executable (of name 'MpSDockZN') should be placed in directory: /tools/bin <br>
+AmberTools needs to be loaded in for using SEED. 
+The config.txt file should contain: 
+```
+    chimera_path=/home/chimera
+    dock6_path=/home/dock6
+    receptor=./receptor.mol2 
+    box_in=./box.in
+    grid_in=./grid.in
+    dock_in=./dock.in
+```

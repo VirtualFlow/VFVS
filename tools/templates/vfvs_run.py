@@ -992,7 +992,6 @@ def process_docking_completion(item, ret):
         or item['program'] == "autodock_gpu"
         ):
         docking_finish_autodock(item, ret)
-    
     elif(item['program'] == "autodock_koto"):
         docking_finish_autodock_koto(item, ret)
     elif(item['program'] == "RLDock"):
@@ -1009,6 +1008,8 @@ def process_docking_completion(item, ret):
         docking_finish_rosetta_ligand(item, ret) 
     elif(item['program'] == "SEED"):
         docking_finish_SEED(item, ret) 
+    elif(item['program'] == "MpSDockZN"):
+        docking_finish_MpSDockZN(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1074,7 +1075,9 @@ def program_runstring_array(task):
     elif(task['program'] == "rosetta-ligand"):
         cmd = docking_start_rosetta_ligand(task)   
     elif(task['program'] == "SEED"):
-        cmd = docking_start_SEED(task)   
+        cmd = docking_start_SEED(task)  
+    elif(task['program'] == "MpSDockZN"):
+        cmd = docking_start_MpSDockZN(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1082,6 +1085,54 @@ def program_runstring_array(task):
 
 
 ####### Docking program configurations
+
+## MpSDockZN
+
+def docking_start_MpSDockZN(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['MpSDockZN_tmp_file'] = os.path.join(task['tmp_run_dir'], "MpSDockZN_run.sh")
+    
+    with open(task['MpSDockZN_tmp_file'], 'a+') as f: 
+        f.writelines(['export Chimera={}\n'.format(config_['chimera_path'])])
+        f.writelines(['export DOCK6={}\n'.format(config_['dock6_path'])])
+        f.writelines(['charge=`$Chimera/bin/chimera --nogui --silent {} charges.py`\n'.format(task['ligand_path'])])
+        f.writelines(['antechamber -i {} -fi mol2 -o ligand_input.mol2 -fo mol2 -at sybyl -c gas -rn LIG -nc $charge -pf y\n'.format(task['ligand_path'])])
+        f.writelines(['$DOCK6/bin/showbox < {} \n'.format(config_['dock6_path'])])
+        f.writelines(['$DOCK6/bin/grid -i {} \n'.format(config_['grid_in'])])
+        f.writelines(['./executables/MpSDock -i {} \n'.format(config_['dock_in'])])
+        
+    os.system('chmod 0700 {}'.format(task['MpSDockZN_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['MpSDockZN_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_MpSDockZN(item, ret): 
+    try: 
+        score_path = os.path.join(item['tmp_run_dir'], "receptor_input_docked_result.list")
+        score_all = []
+        with open(score_path, 'r') as f: 
+            lines = f.readlines()
+        for item in lines: 
+            A = item.split(' ')
+            A = [x for x in A if x != '']
+            try: score_1, score_2, score_3, score_4, score_5 = float(A[0]), float(A[1]), float(A[2]),float(A[3]), float(A[4])
+            except: continue 
+            final_score = score_1 + score_2 + score_3 + score_4 + score_5
+            score_all.append(final_score)
+        item['score'] = min(score_all)   
+ 
+        pose_path = os.path.join(item['tmp_run_dir'], "receptor_input_docked_result.mol2")
+        shutil.move(pose_path, item['output_dir'])  
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
 
 ## SEED
 def docking_start_SEED(task): 
