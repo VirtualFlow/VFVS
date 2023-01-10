@@ -1,4 +1,7 @@
-****** Job Resource Configuration 
+# Each line that starts with '#' is a comment/description of the variable above the comment
+# Each line that starts with '*' belongs to a section heading
+
+****** Job Resource Configuration
 
 job_name=testing
 # alphabetic characters (i.e. letters from a-z or A-Z)
@@ -226,7 +229,6 @@ docking_scenario_replicas=1
 #     e.g.: docking_scenario_replicas=1:1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
-
 
 docking_scenario_basefolder=../input-files
 # Relative path to tools directory
