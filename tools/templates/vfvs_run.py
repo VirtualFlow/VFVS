@@ -48,6 +48,782 @@ import hashlib
 import pandas as pd
 from pathlib import Path
 from botocore.config import Config
+from statistics import mean
+from multiprocessing import Process
+from multiprocessing import Queue
+from queue import Empty
+import math
+import sys
+import uuid
+
+
+# Download
+# -
+# Get the file and move it to a local location
+#
+
+def downloader(download_queue, unpack_queue, summary_queue, tmp_dir):
+
+
+    botoconfig = Config(
+       retries = {
+          'max_attempts': 25,
+          'mode': 'standard'
+       }
+    )
+
+    s3 = boto3.client('s3', config=botoconfig)
+
+
+    while True:
+        try:
+            item = download_queue.get(timeout=20.5)
+        except Empty:
+            #print('Consumer: gave up waiting...', flush=True)
+            continue
+
+        if item is None:
+            break
+
+
+        item['temp_dir'] = tempfile.mkdtemp(prefix=tmp_dir)
+        item['local_path'] = f"{item['temp_dir']}/tmp.{item['ext']}"
+
+
+        # Move the data either from S3 or a shared filesystem
+
+        if('s3_download_path' in item['collection']):
+            remote_path = item['collection']['s3_download_path']
+            job_bucket = item['collection']['s3_bucket']
+
+            try:
+                with open(item['local_path'], 'wb') as f:
+                    s3.download_fileobj(job_bucket, remote_path, f)
+            except botocore.exceptions.ClientError as error:
+                    reason = f"Failed to download from S3 {job_bucket}/{remote_path} to {item['local_path']}: ({error})"
+                    logging.error(reason)
+
+                    # log this to know we skipped
+                    # put on the logging queue
+                    summary_item = {
+                        'type': "download_failed",
+                        'log': {
+                            'base_collection_key': item['collection_key'],
+                            'reason': reason,
+                            'dockings': item['collection']['dockings']
+                        }
+                    }
+                    summary_queue.put(summary_item)
+                    continue
+
+        elif('sharedfs_path' in item['collection']):
+            shutil.copyfile(Path(item['collection']['sharedfs_path']), item['local_path'])
+
+
+        # Move it to the next step if there's space
+
+        while unpack_queue.qsize() > 35:
+            time.sleep(0.2)
+
+        unpack_queue.put(item)
+
+
+
+
+def untar(unpack_queue, collection_queue):
+    print('Unpacker: Running', flush=True)
+
+    while True:
+        try:
+            item = unpack_queue.get(timeout=20.5)
+        except Empty:
+            #print('unpacker: gave up waiting...', flush=True)
+            continue
+
+        # check for stop
+        if item is None:
+            break
+
+        item['ligands'] = unpack_item(item)
+
+        # Next step is to process this
+        while collection_queue.qsize() > 35:
+            time.sleep(0.2)
+
+        collection_queue.put(item)
+
+
+
+def unpack_item(item):
+
+    ligands = {}
+
+    os.chdir(item['temp_dir'])
+    try:
+        tar = tarfile.open(item['local_path'])
+        for member in tar.getmembers():
+            if(not member.isdir()):
+                _, ligand = member.name.split("/", 1)
+
+                if(ligand == ".listing"):
+                    continue
+
+                ligand_name = ligand.split(".")[0]
+
+                ligands[ligand_name] = {
+                    'path':  os.path.join(item['temp_dir'], item['collection']['collection_number'], ligand),
+                    'base_collection_key': item['collection_key'],
+                    'collection_key': item['collection_key']
+                }
+
+        tar.extractall()
+        tar.close()
+    except Exception as err:
+        logging.error(
+            f"ERR: Cannot open {item['local_path']} type: {str(type(err))}, err: {str(err)}")
+        return None
+
+    # Check if we have specific instructions
+    if(item['collection']['mode'] == "sensor_screen_mode"):
+        sensor_screen_ligands = {}
+
+        # We should read the sparse file to know which ligands we actually need to keep
+        with open(os.path.join(item['temp_dir'], item['collection']['collection_number'], ".listing"), "r") as read_file:
+            for index, line in enumerate(read_file):
+                line = line.strip()
+
+                screen_collection_key, screen_ligand_name, screen_index = line.split(",")
+
+                if(int(screen_index) >= item['collection']['sensor_screen_count']):
+                    continue
+
+                sensor_screen_ligands[screen_ligand_name] = ligands[screen_ligand_name]
+                sensor_screen_ligands[screen_ligand_name]['collection_key'] = screen_collection_key
+
+        return sensor_screen_ligands
+    elif(item['collection']['mode'] == "named"):
+        select_ligands = {}
+        for ligand_name in item['collection']['ligands']:
+            select_ligands[ligand_name] = ligands[ligand_name]
+        return select_ligands
+    else:
+        return ligands
+
+
+
+
+
+def collection_process(ctx, collection_queue, docking_queue, summary_queue):
+
+    while True:
+        try:
+            item = collection_queue.get(timeout=20.5)
+        except Empty:
+            #print('unpacker: gave up waiting...', flush=True)
+            continue
+
+        # check for stop
+        if item is None:
+            break
+
+        expected_ligands = 0
+        completions_per_ligand = 0
+
+
+        # How many do we run per ligand?
+        for scenario_key in ctx['main_config']['docking_scenarios']:
+            scenario = ctx['main_config']['docking_scenarios'][scenario_key]
+            for replica_index in range(scenario['replicas']):
+                completions_per_ligand += 1
+
+
+            # generate directory for output
+            scenario_directory = Path(item['temp_dir']) / "output" / scenario_key
+            scenario_directory.mkdir(parents=True, exist_ok=True)
+
+
+        # Process every ligand after making sure it is valid
+
+        for ligand_key in item['ligands']:
+            ligand = item['ligands'][ligand_key]
+
+            coords = {}
+            skip_ligand = 0
+
+            with open(ligand['path'], "r") as read_file:
+                for index, line in enumerate(read_file):
+
+                    if (int(ctx['main_config']['run_atom_check']) == 1):
+                        match = re.search(r'(?P<letters>\s+(B|Si|Sn)\s+)', line)
+                        if(match):
+                            matches = match.groupdict()
+                            logging.error(
+                                f"Found {matches['letters']} in {ligand}. Skipping.")
+                            skip_reason = f"failed(ligand_elements:{matches['letters']})"
+                            skip_reason_json = f"ligand includes elements: {matches['letters']})"
+                            skip_ligand = 1
+                            break
+
+                    match = re.search(r'^ATOM', line)
+                    if(match):
+                        parts = line.split()
+                        coord_str = ":".join(parts[5:8])
+
+                        if(coord_str in coords):
+                            logging.error(
+                                f"Found duplicate coordinates in {ligand}. Skipping.")
+                            skip_reason = f"failed(ligand_coordinates)"
+                            skip_reason_json = f"duplicate coordinates"
+                            skip_ligand = 1
+                            break
+                        coords[coord_str] = 1
+
+            if(skip_ligand == 0):
+                # We can submit this for processing
+                ligand_attrs = get_attrs(ctx['main_config']['ligand_library_format'], ligand['path'], ctx['main_config']['print_attrs_in_summary'])
+                submit_ligand_for_docking(ctx, docking_queue, ligand_key, ligand['path'], ligand['collection_key'], ligand['base_collection_key'], ligand_attrs, item['temp_dir'])
+                expected_ligands += completions_per_ligand
+
+            else:
+                # log this to know we skipped
+                # put on the logging queue
+                summary_item = {
+                    'type': "skip",
+                    'log': {
+                        'base_collection_key': ligand['base_collection_key'],
+                        'collection_key': ligand['collection_key'],
+                        'ligand_key': ligand_key,
+                        'reason': skip_reason_json
+                    }
+                }
+                summary_queue.put(summary_item)
+
+
+        # Let the summary queue know that it can delete the directory after len(ligands)
+        # number of ligands have been processed
+
+
+        summary_item = {
+            'type': "delete",
+            'temp_dir': item['temp_dir'],
+            'base_collection_key': item['collection_key'],
+            'expected_completions': expected_ligands
+        }
+
+        summary_queue.put(summary_item)
+
+
+
+
+def get_attrs(ligand_format, ligand_path, attrs = ['smi']):
+
+    valid_formats = ['pdbqt', 'mol2', 'pdb', 'sdf']
+
+    attributes = {}
+    attributes_found = 0
+    for key in attrs:
+        attributes[key] = "N/A"
+
+    if ligand_format in valid_formats:
+        with open(ligand_path, "r") as read_file:
+            for line in read_file:
+                line = line.strip()
+
+                match = re.search(r"SMILES_current:\s*(?P<smi>.*)$", line)
+                if(match):
+                    attributes['smi'] = match.group('smi')
+                    attributes_found += 1
+
+                match = re.search(r"SMILES:\s*(?P<smi>.*)$", line)
+                if(match):
+                    attributes['smi'] = match.group('smi')
+                    attributes_found += 1
+
+                match = re.search(r"\* Heavy atom count:\s*(?P<hacount>.*)$", line)
+                if(match):
+                    attributes['heavy_atom_count'] = match.group('hacount')
+                    attributes_found += 1
+
+                if(attributes_found >= len(attrs)):
+                    break
+
+    return attributes
+
+
+def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, collection_key, base_collection_key, ligand_attrs, temp_dir):
+
+    for scenario_key in ctx['main_config']['docking_scenarios']:
+        scenario = ctx['main_config']['docking_scenarios'][scenario_key]
+
+        for replica_index in range(scenario['replicas']):
+
+            ligand_directory_directory = Path(temp_dir) / "output" / scenario_key / ligand_name / str(replica_index)
+            ligand_directory_directory.mkdir(parents=True, exist_ok=True)
+
+            docking_item = {
+                'ligand_key': ligand_name,
+                'ligand_path': ligand_path,
+                'scenario_key': scenario_key,
+                'collection_key': collection_key,
+                'base_collection_key': base_collection_key,
+                'config_path': scenario['config'],
+                'program': scenario['program'],
+                'program_long': scenario['program_long'],
+                'input_files_dir':  os.path.join(ctx['temp_dir'], "vf_input", "input-files"),
+                'timeout': int(ctx['main_config']['program_timeout']),
+                'tools_path': ctx['tools_path'],
+                'threads_per_docking': int(ctx['main_config']['threads_per_docking']),
+                'temp_dir': temp_dir,
+                'attrs': ligand_attrs,
+                'output_dir': str(ligand_directory_directory)
+            }
+
+            docking_queue.put(docking_item)
+
+    while docking_queue.qsize() > 100:
+            time.sleep(0.2)
+
+
+def read_config_line(line):
+    key, sep, value = line.strip().partition("=")
+    return key, value
+
+
+def docking_process(docking_queue, summary_queue):
+
+    while True:
+        try:
+            item = docking_queue.get(timeout=20.5)
+        except Empty:
+            #print('unpacker: gave up waiting...', flush=True)
+            continue
+
+        # check for stop
+        if item is None:
+            break
+
+        print(f"processing {item['ligand_key']}")
+
+        start_time = time.perf_counter()
+        ret = None
+
+        # temporary directory that will be wiped after this docking is complete
+
+        item['tmp_run_dir'] = Path(item['output_dir']) / "tmp"
+        item['tmp_run_dir'].mkdir(parents=True, exist_ok=True)
+
+        # Make a copy of the input files so we have paths that make sense
+
+        item['tmp_run_dir_input'] = Path(item['tmp_run_dir']) / "input-files"
+        shutil.copytree(item['input_files_dir'], item['tmp_run_dir_input'])
+
+        # Setup paths for things we want to save
+
+        item['output_path'] = f"{item['output_dir']}/output"
+        item['log_path'] = f"{item['output_dir']}/stdout"
+
+        item['ligand_path'] = item['ligand_path']
+        item['status'] = "failed"
+
+        item['log'] = {
+                'base_collection_key': item['base_collection_key'],
+                'collection_key': item['collection_key'],
+                'ligand_key': item['ligand_key'],
+                'reason': ""
+        }
+
+        try:
+            cmd = program_runstring_array(item)
+        except RuntimeError as err:
+            logging.error(f"Invalid cmd generation for {item['ligand_key']} (program: '{item['program']}')")
+            raise(err)
+
+        try:
+            ret = subprocess.run(cmd, capture_output=True,
+                         text=True, cwd=item['tmp_run_dir_input'], timeout=item['timeout'])
+        except subprocess.TimeoutExpired as err:
+            logging.error(f"timeout on {item['ligand_key']}")
+
+
+        if ret != None:
+            if ret.returncode == 0:
+                process_docking_completion(item, ret)
+            else:
+                item['log']['reason'] = f"Non zero return code for {item['collection_key']} {item['ligand_key']} {item['scenario_key']}"
+                logging.error(item['log']['reason'])
+                logging.error(f"stdout:\n{ret.stdout}\nstderr:{ret.stderr}\n")
+
+
+            # Place output into files
+            with open(item['log_path'], "w") as output_f:
+                output_f.write(f"STDOUT:\n{ret.stdout}\n")
+                output_f.write(f"STDERR:\n{ret.stderr}\n")
+
+        # Cleanup
+        shutil.rmtree(item['tmp_run_dir'])
+
+        end_time = time.perf_counter()
+
+        item['seconds'] = end_time - start_time
+        print(f"processing {item['ligand_key']} - done in {item['seconds']}")
+
+        while summary_queue.qsize() > 200:
+            time.sleep(0.2)
+
+        item['type'] = "docking_complete"
+        summary_queue.put(item)
+
+
+
+def check_for_completion_of_collection_key(collection_completions, collection_key, scenario_directories):
+
+    current_completions = collection_completions[collection_key]['current_completions']
+    expected_completions = collection_completions[collection_key]['expected_completions']
+
+    if current_completions == expected_completions:
+        for scenario_key, scenario_dest in scenario_directories.items():
+            scenario_directory = Path(collection_completions[collection_key]['temp_dir']) / "output" / scenario_key
+            for dir_file in scenario_directory.iterdir():
+                shutil.move(str(dir_file), f"{scenario_dest}/")
+
+        shutil.rmtree(collection_completions[collection_key]['temp_dir'])
+        collection_completions.pop(collection_key, None)
+
+
+
+
+def summary_process(ctx, summary_queue, upload_queue, metadata):
+
+    print("starting summary process")
+    start_time =  time.perf_counter()
+
+    overview_data = {
+        'metadata': metadata,
+        'total_dockings': 0,
+        'dockings_status': {
+            'success': 0,
+            'failed': 0
+        },
+        'skipped_ligands': 0,
+        'skipped_ligand_list': [],
+        'failed_list': [],
+        'failed_downloads': 0,
+        'failed_downloads_log': [],
+        'failed_downloads_dockings': 0
+    }
+
+    summary_data = {}
+    dockings_processed = 0
+    collection_completions = {}
+    scenario_directory = {}
+
+    for scenario_key in ctx['main_config']['docking_scenarios']:
+        summary_data[scenario_key] = {}
+
+        scenario_directory[scenario_key] = Path(ctx['temp_dir']) / "output" / scenario_key / ctx['subjob_id']
+        scenario_directory[scenario_key].mkdir(parents=True, exist_ok=True)
+
+
+    while True:
+        try:
+            item = summary_queue.get()
+        except Empty:
+            #print('unpacker: gave up waiting...', flush=True)
+            continue
+
+        # check for stop
+        if item is None:
+
+            # Calculate how much time we spent
+            overview_data['sec']  = time.perf_counter() - start_time
+
+            # We need to generate the general overview data
+            # even if we didn't process anything
+
+            generate_overview_file(ctx, overview_data, upload_queue)
+
+            # clean up anything extra that is around
+            if(dockings_processed > 0):
+                generate_summary_file(ctx, summary_data, upload_queue, ctx['temp_dir'])
+                generate_output_archives(ctx, upload_queue, scenario_directory)
+            break
+
+
+        if(item['type'] == "delete"):
+            if item['base_collection_key'] in collection_completions:
+                collection_completions[item['base_collection_key']]['expected_completions'] = item['expected_completions']
+                collection_completions[item['base_collection_key']]['temp_dir'] = item['temp_dir']
+            else:
+                collection_completions[item['base_collection_key']] = {
+                    'expected_completions':item['expected_completions'],
+                    'current_completions': 0,
+                    'temp_dir': item['temp_dir']
+                }
+
+            check_for_completion_of_collection_key(collection_completions, item['base_collection_key'], scenario_directory)
+
+        elif(item['type'] == "download_failed"):
+            overview_data['failed_downloads_log'].append(item['log'])
+            overview_data['failed_downloads'] += 1
+            overview_data['failed_downloads_dockings'] += item['log']['dockings']
+
+
+        elif(item['type'] == "skip"):
+
+            overview_data['skipped_ligands'] += 1
+            overview_data['skipped_ligand_list'].append(item['log'])
+
+        elif(item['type'] == "docking_complete"):
+
+            overview_data['total_dockings'] += 1
+            overview_data['dockings_status'][item['status']] += 1
+
+            # Save off the data we need
+            dockings_processed += 1
+
+            if(item['status'] == "success"):
+
+                summary_key = f"{item['ligand_key']}"
+
+                if summary_key not in summary_data[item['scenario_key']]:
+                    summary_data[item['scenario_key']][summary_key] = {
+                        'ligand': item['ligand_key'],
+                        'collection_key': item['collection_key'],
+                        'scenario': item['scenario_key'],
+                        'scores': [ item['score'] ],
+                        'attrs': item['attrs']
+                    }
+
+                else:
+                    summary_data[item['scenario_key']][summary_key]['scores'].append(item['score'])
+            else:
+                # Log the failure
+                overview_data['failed_list'].append(item['log'])
+
+
+            # See if this was the last completion for this collection_key
+
+            if item['base_collection_key'] in collection_completions:
+                collection_completions[item['base_collection_key']]['current_completions'] += 1
+                check_for_completion_of_collection_key(collection_completions, item['base_collection_key'], scenario_directory)
+            else:
+                collection_completions[item['base_collection_key']] = {
+                    'expected_completions': -1,
+                    'current_completions': 1,
+                    'temp_dir': ""
+                }
+        else:
+            logging.error(f"received invalid summary completion {item['type']}")
+            raise
+
+
+def generate_tarfile(dir, tarname):
+    os.chdir(str(Path(dir).parents[0]))
+
+    with tarfile.open(tarname, "x:gz") as tar:
+        tar.add(os.path.basename(dir))
+
+    return os.path.join(str(Path(dir).parents[0]), tarname)
+
+
+def generate_output_path(ctx, scenario_key, content_type, extension):
+
+
+    if scenario_key != None:
+        if(ctx['main_config']['job_storage_mode'] == "s3"):
+            return f"{ctx['main_config']['object_store_job_prefix']}/{ctx['main_config']['job_name']}/{scenario_key}/{content_type}/{ctx['workunit_id']}/{ctx['subjob_id']}.{extension}"
+        else:
+            outputfiles_dir = Path(ctx['main_config']['sharedfs_output_files_path']) / scenario_key / content_type / str(ctx['workunit_id'])
+            return f"{ctx['main_config']['sharedfs_output_files_path']}/{scenario_key}/{content_type}/{ctx['workunit_id']}/{ctx['subjob_id']}.{extension}"
+    else:
+        if(ctx['main_config']['job_storage_mode'] == "s3"):
+            return f"{ctx['main_config']['object_store_job_prefix']}/{ctx['main_config']['job_name']}/{content_type}/{ctx['workunit_id']}/{ctx['subjob_id']}.{extension}"
+        else:
+            outputfiles_dir = Path(ctx['main_config']['sharedfs_output_files_path']) / content_type / str(ctx['workunit_id'])
+            return f"{ctx['main_config']['sharedfs_output_files_path']}/{content_type}/{ctx['workunit_id']}/{ctx['subjob_id']}.{extension}"
+
+
+def generate_output_archives(ctx, upload_queue, scenario_directories):
+
+    for scenario_key, scenario_dir in scenario_directories.items():
+
+        upload_tmp_dir = tempfile.mkdtemp(prefix=ctx['temp_dir'])
+
+        # tar the file
+        tar_name = f"{upload_tmp_dir}/{ctx['subjob_id']}.tar.gz"
+        tar_gz_path = generate_tarfile(scenario_dir, tar_name)
+
+        uploader_item = {
+            'storage_type': ctx['main_config']['job_storage_mode'],
+            'remote_path' : generate_output_path(ctx, scenario_key, "logs", "tar.gz"),
+            's3_bucket' : ctx['main_config']['object_store_job_bucket'],
+            'local_path': tar_name,
+            'temp_dir': upload_tmp_dir
+        }
+
+        upload_queue.put(uploader_item)
+
+
+def generate_overview_file(ctx, overview_data, upload_queue):
+
+    upload_tmp_dir = tempfile.mkdtemp(prefix=ctx['temp_dir'])
+    overview_json_location = f"{upload_tmp_dir}/overview.json.gz"
+
+    with gzip.open(overview_json_location, "wt") as json_out:
+        json.dump(overview_data, json_out)
+
+    uploader_item = {
+        'storage_type': ctx['main_config']['job_storage_mode'],
+        'remote_path' : generate_output_path(ctx, None, "summary", "json.gz"),
+        's3_bucket': ctx['main_config']['object_store_job_bucket'],
+        'local_path': overview_json_location,
+        'temp_dir': upload_tmp_dir
+    }
+
+    upload_queue.put(uploader_item)
+
+def generate_summary_file(ctx, summary_data, upload_queue, tmp_dir):
+
+    for scenario_key in ctx['main_config']['docking_scenarios']:
+
+        if(len(summary_data[scenario_key]) == 0):
+            break
+
+        csv_ordering = ['ligand', 'collection_key', 'scenario', 'score_average', 'score_min']
+        max_scores = 0
+
+        # Need to run all of the averages
+        for summary_key, summary_value in summary_data[scenario_key].items():
+
+            if(len(summary_value['scores']) > max_scores):
+                max_scores = len(summary_value['scores'])
+
+            for index, score in enumerate(summary_value['scores']):
+                summary_value[f"score_{index}"] = score
+
+            summary_value['score_average'] = mean(summary_value['scores'])
+            summary_value['score_min'] = min(summary_value['scores'])
+
+            summary_value.pop('scores', None)
+
+            # Update the attrs
+            for attr_name, attr_value in summary_value['attrs'].items():
+                summary_value[f'attr_{attr_name}'] = attr_value
+                if f'attr_{attr_name}' not in csv_ordering:
+                    csv_ordering.append(f'attr_{attr_name}')
+
+            summary_value.pop('attrs', None)
+
+
+            # For each collection tranche.. .explode them out
+            collection_name, collection_number = summary_value['collection_key'].split("_")
+            for letter_index, letter in enumerate(collection_name):
+                summary_value[f'tranche_{letter_index}'] = letter
+
+
+        # Ouput for each scenario
+
+        if 'parquet' in ctx['main_config']['summary_formats']:
+
+            # Now we can generate a parquet file with all of the data
+            df = pd.DataFrame.from_dict(summary_data[scenario_key], "index")
+
+            upload_tmp_dir = tempfile.mkdtemp(prefix=tmp_dir)
+
+            uploader_item = {
+                'storage_type': ctx['main_config']['job_storage_mode'],
+                'remote_path' : generate_output_path(ctx, scenario_key, "parquet", "parquet"),
+                's3_bucket': ctx['main_config']['object_store_job_bucket'],
+                'local_path': f"{upload_tmp_dir}/summary.parquet",
+                'temp_dir': upload_tmp_dir
+            }
+
+
+            df.to_parquet(uploader_item['local_path'], compression='gzip')
+            upload_queue.put(uploader_item)
+
+
+        if 'csv.gz' in ctx['main_config']['summary_formats']:
+
+            for index in range(max_scores):
+                csv_ordering.append(f"score_{index}")
+
+            upload_tmp_dir = tempfile.mkdtemp(prefix=tmp_dir)
+
+            with gzip.open(f"{upload_tmp_dir}/summary.txt.gz", "wt") as summmary_fp:
+
+                # print header
+                summmary_fp.write(",".join(csv_ordering))
+                summmary_fp.write("\n")
+
+                for summary_key, summary_value in summary_data[scenario_key].items():
+                    ordered_summary_list = list(map(lambda key: str(summary_value[key]), csv_ordering))
+                    summmary_fp.write(",".join(ordered_summary_list))
+                    summmary_fp.write("\n")
+
+
+            uploader_item_csv = {
+                'storage_type': ctx['main_config']['job_storage_mode'],
+                'remote_path' : generate_output_path(ctx, scenario_key, "csv", "csv.gz"),
+                's3_bucket': ctx['main_config']['object_store_job_bucket'],
+                'local_path': f"{upload_tmp_dir}/summary.txt.gz",
+                'temp_dir': upload_tmp_dir
+            }
+            upload_queue.put(uploader_item_csv)
+
+
+
+def upload_process(ctx, upload_queue):
+
+    print('Uploader: Running', flush=True)
+
+    botoconfig = Config(
+       retries = {
+          'max_attempts': 25,
+          'mode': 'standard'
+       }
+    )
+
+    s3 = boto3.client('s3', config=botoconfig)
+
+    while True:
+        try:
+            item = upload_queue.get(timeout=20.5)
+        except Empty:
+            #print('unpacker: gave up waiting...', flush=True)
+            continue
+
+        # check for completion
+        if item is None:
+
+            # clean up anything extra that is around
+            break
+
+        # Save off the data we need
+        # Basically.. if s3 then use boto3
+
+        if(item['storage_type'] == "s3"):
+            try:
+                print(f"Uploading to {item['remote_path']}")
+                response = s3.upload_file(item['local_path'], item['s3_bucket'], item['remote_path'])
+            except botocore.exceptions.ClientError as e:
+                logging.error(e)
+                raise
+
+        else:
+            # if sharedfs.. .then just do a copy
+
+            parent_directory = Path(Path(item['remote_path']).parent)
+            parent_directory.mkdir(parents=True, exist_ok=True)
+
+            shutil.copyfile(item['local_path'], item['remote_path'])
+
+
+        # Get rid of the temp directory
+        shutil.rmtree(item['temp_dir'])
+
+
+
 
 
 
@@ -60,19 +836,17 @@ def process_config(ctx):
     ctx['main_config']['output_working_path'] = os.path.join(
         ctx['temp_dir'], "output-files")
 
-    # Determine full config.txt paths for scenarios
+    if('summary_formats' not in ctx['main_config']):
+        ctx['main_config']['summary_formats'] = {
+                'csv.gz': 1
+        }
+
+
     ctx['main_config']['docking_scenarios'] = {}
 
-
-    if('summary_formats' not in ctx['main_config']):
-        ctx['main_config']['txt.gz']
-
     for index, scenario in enumerate(ctx['main_config']['docking_scenario_names']):
-
         program_long = ctx['main_config']['docking_scenario_programs'][index]
         program = program_long
-
-        logging.debug(f"Processing scenario '{scenario}' at index '{index}' with {program}")
 
         # Special handing for smina* and gwovina*
         match = re.search(r'^(?P<program>smina|gwovina)', program_long)
@@ -95,6 +869,7 @@ def process_config(ctx):
         }
 
 
+
 def get_workunit_from_s3(ctx, workunit_id, subjob_id, job_bucket, job_object, download_dir):
     # Download from S3
 
@@ -106,7 +881,7 @@ def get_workunit_from_s3(ctx, workunit_id, subjob_id, job_bucket, job_object, do
     except botocore.exceptions.ClientError as error:
         logging.error(
             f"Failed to download from S3 {job_bucket}/{job_object} to {download_to_workunit_file}, ({error})")
-        return None
+        sys.exit(1)
 
     os.chdir(download_dir)
 
@@ -124,14 +899,16 @@ def get_workunit_from_s3(ctx, workunit_id, subjob_id, job_bucket, job_object, do
             # AWS Batch requires that an array job have at least 2 elements,
             # sometimes we only need 1 though
             if(subjob_id == "1"):
-                exit(0)
+                sys.exit(0)
             else:
+                sys.exit(1)
                 raise RuntimeError(f"There is no subjob ID with ID:{subjob_id}")
 
         tar.close()
     except Exception as err:
         logging.error(
             f"ERR: Cannot open {download_to_workunit_file}. type: {str(type(err))}, err: {str(err)}")
+        sys.exit(1)
         return None
 
 
@@ -171,27 +948,73 @@ def get_workunit_from_sharedfs(ctx, workunit_id, subjob_id, job_tar, download_di
     ctx['main_config'] = all_config['config']
 
 
-def get_smi(ligand_format, ligand_path):
 
-    valid_formats = ['pdbqt', 'mol2']
+def process_docking_completion(item, ret):
+    item['status'] = "failed"
 
-    if ligand_format in valid_formats:
-        with open(ligand_path, "r") as read_file:
-            for line in read_file:
-                line = line.strip()
-                match = re.search(r"SMILES:\s*(?P<smi>.*)$", line)
-                if(match):
-                    return match.group('smi')
-
-    return "N/A"
-
-
+    if(item['program'] == "qvina02"
+        or item['program'] == "qvina_w"
+        or item['program'] == "vina"
+        or item['program'] == "vina_carb"
+        or item['program'] == "vina_xb"
+        or item['program'] == "gwovina"
+        or item['program'] == "AutodockVina_1.2"
+        or item['program'] == "AutodockZN"
+    ):
+        docking_finish_vina(item, ret)
+    elif(item['program'] == "smina"
+        or item['program'] == "gnina"
+    ):
+        docking_finish_smina(item, ret)
+    elif(item['program'] == "adfr"):
+        docking_finish_adfr(item, ret)
+    elif(item['program'] == "plants"):
+        docking_finish_plants(item, ret)
+    elif(item['program'] == "rDOCK"):
+        docking_finish_rdock(item, ret)
+    elif(item['program'] == "M-Dock"):
+        docking_finish_mdock(item, ret)
+    elif(item['program'] == "MCDock"):
+        docking_finish_mcdock(item, ret)
+    elif(item['program'] == "LigandFit"):
+        docking_finish_ligandfit(item, ret)
+    elif(item['program'] == "ledock"):
+        docking_finish_ledock(item, ret)
+    elif(item['program'] == "gold"):
+        docking_finish_gold(item, ret)
+    elif(item['program'] == "iGemDock"):
+        docking_finish_igemdock(item, ret)
+    elif(item['program'] == "idock"):
+        docking_finish_idock(item, ret)
+    elif(item['program'] == "GalaxyDock3"):
+        docking_finish_galaxydock3(item, ret)
+    elif(item['program'] == "autodock_cpu"
+        or item['program'] == "autodock_gpu"
+        ):
+        docking_finish_autodock(item, ret)
+    
+    elif(item['program'] == "autodock_koto"):
+        docking_finish_autodock_koto(item, ret)
+    elif(item['program'] == "RLDock"):
+        docking_finish_rldock(item, ret)
+    elif(item['program'] == "PSOVina"):
+        docking_finish_PSOVina(item, ret)
+    elif(item['program'] == "LightDock"):
+        docking_finish_LightDock(item, ret)
+    elif(item['program'] == "FitDock"):
+        docking_finish_FitDock(item, ret)
+    elif(item['program'] == "Molegro"):
+        docking_finish_Molegro(item, ret)
+    elif(item['program'] == "rosetta-ligand"):
+        docking_finish_rosetta_ligand(item, ret) 
+    elif(item['program'] == "SEED"):
+        docking_finish_SEED(item, ret) 
+    else:
+        raise RuntimeError(f"No completion function for {item['program']}")
 
 # Generate the run command for a given program
 
 def program_runstring_array(task):
-
-    cpus_per_program = str(task['threads_per_docking'])
 
     cmd = []
 
@@ -201,347 +1024,1085 @@ def program_runstring_array(task):
             or task['program'] == "vina_carb"
             or task['program'] == "vina_xb"
             or task['program'] == "gwovina"
+            or task['program'] == "AutodockVina_1.2"
        ):
-        cmd = [
+        cmd = docking_start_vina(task)
+    elif(task['program'] == "smina"):
+        cmd = docking_start_smina(task)
+    elif(task['program'] == "adfr"):
+        cmd = docking_start_adfr(task)
+    elif(task['program'] == "plants"):
+        cmd = docking_start_plants(task)
+    elif(task['program'] == "AutodockZN"):
+        cmd = docking_start_autodockzn(task)
+    elif(task['program'] == "gnina"):
+        cmd = docking_start_gnina(task)
+    elif(task['program'] == "rDock"):
+        cmd = docking_start_rdock(task)
+    elif(task['program'] == "M-Dock"):
+        cmd = docking_start_mdock(task)
+    elif(task['program'] == "MCDock"):
+        cmd = docking_start_mcdock(task)
+    elif(task['program'] == "LigandFit"):
+        cmd = docking_start_ligandfit(task)
+    elif(task['program'] == "ledock"):
+        cmd = docking_start_ledock(task)
+    elif(task['program'] == "gold"):
+        cmd = docking_start_gold(task)
+    elif(task['program'] == "iGemDock"):
+        cmd = docking_start_igemdock(task)
+    elif(task['program'] == "idock"):
+        cmd = docking_start_idock(task)
+    elif(task['program'] == "GalaxyDock3"):
+        cmd = docking_start_galaxydock3(task)
+    elif(task['program'] == "autodock_cpu"):
+        cmd = docking_start_autodock(task, "cpu")
+    elif(task['program'] == "autodock_gpu"):
+        cmd = docking_start_autodock(task, "gpu")
+    elif(task['program'] == "autodock_koto"):
+        cmd = docking_start_autodock_koto(task)    
+    elif(task['program'] == "RLDock"):
+        cmd = docking_start_rldock(task)     
+    elif(task['program'] == "PSOVina"):
+        cmd = docking_start_PSOVina(task)     
+    elif(task['program'] == "LightDock"):
+        cmd = docking_start_LightDock(task)   
+    elif(task['program'] == "FitDock"):
+        cmd = docking_start_FitDock(task)   
+    elif(task['program'] == "Molegro"):
+        cmd = docking_start_Molegro(task)   
+    elif(task['program'] == "rosetta-ligand"):
+        cmd = docking_start_rosetta_ligand(task)   
+    elif(task['program'] == "SEED"):
+        cmd = docking_start_SEED(task)   
+    else:
+        raise RuntimeError(f"Invalid program type of {task['program']}")
+
+    return cmd
+
+
+####### Docking program configurations
+
+## SEED
+def docking_start_SEED(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['seed_tmp_file'] = os.path.join(task['tmp_run_dir'], "seed_run.sh")
+    
+    with open(task['seed_tmp_file'], 'a+') as f: 
+        f.writelines(["charge=`{}/bin/chimera --nogui --silent {} charges.py`\n".format(config_['chimera_path'], task['ligand_path'])])
+        f.writelines(["antechamber -i {} -fi mol2 -o ligand_gaff.mol2 -fo mol2 -at gaff2 -c gas -rn LIG -nc $charge -pf y\n".format(task['ligand_path'])])
+        f.writelines(["python {} ligand_gaff.mol2 ligand_gaff.mol2 ligand_seed.mol2\n".format(task['mol2seed4_receptor_script'])])
+        f.writelines(["{}/bin/chimera --nogui {} dockprep.py \n".format(config_['chimera_path'], config_['receptor'])])
+        f.writelines(["python {} receptor.mol2 receptor.mol2 receptor_seed.mol2\n".format(task['mol2seed4_receptor_script'])])
+        f.writelines(["\t\t-out:suffix out\n"])
+        f.writelines(['{}/seed4 {} > log'.format(task['tools_path'], config_['seed_inp_file'])])
+        
+    os.system('chmod 0700 {}'.format(task['seed_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['seed_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_SEED(item, ret): 
+    try: 
+        score_path = os.path.join(item['tmp_run_dir'], "seed_best.dat")
+        with open(score_path, 'r') as f: 
+            lines = f.readlines()
+        docking_score = float([x for x in lines[1].split(' ') if x != ''][4])
+        item['score'] = min(docking_score)   
+ 
+        pose_path = os.path.join(item['tmp_run_dir'], "ligand_seed_best.mol2")
+        shutil.move(pose_path, item['output_dir'])  
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
+        
+
+## rosetta-ligand
+def docking_start_rosetta_ligand(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['rosetta_tmp_file'] = os.path.join(task['tmp_run_dir'], "rosetta_run.sh")
+    
+    with open(task['rosetta_tmp_file'], 'a+') as f: 
+        f.writelines(['export ROSETTA={}\n'.format(config_['ROSETTA_location'])])
+        f.writelines(['obabel {} -O conformers.sdf --conformer --score rmsd --writeconformers --nconf 30\n'.format(task['ligand_path'])])
+        f.writelines(['$ROSETTA/source/scripts/python/public/molfile_to_params.py -n LIG -p LIG --conformers-in-one-file conformers.sdf\n'])
+        f.writelines(['cat {} LIG.pdb > complex.pdb\n'.format(task['receptor'])])
+        f.writelines(['echo "END" >> complex.pdb\n'])
+        f.writelines(["$ROSETTA/source/bin/rosetta_scripts.default.linuxgccrelease  \\\n"])
+        f.writelines(["	-database $ROSETTA/database \\\n"])
+        f.writelines(["\t@ options \\\n"])
+        f.writelines(["\t\t-parser:protocol {} \\\n".format(config_['dock_xml_file_loc'])])
+        f.writelines(["\t\t-parser:script_vars X={} Y={} Z={} \\\n".format(config_['center_x'], config_['center_y'], config_['center_z'])])
+        f.writelines(["\t\t-in:file:s complex.pdb \\\n"])
+        f.writelines(["\t\t-in:file:extra_res_fa LIG.params \\\n"])
+        f.writelines(["\t\t-out:nstruct 10 \\\n"])
+        f.writelines(["\t\t-out:level {} \\\n".format(config_['exhaustiveness'])])
+        f.writelines(["\t\t-out:suffix out\n"])
+        
+
+    os.system('chmod 0700 {}'.format(task['rosetta_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['rosetta_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_rosetta_ligand(item, ret): 
+    try: 
+        
+        docking_score_path = os.path.join(item['tmp_run_dir'], "scoreout.sc")
+
+        with open(docking_score_path, 'r') as f: 
+            lines = f.readlines()
+        lines = lines[2: ]
+        docking_scores = []
+        for item in lines: 
+            A = item.split(' ')
+            A = [x for x in A if x!='']
+            docking_scores.append(float(A[44]))
+        
+        item['score'] = min(docking_scores)   
+        
+        out_files = [x for x in os.listdir(item['tmp_run_dir']) if 'complexout' in x][0] 
+        docking_out_path = os.path.join(item['tmp_run_dir'], out_files)
+        shutil.move(docking_out_path, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
+
+## LigandFit
+def docking_start_Molegro(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    mvdscript_loc = os.path.join(task['tmp_run_dir'], "docking.mvdscript")
+    
+    with open(mvdscript_loc, 'a+') as f: 
+        f.writelines(['// Molegro Script Job.\n\n'])
+        f.writelines(['IMPORT Proteins;Waters;Cofactors FROM {}\n\n'.format(config_['receptor'])])
+        f.writelines(['PREPARE Bonds=IfMissing;BondOrders=IfMissing;Hydrogens=IfMissing;Charges=Always; TorsionTrees=Always\n\n'])
+        f.writelines(['IMPORT All FROM ligands.mol2\n\n'])
+        f.writelines(['SEARCHSPACE radius=12;center=Ligand[0]\n\n'])
+        f.writelines(['DOCK Ligand[1]\n\n\n'])
+        f.writelines(['EXIT'])
+            
+            
+    task['molegro_tmp_file'] = os.path.join(task['tmp_run_dir'], "run_.sh")
+    
+    with open(task['molegro_tmp_file'], 'w') as f: 
+        f.writelines('export Molegro={}\n'.format(config_['molegro_location']))
+        f.writelines('cat {} {} > ligands.mol2\n'.format(config_['ref_ligand'], task['ligand_path']))
+        f.writelines('$Molegro/bin/mvd docking.mvdscript -nogui\n')
+
+    os.system('chmod 0700 {}'.format(task['molegro_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['molegro_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_Molegro(item, ret): 
+    try: 
+        
+        cmd_run = ret.stdout.decode("utf-8").split('\n')[-2]
+        cmd_run = [x for x in cmd_run if 'Pose:' in x]
+        scores = []
+        for item in cmd_run: 
+            scores.append( float(item.split('Energy')[-1].split(' ')[1][:-2]) )
+        item['score'] = min(scores)
+        
+        docking_out_file = os.path.join(item['tmp_run_dir'])
+        docking_out_file = [x for x in os.listdir(docking_out_file) if 'mol2' in x][0]
+        docking_out_file = os.path.join(item['tmp_run_dir'], docking_out_file)
+
+        shutil.move(docking_out_file, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
+## LigandFit
+def docking_start_FitDock(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+    
+    cmd = [
+            f"{task['tools_path']}/FitDock",
+            '-Tprot', config_['receptor_template'],
+            '-Tlig', config_['ligand_reference'],
+            '-Qprot', config_['receptor'],
+            '-Qlig', task['ligand_path'], 
+            '-ot', 'ot.mol2', 
+            '-os', 'os.mol2', 
+            '-o', 'o.mol2'
+          ]
+        
+    return cmd
+
+def docking_finish_FitDock(item, ret): 
+    try: 
+        
+        docking_score_file = os.path.join(item['tmp_run_dir'], "out.log")
+        docking_out_file = os.path.join(item['tmp_run_dir'], "o.mol2")
+                
+        with open(docking_score_file, 'r') as f: 
+            lines = f.readlines()
+        lines = [x for x in lines if 'Binding Score after  EM' in x]
+        docking_score = float(lines[0].split(' ')[-2])
+        item['score'] = min(docking_score)
+
+        shutil.move(docking_out_file, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
+
+## LightDock
+def docking_start_LightDock(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+    
+    task['lightdock_tmp_file'] = os.path.join(task['tmp_run_dir'], "run_.sh")
+    
+    with open(task['lightdock_tmp_file'], 'w') as f: 
+        f.writelines('./lightdock/bin/lightdock3_setup.py {} {} --noxt --noh --now -anm\n'.format(config_['receptor'], task['ligand_path']))
+        f.writelines('./lightdock/bin/lightdock3.py setup.json 100 -c 1 -l 0\n')
+        f.writelines('./lightdock/bin/lgd_generate_conformations.py {} {} swarm_0/gso_100.out {}\n'.format(config_['receptor'], task['ligand_path'], config_['exhaustiveness']))
+
+    os.system('chmod 0700 {}'.format(task['lightdock_tmp_file'])) # Assign execution permisions on script
+    
+    cmd = ['./{}'.format(task['lightdock_tmp_file'])]
+    
+    return cmd
+
+def docking_finish_LightDock(item, ret): 
+    try: 
+        
+        docking_score_file = os.path.join(item['tmp_run_dir'], "swarm_0", "gso_100.out")
+        
+        with open(docking_score_file, 'r') as f: 
+            lines = f.readlines()
+        lines = lines[1: ]
+        scoring = []
+        for item in lines: 
+            A = item.split(' ')
+            scoring.append(float(A[-1]))
+
+        docking_pose_file = os.path.join(item['tmp_run_dir'], "swarm_0")
+        complex_file = [x for x in os.listdir(docking_pose_file) if '.pdb' in x][0]
+        docking_pose_file = os.path.join(item['tmp_run_dir'], "swarm_0", complex_file)
+        shutil.move(docking_pose_file, item['output_dir'])     
+        
+        item['score'] = min(scoring)
+        item['status'] = "success"
+        
+    except: 
+        logging.error("failed parsing")
+    return 
+
+## RLDock
+def docking_start_rldock(task): 
+    cpus_per_program = str(task['threads_per_docking'])
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = [
+            f"{task['tools_path']}/RLDOCK",
+            '--i', config_['receptor'],
+            '--l', task['ligand_path'],
+            '-c', config_['exhaustiveness'],
+            '-n', cpus_per_program, 
+            '-s', config_['spheres_file_path']
+        ]
+    return cmd
+
+def docking_finish_rldock(item, ret): 
+    try: 
+        docking_pose = os.path.join(item['tmp_run_dir_input'], "output_cluster.mol2")
+
+        with open(docking_pose, 'r') as f: 
+            lines = f.readlines()
+        lines = [x for x in lines if '# Total_Energy:' in x]
+        docking_scores = []
+        for item in lines: 
+            docking_scores.append(float(item.split(' ')[-1]))
+
+        shutil.move(docking_pose, item['output_dir'])        
+        item['score'] = min(docking_scores)
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
+    
+    return 
+
+## Autodock koto
+def docking_start_autodock_koto(task): 
+    cpus_per_program = str(task['threads_per_docking'])
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = [
+            f"{task['tools_path']}/AutoDock-Koto",
+            '--receptor', config_['receptor'],
+            '--ligand', task['ligand_path'],
+            '--cpu', cpus_per_program,
+            '--exhaustiveness', config_['exhaustiveness'],
+            '--center_x', '{}'.format(config_['center_x']),
+            '--center_y', '{}'.format(config_['center_y']),
+            '--center_z', '{}'.format(config_['center_z']),
+            '--size_x',   '{}'.format(config_['size_x']),
+            '--size_y',   '{}'.format(config_['size_y']),
+            '--size_z',   '{}'.format(config_['size_z']),
+            '--out', task['output_path']
+        ]
+    return cmd
+
+def docking_finish_autodock_koto(item, ret): 
+    try: 
+        docking_out = ret.stdout.decode("utf-8")
+        A = docking_out.split('\n')
+        docking_score = []
+        for item in A: 
+            line_split = item.split(' ')
+            line_split = [x for x in line_split if x != '']
+            if len(line_split) == 4: 
+                try: 
+                    vr_1 = float(line_split[0])
+                    vr_2 = float(line_split[1])
+                    vr_3 = float(line_split[2])
+                    vr_4 = float(line_split[3])
+                    docking_score.append(vr_2)
+                except: continue
+            item['score'] = min(docking_score)
+            item['status'] = "success"        
+    except: 
+        logging.error("failed parsing")
+    
+    return 
+
+## PSOvina
+
+def docking_start_PSOVina(task):
+    cpus_per_program = str(task['threads_per_docking'])
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = [
+            f"{task['tools_path']}/PSOVina",
+            '--receptor', config_['receptor'],
+            '--ligand', task['ligand_path'],
+            '--cpu', cpus_per_program,
+            '--exhaustiveness', config_['exhaustiveness'],
+            '--center_x', '{}'.format(config_['center_x']),
+            '--center_y', '{}'.format(config_['center_y']),
+            '--center_z', '{}'.format(config_['center_z']),
+            '--size_x',   '{}'.format(config_['size_x']),
+            '--size_y',   '{}'.format(config_['size_y']),
+            '--size_z',   '{}'.format(config_['size_z']),
+            '--out', task['output_path']
+         ]
+    return cmd
+
+def docking_finish_PSOVina(item, ret):
+    match = re.search(r'^\s+1\s+(?P<value>[-0-9.]+)\s+', ret.stdout, flags=re.MULTILINE)
+    if(match):
+        matches = match.groupdict()
+        item['score'] = float(matches['value'])
+        item['status'] = "success"
+    else:
+        item['log']['reason'] = f"Could not find score"
+        logging.error(item['log']['reason'])
+
+## *vina
+
+def docking_start_vina(task):
+    cpus_per_program = str(task['threads_per_docking'])
+
+    cmd = [
             f"{task['tools_path']}/{task['program']}",
             '--cpu', cpus_per_program,
             '--config', task['config_path'],
             '--ligand', task['ligand_path'],
             '--out', task['output_path']
         ]
-    elif(task['program'] == "smina"):
-        cmd = [
-            f"{task['tools_path']}/smina",
-            '--cpu', cpus_per_program,
-            '--config', task['config_path'],
-            '--ligand', task['ligand_path'],
-            '--out', task['output_path'],
-            '--log', f"task['output_path_base'].flexres.pdb",
-            '--atom_terms', f"task['output_path_base'].atomterms"
-        ]
-    else:
-        raise RuntimeError(f"Invalid program type of {task['program']}")
+    return cmd
 
-    #elif(task['program'] == "adfr"):
-    #    # TODO: convert config.txt and remove all newlines and pass in
-    #
-    #    adfr_config_options = ""
-    #
-    #    cmd = [
-    #        'adfr',
-    #        '-l', task['ligand_path'],
-    #        '--jobName', 'adfr',
-    #        adfr_config_options
-    #    ]
-        #                     adfr_configfile_options=$(cat ${docking_scenario_inputfolder}/config.txt | tr -d "\n")
-    #            { bin/time_bin -f " Docking timings \n-------------------------------------- \n user real system \n %U %e %S \n------------------------------------- \n" adfr -l ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format} --jobName adfr ${adfr_configfile_options} 2> >(tee ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output.tmp 1>&2) ; } 2>&1
-    #            rename "_adfr_adfr.out" "" ${next_ligand}_replica-${docking_replica_index} ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}*
-    #
-    #            score_value=$(grep -m 1 "FEB" ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/output-files/incomplete/${docking_scenario_name}/logfiles/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}_replica-${docking_replica_index}.${ligand_library_format} | awk -F ': ' '{print $(NF)}')
-    #elif(task['program'] == "plants"):
-    #    # TODO implement plants
-    #    adfr_config_options = ""
+def docking_finish_vina(item, ret):
+    match = re.search(r'^\s+1\s+(?P<value>[-0-9.]+)\s+', ret.stdout, flags=re.MULTILINE)
+    if(match):
+        matches = match.groupdict()
+        item['score'] = float(matches['value'])
+        item['status'] = "success"
+    else:
+        item['log']['reason'] = f"Could not find score"
+        logging.error(item['log']['reason'])
+
+## smina
+
+def docking_start_smina(task):
+    cpus_per_program = str(task['threads_per_docking'])
+    log_file = os.path.join(task['output_dir'], "out.flexres.pdb")
+    atomterms_file = os.path.join(task['output_dir'], "out.atomterms")
+
+    cmd = [
+        f"{task['tools_path']}/smina",
+        '--cpu', cpus_per_program,
+        '--config', task['config_path'],
+        '--ligand', task['ligand_path'],
+        '--out', task['output_path'],
+        '--log', log_file,
+        '--atom_terms', atomterms_file
+    ]
+    return cmd
+
+def docking_finish_smina(item, ret):
+    found = 0
+    for line in reversed(ret.stdout.splitlines()):
+        match = re.search(r'^1\s{4}\s*(?P<value>[-0-9.]+)\s*', line)
+        if(match):
+            matches = match.groupdict()
+            item['score'] = float(matches['value'])
+            item['status'] = "success"
+            found = 1
+            break
+    if(found == 0):
+        item['log']['reason'] = f"Could not find score"
+        logging.error(item['log']['reason'])
+
+
+## plants
+
+def docking_start_plants(task):
+
+    task['plants_tmp_file'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.txt")
+    shutil.copy(task['config_path'], task['plants_tmp_file'])
+
+    with open(task['plants_tmp_file'], 'a+') as f:
+        f.writelines('ligand_file {}\n'.format(task['ligand_path']))
+        f.writelines('output_dir {}\n'.format(task['output_path']))
+
+
+    cmd = ['{}/PLANTS'.format(task['tools_path']),
+            '--mode', 'screen',
+            task['plants_tmp_file']
+    ]
 
     return cmd
 
-# Individual tasks that will be completed in parallel
-
-
-def process_ligand(task):
-
-    start_time = time.perf_counter()
-
-    completion_event = {
-        'collection_key': task['collection_key'],
-        'ligand_key': task['ligand_key'],
-        'scenario_key': task['scenario_key'],
-        'replica_index': task['replica_index'],
-        'ligand_path': task['ligand_path'],
-        'output_path': task['output_path'],
-        'log_path': task['log_path'],
-        'status': "failed(docking)"
-    }
-
-    if(task['get_smi'] == True):
-        completion_event['smi'] = get_smi(task['ligand_format'], task['ligand_path'])
+def docking_finish_plants(item, ret):
 
     try:
-        cmd = program_runstring_array(task)
-    except RuntimeError as err:
-        logging.error(f"Invalid cmd generation for {task['ligand_key']} (program: '{task['program']}')")
-        raise(err)
+        plants_cmd = ret.stdout.decode("utf-8").split('\n')[-6]
+        item['score'] = float(plants_cmd.split(' ')[-1])
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
+
+
+## adfr
+
+def docking_start_adfr(item):
+    with open(item['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+
+    cmd = ['adfr',
+           '-t', '{}'.format(config_['receptor']),
+           '-l', '{}'.format(item['ligand_path']),
+           '--jobName', '{}'.format(item['output_path'])
+           ]
+    return cmd
+
+def docking_finish_adfr(item, ret):
 
     try:
-        ret = subprocess.run(cmd, capture_output=True,
-                         text=True, cwd=task['input_files_dir'], timeout=task['timeout'])
-    except subprocess.TimeoutExpired as err:
-        logging.error(f"timeout on {task['ligand_key']}")
-        end_time = time.perf_counter()
-        completion_event['seconds'] = end_time - start_time
-        return completion_event
+        docking_out = ret.stdout.decode("utf-8")
+        docking_scores = []
+        for line_item in docking_out:
+            A = line_item.split(' ')
+            A = [x for x in A if x != '']
+            try:
+                _, a_2, _ = float(A[0]), float(A[1]), float(A[2])
+            except:
+                continue
+            docking_scores.append(float(a_2))
 
-    if ret.returncode == 0:
+        item['score'] = min(docking_scores)
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
 
-        if(task['program'] == "qvina02"
-                or task['program'] == "qvina_w"
-                or task['program'] == "vina"
-                or task['program'] == "vina_carb"
-                or task['program'] == "vina_xb"
-                or task['program'] == "gwovina"
-           ):
+## AutodockZN
 
-            match = re.search(
-                r'^\s+1\s+(?P<value>[-0-9.]+)\s+', ret.stdout, flags=re.MULTILINE)
-            if(match):
-                matches = match.groupdict()
-                completion_event['score'] = float(matches['value'])
-                completion_event['status'] = "success"
-            else:
-                logging.error(
-                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+def docking_start_autodockzn(task):
 
-        elif(task['program'] == "smina"):
-            found = 0
-            for line in reversed(ret.stdout.splitlines()):
-                match = re.search(r'^1\s{4}\s*(?P<value>[-0-9.]+)\s*', line)
-                if(match):
-                    matches = match.groupdict()
-                    completion_event['score'] = float(matches['value'])
-                    completion_event['status'] = "success"
-                    found = 1
-                    break
-            if(found == 0):
-                logging.error(
-                    f"Could not find score for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
 
-        elif(task['program'] == "adfr"):
-            logging.error(
-                f"adfr not implemented {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
-        elif(task['program'] == "plants"):
-            logging.error(
-                f"plants not implemented {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
 
-    else:
-        logging.error(
-            f"Non zero return code for {task['collection_key']} {task['ligand_key']} {task['scenario_key']} {task['replica_index']}")
-        logging.error(f"stdout:\n{ret.stdout}\nstderr:{ret.stderr}\n")
+    cmd = ['{}/AutodockVina_1.2'.format(task['tools_path']),
+           '--ligand', '{}'.format(task['ligand_path']),
+           '--maps', config_['afinit_maps_name'],
+           '--scoring', 'ad4',
+           '--exhaustiveness', '{}'.format(config_['exhaustiveness']),
+           '--out', '{}'.format(task['output_path'])]
+    return cmd
 
-    # Place output into files
-    with open(task['log_path'], "w") as output_f:
-        output_f.write(f"STDOUT:\n{ret.stdout}\n")
-        output_f.write(f"STDERR:\n{ret.stderr}\n")
+## gnina
 
-    end_time = time.perf_counter()
+def docking_start_gnina(task):
 
-    completion_event['seconds'] = end_time - start_time
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
 
-    logging.info(f"Finished {task['ligand_key']} in {completion_event['seconds']} sec")
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
 
-    return completion_event
+    cmd = ['{}/gnina'.format(task['tools_path']),
+               '-r', config_['receptor'],
+               '-l', '{}'.format(task['ligand_path']),
+               '--exhaustiveness', '{}'.format(config_['exhaustiveness']),
+               '--center_x', '{}'.format(config_['center_x']),
+               '--center_y', '{}'.format(config_['center_y']),
+               '--center_z', '{}'.format(config_['center_z']),
+               '--size_x',   '{}'.format(config_['size_x']),
+               '--size_y',   '{}'.format(config_['size_y']),
+               '--size_z',   '{}'.format(config_['size_z']),
+               '--out', '{}'.format(task['output_path'])]
+    return cmd
 
-def get_collection_data(ctx, collection):
-    
-    ligands = {}
+## rDock
 
-    # Make a place to put the data
-    download_dir = Path(ctx['temp_dir']) / collection['collection_name']
-    download_dir.mkdir(parents=True, exist_ok=True)
-    collection_file = download_dir / f"{collection['collection_number']}.tar.gz"
+def docking_start_rdock(task):
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
 
-    if(ctx['job_storage_mode'] == "s3"):
-        
-        try:
-            with collection_file.open(mode = 'wb') as f:
-                ctx['s3'].download_fileobj(collection['s3_bucket'], collection['s3_download_path'], f)
-        except botocore.exceptions.ClientError as error:
-            logging.error(f"Failed to download from S3 {collection['s3_bucket']}/{collection['s3_download_path']} to {str(collection_file)}, ({error})")
-            raise
-    else:
-        shutil.copyfile(Path(collection['sharedfs_path']), collection_file)
+    cmd = [ 'rbdock',
+                '-i', task['ligand_path'],
+                '-o', task['output_path'],
+                '-r', config_['rdock_config'],
+                '-p', config_['dock_prm'],
+                '-n', config_['runs']]
+    return cmd
 
-    # Extract the ligands from the file
-
-    os.chdir(download_dir)
+def docking_finish_rdock(item, ret):
 
     try:
-        tar = tarfile.open(collection_file)
-        for member in tar.getmembers():
-            if(not member.isdir()):
-                _, ligand = member.name.split("/", 1)
-
-                ligands[ligand] = {
-                    'path':  os.path.join(download_dir, collection['collection_number'], ligand)
-                }
-
-        tar.extractall()
-        tar.close()
-    except Exception as err:
-        logging.error(
-            f"ERR: Cannot open {collection_file} type: {str(type(err))}, err: {str(err)}")
-        return None
+        with open(item['output_path'], 'r') as f:
+            lines = f.readlines()
+        score = []
+        for i, item in enumerate(lines):
+            if item.strip() == '>  <SCORE>':
+                score.append(float(lines[i+1]))
+        item['score'] = min(score)
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
 
 
-    return ligands
+## M-Dock
+
+def docking_start_mdock(task):
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = ['{}/MDock_Linux'.format(task['tools_path']),
+            config_['protein_name'],
+            task['ligand_path'],
+           '-param', config_['mdock_config']
+          ]
+
+    return cmd
 
 
+def docking_finish_mdock(item, ret):
 
-def preprocess_collection(ctx, collection):
-    collection['ligands'] = get_collection_data(ctx, collection)
-    collection['log'] = []
-    collection['log_json'] = []
+    try:
+        docking_scores = []
+
+        output_file = os.path.join(item['tmp_run_dir_input'], "mdock_dock.out")
+        with open(output_file, 'r') as f:
+            lines = f.readlines()
+
+        for item in lines:
+            docking_scores.append( float([x for x in item.split(' ') if x != ''][4]))
+
+        shutil.move(output_file, item['output_dir'])
+        mol_output_file = os.path.join(item['tmp_run_dir_input'], "mdock_dock.mol2")
+        shutil.move(mol_output_file, item['output_path'])
+
+        item['score'] = min(docking_scores)
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
+
+## MCDock
+
+def docking_start_mcdock(task):
+
+    with open(task['config_path']) as fd:
+            config_ = dict(read_config_line(line) for line in fd)
+
+    cmd = ['{}/mcdock'.format(task['tools_path']),
+        '--target', config_['protein_name'],
+        '--ligand', task['ligand_path']]
+
+    return cmd
+
+def docking_finish_mcdock(item, ret):
+
+    try:
+        output_file = os.path.join(item['tmp_run_dir_input'], "out.xyz")
+
+        with open(output_file, 'r') as f:
+            lines = f.readlines()
+
+        lines = [x for x in lines if 'Binding Energy' in x]
+        binding_energies = []
+        for item in lines:
+            binding_energies.append(float(item.split(' ')[2].split('\t')[0]))
+
+        item['score'] = min(binding_energies)
+        item['status'] = "success"
+
+        shutil.move(output_file, item['output_path'])
+    except:
+        logging.error("failed parsing")
+
+## LigandFit
+
+def docking_start_ligandfit(task):
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = ['{}/ligandfit'.format(task['tools_path']),
+           'data=', config_['receptor_mtz'],
+           'model=', config_['receptor'],
+           'ligand', task['ligand_path'],
+           'search_center=', config_['center_x'], config_['center_y'], config_['center_z']]
+
+    return cmd
+
+def docking_finish_ligandfit(item, ret):
+
+    run_pdb = os.path.join(item['tmp_run_dir_input'], "LigandFit_run_1_", "ligand_fit_1.pdb")
+    run_log = os.path.join(item['tmp_run_dir_input'], "LigandFit_run_1_", "ligand_1_1.log")
+
+    try:
+        with open(run_log, 'r') as f:
+            lines = f.readlines()
+        lines = [x for x in lines if 'Best score' in x]
+        scores = []
+        for item in lines:
+            scores.append( float([x for x in item.split(' ') if x != ''][-2]) )
+
+        item['score'] = min(scores)
+        item['status'] = "success"
+
+        shutil.move(run_pdb, item['output_path'])
+        shutil.move(run_log, item['output_dir'])
+    except:
+        logging.error("failed parsing")
+
+    # TODO
+    os.system('rm -rf LigandFit_run_1_')
+
+## ledock
+
+def docking_start_ledock(item):
+
+    item['ledock_tmp_file'] = os.path.join(item['tmp_run_dir'], "vfvs_tmp.in")
+    item['ledock_tmp_file_list'] = os.path.join(item['tmp_run_dir'], "vfvs_tmp.list")
+
+    cmd = [
+        '{}/ledock'.format(item['tools_path']),
+        '{}'.format(item['ledock_tmp_file'])
+    ]
+
+    with open(item['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+
+    docking_file = cmd[-1]
+    ligand_list_file = docking_file.split('.')[0] + '.list'
+
+    with open(docking_file, 'w') as f:
+        f.writelines(['Receptor'])
+        f.writelines([config_['receptor'] + '\n'])
+        f.writelines(['RMSD'])
+        f.writelines([config_['rmsd'] + '\n'])
+        f.writelines(['Binding pocket'])
+        f.writelines(['{} {}'.format( config_['min_x'], config_['max_x']) ])
+        f.writelines(['{} {}'.format( config_['min_y'], config_['max_y']) ])
+        f.writelines(['{} {}\n'.format( config_['min_z'], config_['max_z']) ])
+        f.writelines(['Number of binding poses'])
+        f.writelines([config_['n_poses'] + '\n'])
+        f.writelines(['Ligands list'])
+        f.writelines([item['ledock_tmp_file_list'] + '\n'])
+        f.writelines(['END'])
+
+    with open(item['ledock_tmp_file_list'], 'w') as f:
+        f.writelines(item['ligand_path'])
+
+    return cmd
+
+def docking_finish_ledock(item, ret):
+
+    try:
+        ligand_filename = item['ligand_path'].split('/')[-1]
+        ligand_base = ligand_filename.split('.')[0]
+
+        run_dok = os.path.join(item['tmp_run_dir_input'], "ligands", f"{ligand_base}.dok")
+
+        with open(run_dok, 'r') as f:
+            lines = f.readlines()
+        lines = [x for x in lines if 'Score' in x]
+        scores = []
+        for item in lines:
+            A = item.split('Score')[-1].strip().split(': ')[1].split(' ')[0]
+            scores.append(float(A))
+        item['score'] = min(scores)
+        item['status'] = "success"
+
+        shutil.move(run_dok, item['output_dir'])
+
+    except:
+        logging.error("failed parsing")
 
 
-def collection_output(ctx, collection, result_type, skip_num=0, tmp_prefix=0, append="", output_addressing="metatranche"):
-    path_components = []
+## gold
 
-    if(tmp_prefix):
-        path_components.append(ctx['temp_dir'])
+def docking_start_gold(item):
 
-    if(output_addressing == "hash"):
+    item['gold_tmp_file'] = os.path.join(item['tmp_run_dir'], "vfvs_tmp.conf")
+    item['gold_tmp_dir'] = os.path.join(item['tmp_run_dir'], "vfvs_tmp")
 
-        if(skip_num != 1):
-            hash_string = get_collection_hash(collection['collection_name'], collection['collection_number'])
+    with open(item['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
 
-            path_components = [
-                hash_string[0:2],
-                hash_string[2:4],
-                ctx['main_config']['job_letter'],
-                "output",
-                result_type,
-                collection['collection_name'],
-                get_formatted_collection_number(collection['collection_number'])
-            ]
-
-        else:
-            hash_string = get_collection_hash(collection['collection_name'], "0")
-
-            path_components = [
-                hash_string[0:2],
-                hash_string[2:4],
-                ctx['main_config']['job_letter'],
-                "output",
-                result_type,
-                collection['collection_name']
-            ]
-
-    else:
-
-        path_components.extend([
-            "output", result_type,
-            collection['collection_tranche'], collection['collection_name']
-        ])
-
-        if(skip_num != 1):
-            path_components.append(collection['collection_number'])
-
-    if(append != ""):
-        path_components[-1] = f"{path_components[-1]}{append}"
-
-    return path_components
-
-
-
-def collection_output_directory_status_gz(ctx, collection, result_type, skip_num=0, tmp_prefix=0):
-    return os.path.join(*collection_output(ctx, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=".status.gz"))
-
-def collection_output_directory_status_gz_hash(ctx, collection, result_type, skip_num=0, tmp_prefix=0):
-    return os.path.join(*collection_output(ctx, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=".status.gz", output_addressing=ctx['main_config']['object_store_job_addressing_mode']))
-
-def collection_output_directory_status_json_gz(ctx, collection, result_type, skip_num=0, tmp_prefix=0):
-    return os.path.join(*collection_output(ctx, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=".json.gz"))
-
-def collection_output_directory_status_json_gz_hash(ctx, collection, result_type, skip_num=0, tmp_prefix=0):
-    return os.path.join(*collection_output(ctx, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=".json.gz", output_addressing=ctx['main_config']['object_store_job_addressing_mode']))
-
-def collection_output_directory(ctx, collection, result_type, skip_num=0, tmp_prefix=0):
-    return os.path.join(*collection_output(ctx, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix))
-
-def get_formatted_collection_number(collection_number):
-    return f"{int(collection_number):07}"
-
-def get_collection_hash(collection_name, collection_number):
-
-    formatted_collection_number = get_formatted_collection_number(collection_number)
-    string_to_hash = f"{collection_name}/{formatted_collection_number}"
-    return hashlib.sha256(string_to_hash.encode()).hexdigest()
-
-
-def scenario_collection_output(ctx, scenario, collection, result_type, skip_num=0, tmp_prefix=0, append="", output_addressing="metatranche"):
-    path_components = []
-
-    if(tmp_prefix):
-        path_components.append(ctx['temp_dir'])
+    with open(item['gold_tmp_file'], 'w') as f:
+        f.writelines(['  GOLD CONFIGURATION FILE\n'])
+        f.writelines(['  AUTOMATIC SETTINGS'])
+        f.writelines(['autoscale = 1\n'])
+        f.writelines(['  POPULATION'])
+        f.writelines(['popsiz = auto'])
+        f.writelines(['select_pressure = auto'])
+        f.writelines(['n_islands = auto'])
+        f.writelines(['maxops = auto'])
+        f.writelines(['niche_siz = auto\n'])
+        f.writelines(['  GENETIC OPERATORS'])
+        f.writelines(['pt_crosswt = auto'])
+        f.writelines(['allele_mutatewt = auto'])
+        f.writelines(['migratewt = auto\n'])
+        f.writelines(['  FLOOD FILL'])
+        f.writelines(['radius = {}'.format(config_['radius'])])
+        f.writelines(['origin = {}   {}   {}'.format(config_['center_x'], config_['center_y'], config_['center_z'])])
+        f.writelines(['do_cavity = 0'])
+        f.writelines(['floodfill_center = point\n'])
+        f.writelines(['   DATA FILES'])
+        f.writelines(['ligand_data_file {} 10'.format(item['ligand_path'])])
+        f.writelines(['param_file = DEFAULT'])
+        f.writelines(['set_ligand_atom_types = 1'])
+        f.writelines(['set_protein_atom_types = 0'])
+        f.writelines(['directory = {}'.format(item['gold_tmp_dir'])])
+        f.writelines(['tordist_file = DEFAULT'])
+        f.writelines(['make_subdirs = 0'])
+        f.writelines(['save_lone_pairs = 1'])
+        f.writelines(['fit_points_file = fit_pts.mol2'])
+        f.writelines(['read_fitpts = 0'])
+        f.writelines(['bestranking_list_filename = bestranking.lst\n'])
+        f.writelines(['   FLAGS'])
+        f.writelines(['internal_ligand_h_bonds = 1'])
+        f.writelines(['flip_free_corners = 1'])
+        f.writelines(['match_ring_templates = 1'])
+        f.writelines(['flip_amide_bonds = 0'])
+        f.writelines(['flip_planar_n = 1 flip_ring_NRR flip_ring_NHR'])
+        f.writelines(['flip_pyramidal_n = 0'])
+        f.writelines(['rotate_carboxylic_oh = flip'])
+        f.writelines(['use_tordist = 1'])
+        f.writelines(['postprocess_bonds = 1'])
+        f.writelines(['rotatable_bond_override_file = DEFAULT'])
+        f.writelines(['solvate_all = 1\n'])
+        f.writelines(['   TERMINATION'])
+        f.writelines(['early_termination = 1'])
+        f.writelines(['n_top_solutions = 3'])
+        f.writelines(['rms_tolerance = 1.5\n'])
+        f.writelines(['   CONSTRAINTS'])
+        f.writelines(['force_constraints = 0\n'])
+        f.writelines(['   COVALENT BONDING'])
+        f.writelines(['covalent = 0\n'])
+        f.writelines(['   SAVE OPTIONS'])
+        f.writelines(['save_score_in_file = 1'])
+        f.writelines(['save_protein_torsions = 1\n'])
+        f.writelines(['  FITNESS FUNCTION SETTINGS'])
+        f.writelines(['initial_virtual_pt_match_max = 4'])
+        f.writelines(['relative_ligand_energy = 1'])
+        f.writelines(['gold_fitfunc_path = goldscore'])
+        f.writelines(['score_param_file = DEFAULT\n'])
+        f.writelines(['  PROTEIN DATA'])
+        f.writelines(['protein_datafile = {}'.format(config_['receptor'])])
 
 
-    if(output_addressing == "hash"):
+    cmd = ['{}/gold_auto'.format(item['tools_path']), '{}'.format(item['gold_tmp_file'])]
 
-        if(skip_num != 1):
-            hash_string = get_collection_hash(collection['collection_name'], collection['collection_number'])
-
-            path_components = [
-                hash_string[0:2],
-                hash_string[2:4],
-                ctx['main_config']['job_letter'],
-                "output",
-                scenario['key'],
-                result_type,
-                collection['collection_name'],
-                get_formatted_collection_number(collection['collection_number'])
-            ]
-
-            if(append != ""):
-                path_components[-1] = f"{path_components[-1]}{append}"
-        else:
-            hash_string = get_collection_hash(collection['collection_name'], "0")
-
-            path_components = [
-                hash_string[0:2],
-                hash_string[2:4],
-                ctx['main_config']['job_letter'],
-                "output",
-                scenario['key'],
-                result_type,
-                collection['collection_name']
-            ]
-
-            if(append != ""):
-                path_components[-1] = f"{path_components[-1]}{append}"
-
-    else:
-
-        path_components.extend([
-            "output", scenario['key'], result_type,
-            collection['collection_tranche'], collection['collection_name']
-        ])
-
-        if(skip_num != 1):
-            path_components.append(collection['collection_number'])
-
-        if(append != ""):
-            path_components[-1] = f"{path_components[-1]}{append}"
+    return cmd
 
 
-    return path_components
+def docking_finish_gold(item, ret):
+    try:
+        # TODO -- fix all of this...
+
+        run_output = os.path.join(item['gold_tmp_dir'], "ligand_m1.rnk")
+        run_pose = os.path.join(item['gold_tmp_dir'], "gold_ligand_m1.mol2")
+
+        with open(run_output, 'r') as f:
+            lines = f.readlines()
+            docking_score = float([x for x in lines[-1].split(' ') if x!=''][1])
+            item['score'] = min(docking_score)
+            item['status'] = "success"
+
+        shutil.move(run_pose, item['output_dir'])
+        shutil.move(run_output, item['output_dir'])
+
+    except:
+        logging.error("failed parsing")
 
 
-def scenario_collection_output_directory(ctx, scenario, collection, result_type, skip_num=0, tmp_prefix=0):
-    return os.path.join(*scenario_collection_output(ctx, scenario, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix))
+## iGemDock
+
+def docking_start_igemdock(task):
+
+    task['igemdock_temp_dir'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp")
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = ['{}/mod_ga'.format(task['tools_path']),
+           config_['exhaustiveness'],
+           config_['receptor'],
+           task['ligand_path'],
+           '-d', item['igemdock_temp_dir']
+    ]
+
+    return cmd
 
 
-def scenario_collection_output_directory_tgz(ctx, scenario, collection, result_type, skip_num=0, tmp_prefix=0):
-    return os.path.join(*scenario_collection_output(ctx, scenario, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=".tar.gz"))
+def docking_finish_igemdock(task, ret):
+
+    try:
+
+        docked_pose = os.listdir(os.path.join(task['igemdock_temp_dir'], ''))[0]
+        with open(docked_pose, 'r') as f:
+            lines = f.readlines()
+
+        docking_score = lines[4]
+        docking_score = float([x for x in docking_score.split(' ') if x != ''][1])
+
+        shutil.move(docked_pose, task['output_path'])
+
+        task['score'] = min(docking_score)
+        task['status'] = "success"
+    except:
+        logging.error("failed parsing")
+
+## idock
+
+def docking_start_idock(item):
+
+    with open(item['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = ['{}/idock'.format(item['tools_path']),
+           '--receptor', config_['receptor'],
+           '--ligand', item['ligand_path'],
+           '--center_x', config_['center_x'],
+           '--center_y', config_['center_y'],
+           '--center_z', config_['center_z'],
+           '--size_x', config_['size_x'],
+           '--size_y', config_['size_y'],
+           '--size_z', config_['size_z'],
+           '--out', '{}'.format(item['output_path'])]
+
+    return cmd
+
+def docking_finish_idock(item, ret):
+    try:
+        docking_out = ret.stdout.decode("utf-8")
+        docking_out = float([x for x in docking_out.split(' ') if x != ''][-2])
+        item['score'] = min(docking_out)
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
+
+## GalaxyDock3
+
+def docking_start_galaxydock3(task):
+
+    task['galaxydock3_tmp_file'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.in")
+    task['ligdock_prefix'] = "vfvs_tmp"
+
+    cmd = [
+            '{}/GalaxyDock3'.format(task['tools_path']),
+            task['galaxydock3_tmp_file']
+    ]
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+
+    with open(cmd[-1], 'w') as f:
+        f.writelines(['!=============================================='])
+        f.writelines(['! I/O Parameters'])
+        f.writelines(['!=============================================='])
+        f.writelines(['data_directory    ./'])
+        f.writelines(['infile_pdb        {}'.format(config_['receptor'])])
+        f.writelines(['infile_ligand        {}'.format(task['ligand_path'])])
+        f.writelines(['top_type          polarh'])
+        f.writelines(['fix_type          all'])
+        f.writelines(['ligdock_prefix    {}'.format(task['ligdock_prefix'])])
+        f.writelines(['!=============================================='])
+        f.writelines(['! Grid Options'])
+        f.writelines(['!=============================================='])
+        f.writelines(['grid_box_cntr     {} {} {}'.format(config_['grid_box_cntr'].split(' ')[0], config_['grid_box_cntr'].split(' ')[1], config_['grid_box_cntr'].split(' ')[2])])
+        f.writelines(['grid_n_elem       {} {} {}'.format(config_['grid_n_elem'].split(' ')[0], config_['grid_n_elem'].split(' ')[1], config_['grid_n_elem'].split(' ')[2])])
+        f.writelines(['grid_width        {}'.format(config_['grid_width'])])
+        f.writelines(['!=============================================='])
+        f.writelines(['! Energy Parameters'])
+        f.writelines(['!=============================================='])
+        f.writelines(['weight_type              GalaxyDock3'])
+        f.writelines(['!=============================================='])
+        f.writelines(['! Initial Bank Parameters'])
+        f.writelines(['!=============================================='])
+        f.writelines(['first_bank               rand'])
+        f.writelines(['max_trial                {}'.format(config_['max_trial'])])
+        f.writelines(['e0max                    1000.0'])
+        f.writelines(['e1max                    1000000.0'])
+        f.writelines(['n_proc 1'])
 
 
-def scenario_collection_output_directory_tgz_hash(ctx, scenario, collection, result_type, skip_num=0, tmp_prefix=0):
-    return os.path.join(*scenario_collection_output(ctx, scenario, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=".tar.gz", output_addressing=ctx['main_config']['object_store_job_addressing_mode']))
+    return cmd
+
+def docking_finish_galaxydock3(item, ret):
+    try:
+
+        info_file = os.path.join(item['tmp_run_dir_input'], f"{item['ligdock_prefix']}_fb.E.info")
+        mol_file = os.path.join(item['tmp_run_dir_input'], f"{item['ligdock_prefix']}_fb.mol2")
+
+        with open(info_file, 'r') as f:
+            lines = f.readlines()
+        lines = lines[3: ]
+        docking_scores = []
+        for item in lines:
+            try:
+                A = item.split(' ')
+                A = [x for x in A if x != '']
+                docking_scores.append(float(A[5]))
+            except:
+                continue
+
+        shutil.move(info_file, item['output_dir'])
+        shutil.move(mol_file, item['output_dir'])
+
+        item['score'] = min(docking_scores)
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
 
 
-def scenario_collection_output_directory_txt_gz(ctx, scenario, collection, result_type, skip_num=0, tmp_prefix=0, summary_format="txt.gz"):
-    return os.path.join(*scenario_collection_output(ctx, scenario, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=f".{summary_format}"))
+## Autodock
+
+def docking_start_autodock(item, arch_type):
+
+    with open(item['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
+
+    cmd = ['{}/autodock_{}'.format(item['tools_path'], arch_type),
+           '--ffile', config_['receptor'],
+           '--lfile', item['ligand_path']]
+
+    return cmd
+
+def docking_finish_autodock(item, ret):
+    try :
+        output = ret.stdout.decode("utf-8").split('\n')[-6]
+        lines = [x.strip() for x in output if 'best energy' in x][0]
+        docking_score = float(lines.split(',')[1].split(' ')[-2])
+        item['score'] = min(docking_score)
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
 
 
-def scenario_collection_output_directory_txt_gz_hash(ctx, scenario, collection, result_type, skip_num=0, tmp_prefix=0, summary_format="txt.gz"):
-    return os.path.join(*scenario_collection_output(ctx, scenario, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=f".{summary_format}", output_addressing=ctx['main_config']['object_store_job_addressing_mode']))
 
 def get_workunit_information():
 
@@ -592,108 +2153,6 @@ def get_subjob_config(ctx, workunit_id, subjob_id):
         raise RuntimeError(f"Invalid jobstoragemode of {ctx['job_storage_mode']}. VFVS_JOB_STORAGE_MODE must be 's3' or 'sharedfs' ")
 
 
-def create_summary_file(ctx, scenario, collection, scenario_result, output_format="txt.gz", get_smi=False):
-
-    # Open the summary file
-
-    summary_dir = scenario_collection_output_directory(
-        ctx, scenario, collection, "summaries", tmp_prefix=1, skip_num=1)
-
-    os.makedirs(summary_dir, exist_ok=True)
-
-    os.chdir(summary_dir)
-
-
-    if(output_format == "txt.gz"):
-        with gzip.open(f"{collection['collection_number']}.txt.gz", "wt") as summmary_fp:
-
-            if(get_smi):
-                summmary_fp.write(
-                    "Tranche    Compound   SMILES   average-score maximum-score  number-of-dockings ")
-            else:
-                summmary_fp.write(
-                    "Tranche    Compound   average-score maximum-score  number-of-dockings ")
-
-            for replica_index in range(scenario['replicas']):
-                replica_str = f"score-replica-{replica_index}"
-                summmary_fp.write(f"{replica_str}")
-            summmary_fp.write("\n")
-
-            # Now we need to go through each ligand
-            for ligand_key in scenario_result['ligands']:
-                ligand = scenario_result['ligands'][ligand_key]
-
-                if(len(ligand['scores']) > 0):
-
-                    max_score = max(ligand['scores'])
-                    avg_score = sum(ligand['scores']) / len(ligand['scores'])
-
-                    if(get_smi):
-                        summmary_fp.write(
-                            f"{collection['collection_full_name']} {ligand_key}     {ligand['smi']}     {avg_score:3.1f}    {max_score:3.1f}     {len(ligand['scores']):5d}   ")
-                    else:
-                        summmary_fp.write(
-                            f"{collection['collection_full_name']} {ligand_key}     {avg_score:3.1f}    {max_score:3.1f}     {len(ligand['scores']):5d}   ")
-
-
-                    for replica_index in range(scenario['replicas']):
-                        summmary_fp.write(
-                            f"{ligand['scores'][replica_index]:3.1f}   ")
-                    summmary_fp.write("\n")
-
-        return os.path.join(summary_dir, f"{collection['collection_number']}.txt.gz")
-
-    elif(output_format == "parquet"):
-        output_filename = f"{collection['collection_number']}.parquet"
-
-        columns = ['collection', 'compound', 'scenario', 'collection_number',
-                    'average_score', 'maximum_score', 'minimum_score', 'number_of_dockings','s3_download_path']
-
-        if(get_smi):
-            columns.append("SMILES")
-
-        for replica_index in range(scenario['replicas']):
-            columns.append(f"score_replica_{replica_index}")
-
-        df = pd.DataFrame(columns = columns)
-
-        for ligand_key in scenario_result['ligands']:
-            ligand = scenario_result['ligands'][ligand_key]
-
-            if(len(ligand['scores']) > 0):
-
-                record = {
-                    'collection' : collection['collection_name'],
-                    'compound' : ligand_key,
-                    'scenario' : scenario['key'],
-                    'collection_number' : collection['collection_number'],
-                    'average_score' : sum(ligand['scores']) / len(ligand['scores']),
-                    'maximum_score' : max(ligand['scores']),
-                    'minimum_score' : min(ligand['scores']),
-                    'number_of_dockings' : len(ligand['scores'])
-                }
-
-                if(get_smi):
-                    record['SMILES'] = ligand['smi']
-
-                if(ctx['job_storage_mode'] == "s3"):
-                    record['s3_download_path'] = collection['s3_download_path']
-                else:
-                    record['s3_download_path'] = collection['sharedfs_path']
-
-                for replica_index in range(scenario['replicas']):
-                    record[f"score_replica_{replica_index}"] = ligand['scores'][replica_index]
-
-            df = df.append(record, ignore_index = True)
-
-        df.to_parquet(output_filename, compression='snappy')
-
-        return os.path.join(summary_dir, output_filename)
-    else:
-        logging.error(f"Invalid summary format of {output_format}")
-        exit(1)
-
-
 
 
 def process(ctx):
@@ -721,339 +2180,119 @@ def process(ctx):
 
     process_config(ctx)
 
+    ctx['workunit_id'] = workunit_id
+    ctx['subjob_id'] = subjob_id
+
+    ctx.pop('s3', None)
+
     print(ctx['temp_dir'])
 
     ligand_format = ctx['main_config']['ligand_library_format']
 
-    get_smi = 0
-    if('print_smi_in_summary' in ctx['main_config'] and int(ctx['main_config']['print_smi_in_summary']) == 1):
-        get_smi = True
-
 
     # Need to expand out all of the collections in this subjob
-    
     subjob = ctx['subjob_config']
 
-    collections = {}
-    for collection_key in subjob['collections']:
-        collection = subjob['collections'][collection_key]
- 
-        collection_full_name = collection['collection_full_name']
-        collection_count = collection['ligand_count']
-
-        preprocess_collection(ctx, collection)
-        collections[collection_full_name] = collection
-
+    metadata = {
+        'workunit_id': workunit_id,
+        'subunit_id': subjob_id,
+        'ligand_library_format': ligand_format,
+        'vcpus_to_use': ctx['vcpus_to_use']
+    }
+
+
+    download_queue = Queue()
+    unpack_queue = Queue()
+    collection_queue = Queue()
+    docking_queue = Queue()
+    summary_queue = Queue()
+    upload_queue = Queue()
+
+
+
+    try:
+        downloader_processes = []
+        for i in range(0, math.ceil(ctx['vcpus_to_use'] / 8.0)):
+            downloader_processes.append(Process(target=downloader, args=(download_queue, unpack_queue, summary_queue, ctx['temp_dir'])))
+            downloader_processes[i].start()
+
+        unpacker_processes = []
+        for i in range(0, math.ceil(ctx['vcpus_to_use'] / 8.0)):
+            unpacker_processes.append(Process(target=untar, args=(unpack_queue, collection_queue)))
+            unpacker_processes[i].start()
+
+        collection_processes = []
+        for i in range(0, math.ceil(ctx['vcpus_to_use'] / 8.0)):
+            # collection_process(ctx, collection_queue, docking_queue, summary_queue)
+            collection_processes.append(Process(target=collection_process, args=(ctx, collection_queue, docking_queue, summary_queue)))
+            collection_processes[i].start()
+
+        docking_processes = []
+        for i in range(0, ctx['vcpus_to_use']):
+            # docking_process(docking_queue, summary_queue)
+            docking_processes.append(Process(target=docking_process, args=(docking_queue, summary_queue)))
+            docking_processes[i].start()
+
+        # There should never be more than one summary process
+        summary_processes = []
+        summary_processes.append(Process(target=summary_process, args=(ctx, summary_queue, upload_queue, metadata)))
+        summary_processes[0].start()
+
+        uploader_processes = []
+        for i in range(0, 2):
+            # docking_process(docking_queue, summary_queue)
+            uploader_processes.append(Process(target=upload_process, args=(ctx, upload_queue)))
+            uploader_processes[i].start()
+
+
+        for collection_key in subjob['collections']:
+            collection = subjob['collections'][collection_key]
+
+            collection_name, collection_number = collection_key.split("_", maxsplit=1)
+            collection['collection_number'] = collection_number
+            collection['collection_name'] = collection_name
+
+            download_item = {
+                'collection_key': collection_key,
+                'collection': collection,
+                'ext': "tar.gz",
+            }
+
+            download_queue.put(download_item)
+
+            # Don't overflow the queues
+            while download_queue.qsize() > 25:
+                time.sleep(0.2)
+
+
+        flush_queue(download_queue, downloader_processes, "download")
+        flush_queue(unpack_queue, unpacker_processes, "unpack")
+        flush_queue(collection_queue, collection_processes, "collection")
+        flush_queue(docking_queue, docking_processes, "docking")
+        flush_queue(summary_queue, summary_processes, "summary")
+        flush_queue(upload_queue, uploader_processes, "upload")
+
+    except Exception as e:
+        logging.error(f"Received exception {e}, terminating")
+
+        for process in [*downloader_processes, *unpacker_processes, *collection_processes, *docking_processes, *summary_processes, *uploader_processes]:
+            print(process.name)
+            process.kill()
+        sys.exit(1)
+
+
+
+def flush_queue(queue, processes, description):
+    logging.error(f"Sending {description} flush")
+    for process in processes:
+        queue.put(None)
+    logging.error(f"Join {description}")
+    for process in processes:
+        process.join()
+        if(process.exitcode != 0):
+            raise RuntimeError(f'Process from {description} exited with {process.exitcode}')
+    logging.error(f"Finished Join of {description}")
 
-    logging.info(f"Finished processing collections")
-
-    # Setup the data structure where we will keep the summary information
-    scenario_results = {}
-    for scenario_key in ctx['main_config']['docking_scenarios']:
-        scenario_results[scenario_key] = {}
-
-        for collection_key in collections:
-            collection = collections[collection_key]
-
-            scenario_results[scenario_key][collection_key] = {'ligands': {}}
-
-            for ligand_key in collection['ligands']:
-                scenario_results[scenario_key][collection_key]['ligands'][ligand_key] = {
-                }
-                scenario_results[scenario_key][collection_key]['ligands'][ligand_key]['scores'] = [
-                ]
-
-    # See if any of the ligands in the collections are invalid for processing
-
-    for collection_key in collections:
-        collection = collections[collection_key]
-
-        ligands_to_skip = []
-
-        for ligand_key in collection['ligands']:
-            ligand = collection['ligands'][ligand_key]
-
-            coords = {}
-            skip_ligand = 0
-            skip_reason = ""
-            skip_reason_json = ""
-
-            logging.debug(f"pre-processing {ligand_key}")
-
-            # Check to see if ligand contains B, Si, Sn or has duplicate coordinates
-            with open(ligand['path'], "r") as read_file:
-                for index, line in enumerate(read_file):
-
-                    match = re.search(r'(?P<letters>\s+(B|Si|Sn)\s+)', line)
-                    if(match):
-                        matches = match.groupdict()
-                        logging.error(
-                            f"Found {matches['letters']} in {collection_full_name}/{ligand_key}. Skipping.")
-                        skip_reason = f"failed(ligand_elements:{matches['letters']})"
-                        skip_reason_json = f"ligand includes elements: {matches['letters']})"
-                        skip_ligand = 1
-                        break
-
-                    match = re.search(r'^ATOM', line)
-                    if(match):
-                        parts = line.split()
-                        coord_str = ":".join(parts[5:8])
-
-                        if(coord_str in coords):
-                            logging.error(
-                                f"Found duplicate coordinates in {collection_full_name}/{ligand_key}. Skipping.")
-                            skip_reason = f"failed(ligand_coordinates)"
-                            skip_reason_json = f"duplicate coordinates"
-                            skip_ligand = 1
-                            break
-                        coords[coord_str] = 1
-
-            if skip_ligand:
-                collection['log'].append(f"{ligand_key} {skip_reason}")
-                collection['log_json'].append(
-                    {'ligand': ligand_key, 'status': 'failed', 'info': skip_reason_json})
-                ligands_to_skip.append(ligand_key)
-
-        for ligand_key in ligands_to_skip:
-            collection['ligands'].pop(ligand_key, None)
-
-    # Create the task list based on the scenarios and replicas required
-    tasklist = []
-    for scenario_key in ctx['main_config']['docking_scenarios']:
-        scenario = ctx['main_config']['docking_scenarios'][scenario_key]
-
-        logging.debug(f"Generating scenario information for '{scenario_key}', program '{scenario['program']}'")
-
-        # For each collection
-        for collection_key in collections:
-            collection = collections[collection_key]
-
-            # Setup the directories for this scenario / collection combination
-
-            results_dir = scenario_collection_output_directory(
-                ctx, scenario, collection, "results", tmp_prefix=1)
-            log_dir = scenario_collection_output_directory(
-                ctx, scenario, collection, "logfiles", tmp_prefix=1)
-
-            os.makedirs(results_dir, exist_ok=True)
-            os.makedirs(log_dir, exist_ok=True)
-
-            # For each ligand, iterate through each replica and generate a task that can be
-            # parallel processed
-
-            for ligand_key in collection['ligands']:
-                ligand = collection['ligands'][ligand_key]
-
-                logging.debug(f"Adding {ligand_key} to tasklist")
-
-                # For each replica
-                for replica_index in range(scenario['replicas']):
-
-                    task = {
-                        'collection_key': collection_key,
-                        'ligand_key': ligand_key,
-                        'ligand_format': ligand_format,
-                        'scenario_key': scenario_key,
-                        'config_path': scenario['config'],
-                        'program': scenario['program'],
-                        'program_long': scenario['program_long'],
-                        'replica_index': replica_index,
-                        'ligand_path': ligand['path'],
-                        'output_path_base': os.path.join(results_dir, f'{ligand_key}_replica-{replica_index}'),
-                        'output_path': os.path.join(results_dir, f'{ligand_key}_replica-{replica_index}.{ligand_format}'),
-                        'log_path': os.path.join(log_dir, f'{ligand_key}_replica-{replica_index}'),
-                        'input_files_dir':  os.path.join(ctx['temp_dir'], "vf_input", "input-files"),
-                        'timeout': int(ctx['main_config']['program_timeout']),
-                        'tools_path': ctx['tools_path'],
-                        'threads_per_docking': int(ctx['main_config']['threads_per_docking']),
-                        'get_smi': get_smi
-                    }
-
-                    tasklist.append(task)
-
-    # At this point we have all of the individual tasks generated. The next step is to divide these up to
-    # multiple processes in a pool. Each task will run independently and generate results
-
-    logging.info(f"Starting processing ligands with {ctx['vcpus_to_use']} vcpus")
-
-    with multiprocessing.Pool(processes=ctx['vcpus_to_use']) as pool:
-        res = pool.map(process_ligand, tasklist)
-
-    # We are done with all of the docking now, we need to summarize them all
-
-    # For each task get the data collected
-
-    for task_result in res:
-        collection_key = task_result['collection_key']
-        scenario_key = task_result['scenario_key']
-        ligand_key = task_result['ligand_key']
-        replica_index = task_result['replica_index']
-
-        collection = collections[collection_key]
-
-        # Check to see if it was successful or not...
-        if(task_result['status'] == "success"):
-            score = task_result['score']
-            scenario_results[scenario_key][collection_key]['ligands'][ligand_key]['scores'].append(
-                score)
-            collection['log'].append(
-                f"{ligand_key} {scenario_key} {replica_index} succeeded total-time:{task_result['seconds']:.2f}")
-            collection['log_json'].append({
-                'ligand': ligand_key, 'scenario_key': scenario_key, 'replica_index': replica_index,
-                'status': 'succeeded', 'seconds': f"{task_result['seconds']:.2f}", 'score': score
-            })
-            if 'smi' in task_result:
-                scenario_results[scenario_key][collection_key]['ligands'][ligand_key]['smi'] = task_result['smi']
-        else:
-            collection['log'].append(
-                f"{ligand_key} {scenario_key} {replica_index} {task_result['status']} total-time:{task_result['seconds']:.2f}")
-            collection['log_json'].append({'ligand': ligand_key, 'scenario_key': scenario_key, 'replica_index': replica_index,
-                                          'status': task_result['status'], 'seconds': f"{task_result['seconds']:.2f}"})
-
-    # Now we can generate the summary files
-    for scenario_key in ctx['main_config']['docking_scenarios']:
-        scenario = ctx['main_config']['docking_scenarios'][scenario_key]
-        for collection_key in collections:
-            collection = collections[collection_key]
-            scenario_result = scenario_results[scenario_key][collection_key]
-
-            for summary_format in ctx['main_config']['summary_formats']:
-                output_name = create_summary_file(
-                    ctx, scenario, collection, scenario_result, output_format=summary_format, get_smi=get_smi)
-
-    # Generate the compressed files
-
-    for scenario_key in ctx['main_config']['docking_scenarios']:
-        scenario = ctx['main_config']['docking_scenarios'][scenario_key]
-        for collection_key in collections:
-            collection = collections[collection_key]
-
-            # Generate the tarfile of all results
-            tarpath = generate_tarfile(ctx, scenario_collection_output_directory(
-                ctx, scenario, collection, "results", tmp_prefix=1))
-
-            # Generate the tarfile of all logs
-            tarpath = generate_tarfile(ctx, scenario_collection_output_directory(
-                ctx, scenario, collection, "logfiles", tmp_prefix=1))
-
-            # Summaries are already gzipped when written
-
-    # Now we need to move these data files -- S3 or elsewhere on the filesystem
-
-    for scenario_key in ctx['main_config']['docking_scenarios']:
-        scenario = ctx['main_config']['docking_scenarios'][scenario_key]
-        for collection_key in collections:
-            collection = collections[collection_key]
-
-            logging.info(f"Completed scenario: {scenario_key}, collection: {collection_key}")
-
-            # Copy the results..
-            copy_output(ctx,
-                        {
-                            'src': scenario_collection_output_directory_tgz(ctx, scenario, collection, 'results', tmp_prefix=1),
-                            'dest_path': scenario_collection_output_directory_tgz_hash(ctx, scenario, collection, 'results', tmp_prefix=0),
-                        }
-                        )
-
-            copy_output(ctx,
-                        {
-                            'src': scenario_collection_output_directory_tgz(ctx, scenario, collection, 'logfiles', tmp_prefix=1),
-                            'dest_path': scenario_collection_output_directory_tgz_hash(ctx, scenario, collection, 'logfiles', tmp_prefix=0),
-                        }
-                        )
-
-            for summary_format in ctx['main_config']['summary_formats']:
-                copy_output(ctx,
-                            {
-                                'src': scenario_collection_output_directory_txt_gz(ctx, scenario, collection, 'summaries', tmp_prefix=1, summary_format=summary_format),
-                                'dest_path': scenario_collection_output_directory_txt_gz_hash(ctx, scenario, collection, 'summaries', tmp_prefix=0, summary_format=summary_format),
-                            }
-                            )
-
-    # We also have one file at the collection level
-    for collection_key in collections:
-        collection = collections[collection_key]
-
-        ligand_log_dir = collection_output_directory(
-            ctx, collection, "ligand-lists", tmp_prefix=1, skip_num=1)
-        ligand_log_file = collection_output_directory_status_gz(
-            ctx, collection, "ligand-lists", tmp_prefix=1)
-        ligand_log_file_json = collection_output_directory_status_json_gz(
-            ctx, collection, "ligand-lists", tmp_prefix=1)
-
-        os.makedirs(ligand_log_dir, exist_ok=True)
-        os.chdir(ligand_log_dir)
-
-        with gzip.open(ligand_log_file, "wt") as summmary_fp:
-            for log_entry in collection['log']:
-                summmary_fp.write(f"{log_entry}\n")
-
-        # Now transfer over txt file
-        copy_output(ctx,
-                    {
-                        'src': ligand_log_file,
-                        'dest_path': collection_output_directory_status_gz_hash(ctx, collection, "ligand-lists", tmp_prefix=0),
-                    }
-                    )
-
-        with gzip.open(ligand_log_file_json, "wt") as summmary_fp:
-            json.dump(collection['log_json'], summmary_fp, indent=4)
-
-        # Now transfer over JSON file
-        copy_output(ctx,
-                    {
-                        'src': ligand_log_file_json,
-                        'dest_path': collection_output_directory_status_json_gz_hash(ctx, collection, "ligand-lists", tmp_prefix=0),
-                    }
-                    )
-
-
-def copy_output(ctx, obj):
-
-
-    if(ctx['job_storage_mode'] == "s3"):
-        if(ctx['main_config']['object_store_job_addressing_mode'] == "hash"):
-            object_name = f"{ctx['main_config']['object_store_job_prefix']}/{obj['dest_path']}"
-        else:
-            object_name = f"{ctx['main_config']['object_store_job_prefix_full']}/{obj['dest_path']}"
-
-        try:
-            response = ctx['s3'].upload_file(
-                obj['src'], ctx['main_config']['object_store_job_bucket'], object_name)
-        except botocore.exceptions.ClientError as e:
-            logging.error(e)
-
-            # We want to fail if this happens...
-            raise(e)
-            return False
-
-        logging.info(f"Copied output to '{object_name}'' in bucket '{ctx['main_config']['object_store_job_bucket']}'")
-
-    elif(ctx['job_storage_mode'] == "sharedfs"):
-
-        copy_to_location = f"{ctx['main_config']['sharedfs_workflow_path']}/{obj['dest_path']}"
-
-        parent_directory = Path(Path(copy_to_location).parent)
-        parent_directory.mkdir(parents=True, exist_ok=True)
-
-        shutil.copyfile(obj['src'], copy_to_location)
-
-        logging.info(f"Copied output to '{copy_to_location}'")
-    else:
-        logging.error("invalid job storage mode")
-
-
-
-    return True
-
-
-def generate_tarfile(ctx, dir):
-    os.chdir(str(Path(dir).parents[0]))
-
-    with tarfile.open(f"{os.path.basename(dir)}.tar.gz", "x:gz") as tar:
-        tar.add(os.path.basename(dir))
-
-    return os.path.join(str(Path(dir).parents[0]), f"{os.path.basename(dir)}.tar.gz")
 
 
 def main():
@@ -1081,6 +2320,7 @@ def main():
 
         print(ctx['temp_dir'])
         process(ctx)
+        print(ctx['temp_dir'])
 
 
 if __name__ == '__main__':

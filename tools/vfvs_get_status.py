@@ -42,74 +42,74 @@ import hashlib
 from botocore.config import Config
 from pathlib import Path
 import argparse
+import gzip
+import multiprocessing
+from multiprocessing import Process
+from multiprocessing import Queue
+from queue import Empty
+import logging
+import shutil
 
 
-batch_job_statuses = {
-    'SUBMITTED': {
-        'check_parent': 1,
-        'check_subjobs': 0,
-        'completed': 0,
-        'order': 1
-    },
-    'PENDING': {
-        'check_parent': 1,
-        'check_subjobs': 1,
-        'completed': 0,
-        'order': 2
-    },
-    'RUNNABLE': {
-        'check_parent': 1,
-        'check_subjobs': 0,
-        'completed': 0,
-        'order': 3
-    },
-    'STARTING': {
-        'check_parent': 1,
-        'check_subjobs': 1,
-        'completed': 0,
-        'order': 4
-    },
-    'RUNNING': {
-        'check_parent': 1,
-        'check_subjobs': 1,
-        'completed': 0,
-        'order': 5
-    },
-    'SUCCEEDED': {
-        'check_parent': 0,
-        'check_subjobs': 1,
-        'completed': 1,
-        'order': 6
-    },
-    'FAILED': {
-        'check_parent': 0,
-        'check_subjobs': 1,
-        'completed': 1,
-        'order': 7
-    },
-}
+
+def downloader(download_queue, summary_queue, tmp_dir, config):
+
+    temp_dir = tempfile.mkdtemp(prefix=tmp_dir)
+
+    botoconfig = Config(
+       retries = {
+          'max_attempts': 25,
+          'mode': 'standard'
+       }
+    )
+
+    s3 = boto3.client('s3', config=botoconfig)
+
+    while True:
+        try:
+            item = download_queue.get(timeout=20.5)
+        except Empty:
+            continue
+
+        if item is None:
+            summary_queue.put(None)
+            break
+
+        local_path= f"{temp_dir}/tmp.{item['workunit_id']}.{item['subjob_id']}.json.gz"
+        remote_path = item['s3_path']
+        job_bucket = config['object_store_job_bucket']
+
+        try:
+            with open(local_path, 'wb') as f:
+                s3.download_fileobj(job_bucket, remote_path, f)
+            logging.debug(f"downloaded to {local_path}")
+        except botocore.exceptions.ClientError as error:
+                logging.error(f"Failed to download from S3 {job_bucket}/{remote_path} to {local_path}, ({error})")
+                continue
+
+
+        with gzip.open(local_path, "rb") as read_file:
+            item['result'] = json.load(read_file)
+
+        # Move it to the next step if there's space
+        while summary_queue.qsize() > 1000:
+            time.sleep(0.2)
+
+        summary_queue.put(item)
+        os.remove(local_path)
 
 
 def parse_config(filename):
     with open(filename, "r") as read_file:
         config = json.load(read_file)
 
-    if('object_store_job_addressing_mode' not in config):
-        config['object_store_job_addressing_mode'] = "metatranche"
-
     return config
-
-def get_formatted_collection_number(collection_number):
-    return f"{int(collection_number):07}"
-
-
-def get_collection_hash(collection_name, collection_number):
-    formatted_collection_number = get_formatted_collection_number(collection_number)
-    string_to_hash = f"{collection_name}/{formatted_collection_number}"
-    return hashlib.sha256(string_to_hash.encode()).hexdigest()
 
 
 def process(config):
+
+    statuses = ['SUBMITTED','PENDING','RUNNABLE','STARTING','RUNNING','SUCCEEDED','FAILED']
+
 
     aws_config = Config(
         region_name=config['aws_region']
@@ -117,533 +117,352 @@ def process(config):
 
 
     parser = argparse.ArgumentParser()
-       
-    parser.add_argument('--detailed', action='store_true', 
+    parser.add_argument('--detailed', action='store_true',
         help="Get detailed ligand information (this can take a long time!)")
-
-    parser.add_argument('--ignore_arrayproperties', action='store_true', 
-        help="Always get subjob information")
-
-
     args = parser.parse_args()
 
     client = boto3.client('batch', config=aws_config)
 
     # load the status file that is keeping track of the data
     with open("../workflow/status.json", "r") as read_file:
-        status = json.load(read_file)
+        complete = json.load(read_file)
 
 
-    collections = {}
-    if os.path.exists("../workflow/collections_status.json"):
-        with open("../workflow/collections_status.json", "r") as read_file:
-            collections = json.load(read_file)
+    status = complete['workunits']
+    finished = []
 
-    workunits = status['workunits']
+    use_list_jobs_status = ['SUBMITTED', 'PENDING']
+    final_states = ['SUCCEEDED', 'FAILED']
 
+    vcpus_per_job = int(config['aws_batch_subjob_vcpus'])
+
+    # Which ones do we need to check
     workunits_to_check = []
+    for workunit_id, workunit in status.items():
+        if 'status' not in workunit:
+            # workunit has not been submitted yet
+            continue
 
-    not_yet_submitted = 0;
-    for workunit_key in workunits:
-        current_workunit = workunits[workunit_key]
+        if(workunit['status'] in use_list_jobs_status):
+            workunits_to_check.append({
+                    'workunit_id': workunit_id,
+                    'batch_jobid': workunit['job_id']
+                }
+                )
 
-        # Has this even been submitted?
-        if 'status' in current_workunit and current_workunit['status']['vf_job_status'] == "SUBMITTED":
-            if('aws_batch_status' not in current_workunit['status']
-               or batch_job_statuses[current_workunit['status']['aws_batch_status']]['check_parent'] == 1):
-                workunits_to_check.append(workunit_key)
+    workunits_to_recompute = {}
+    subjobs_to_check = []
+    failed_downloads = []
+
+    print("Getting workunit status")
+
+    # Check the array parents
+    for status_index_begin in range(0, len(workunits_to_check), 100):
+
+        job_keys_to_check = []
+        job_key_mapping = {}
+
+        for status_item in workunits_to_check[status_index_begin:(status_index_begin+100)]:
+
+            workunit_id = status_item['workunit_id']
+            batch_jobid = status_item['batch_jobid']
+
+            job_keys_to_check.append(batch_jobid)
+            job_key_mapping[batch_jobid] = { 'workunit_id': workunit_id }
+
+        response = client.describe_jobs(jobs=job_keys_to_check)
+
+        if 'jobs' in response:
+
+            for job in response['jobs']:
+                mapping = job_key_mapping[job['jobId']]
+                workunit_id = mapping['workunit_id']
+                workunit = status[workunit_id]
+
+                # Has something changed?
+                workunit_has_changed = 0
+
+                if(workunit['status'] != job['status']):
+                    workunit['status'] = job['status']
+                    workunit_has_changed = 1
+
+                if('status_summary' in workunit):
+
+                    for status_val in job['arrayProperties']['statusSummary']:
+                        if status_val not in workunit['status_summary']:
+                            workunit['status_summary'][status_val] = job['arrayProperties']['statusSummary'][status_val]
+                            workunit_has_changed = 1
+                        elif(workunit['status_summary'][status_val] != job['arrayProperties']['statusSummary'][status_val]):
+                            workunit['status_summary'][status_val] = job['arrayProperties']['statusSummary'][status_val]
+                            workunit_has_changed = 1
+                else:
+                    workunit['status_summary'] = job['arrayProperties']['statusSummary'].copy()
+                    workunit_has_changed = 1
+
+
+                if(workunit_has_changed == 1):
+                    # status has changed
+                    workunits_to_recompute[workunit_id] = 1
+
+                    for subjob_id, subjob in workunit['subjobs'].items():
+                        if(subjob['status'] not in final_states):
+                            subjobs_to_check.append({
+                                    'workunit_id': workunit_id,
+                                    'subjob_id': subjob_id,
+                                    'batch_jobid': f"{job['jobId']}:{subjob_id}"
+                                }
+                            )
         else:
-            not_yet_submitted += 1
+            logging.error(f"Did not get jobs response from AWS Batch")
 
-    if not_yet_submitted > 0:
-        print(f"** There are {not_yet_submitted} not yet submitted workunits out of {len(workunits)}")
 
-    # Check the parent status of each one to see if anything has changed.
-    # AWS Batch can handle up to 100 at a time
+    # Now let's check on the ones that have finished
 
-    print("Looking for updated jobline status - starting")
+    print("Getting subjob status")
 
-    workunit_subjobs_to_check = []
+    subjobs_to_parse = []
 
-    for status_index in range(0, len(workunits_to_check), 100):
 
+    for status_index_begin in range(0, len(subjobs_to_check), 100):
         job_keys_to_check = []
         job_key_mapping = {}
 
-        for workunit_key in workunits_to_check[status_index:(status_index + 100)]:
-            workunit = workunits[workunit_key]
-            job_key_mapping[workunit['status']['job_id']] = workunit_key
-            job_keys_to_check.append(workunit['status']['job_id'])
+        for status_item in subjobs_to_check[status_index_begin:(status_index_begin+100)]:
+            workunit_id = status_item['workunit_id']
+            subjob_id = status_item['subjob_id']
+            batch_jobid = status_item['batch_jobid']
+
+            job_keys_to_check.append(batch_jobid)
+            job_key_mapping[batch_jobid] = { 'workunit_id': workunit_id, 'subjob_id': subjob_id}
 
         response = client.describe_jobs(jobs=job_keys_to_check)
 
         if 'jobs' in response:
             for job in response['jobs']:
+                mapping = job_key_mapping[job['jobId']]
 
-                current_workunit = workunits[job_key_mapping[job['jobId']]]
-
-                # Do we need to check the overall subjob status? We don't need to unless the job has started
-                # and it's different than the last time we checked
-
-                # This status is one we should check the subjobs
-                if(batch_job_statuses[job['status']]['check_subjobs'] == 1):
-                    # If we have never checked it before or it's different than what it was the
-                    # last time we checked
-                    if(('aws_batch_status' not in current_workunit['status'] or
-                            job['arrayProperties']['statusSummary'] != current_workunit['status']['aws_batch_status_array'] or 
-                            args.ignore_arrayproperties)
-                       ):
-                        workunit_subjobs_to_check.append(
-                            job_key_mapping[job['jobId']])
-
-                        
-
-                # Update the status
-                current_workunit['status']['aws_batch_status'] = job['status']
-                current_workunit['status']['aws_batch_status_array'] = job['arrayProperties']['statusSummary']
-
-    print("\nLooking for updated jobline status - done\n")
-
-    print("Looking for updated subtask status - starting")
-
-    subjobids_to_check = []
-
-    # For each case where the subjob information may have changed, add to the list to lookup
-    for workunit_key in workunit_subjobs_to_check:
-        workunit = workunits[workunit_key]
-
-        # Ignore ones that we already know are complete (SUCCEEDED and FAILED) from a previous run
-        for subjob_key in workunit['subjobs']:
-            subjob = workunit['subjobs'][subjob_key]
-
-            if 'status' not in subjob:
-                subjob['status'] = 'UNKNOWN'
-
-            if(subjob['status'] != "SUCCEEDED" and subjob['status'] != "FAILED"):
-                subjobids_to_check.append(
-                    {'workunit_key': workunit_key, 'subjob_key': subjob_key})
-
-
-    # Lookup status in batches of 100
-    counter = 0
-    for status_index in range(0, len(subjobids_to_check), 100):
-
-        job_keys_to_check = []
-        job_key_mapping = {}
-
-        for unit in subjobids_to_check[status_index:(status_index + 100)]:
-
-            workunit = workunits[unit['workunit_key']]
-
-            job_key_mapping[f"{workunit['status']['job_id']}:{unit['subjob_key']}"] = unit
-            job_keys_to_check.append(
-                f"{workunit['status']['job_id']}:{unit['subjob_key']}")
-
-        response = client.describe_jobs(jobs=job_keys_to_check)
-
-        if 'jobs' in response:
-            for job in response['jobs']:
-
-                workunit_key = job_key_mapping[job['jobId']]['workunit_key']
-                subjob_key = job_key_mapping[job['jobId']]['subjob_key']
-
-                workunit = workunits[workunit_key]
-                subjob = workunit['subjobs'][subjob_key]
+                workunit_id = mapping['workunit_id']
+                subjob_id = mapping['subjob_id']
+                subjob = status[workunit_id]['subjobs'][subjob_id]
 
                 subjob['status'] = job['status']
 
-                vcpus = 0;
-                if('container' in job):
-                    if('vcpus' in job['container']):
-                        vcpus = job['container']['vcpus']
-                    elif('resourceRequirements' in job['container']):
-                        for resource in job['container']['resourceRequirements']:
-                            if(resource['type'] == "VCPU"):
-                                vcpus = resource['value']
-                                break
+                if subjob['status'] in final_states:
 
-                subjob['detailed_status'] = {
-                    'container': {
-                        'vcpus': int(vcpus)
-                    },
-                    'attempts': job['attempts']
-                }
+                    if(subjob['status'] == "SUCCEEDED"):
+                        subjobs_to_parse.append({ 'workunit_id': workunit_id, 'subjob_id': subjob_id})
 
-        counter += 100
+                    subjob['vcpu_seconds_interrupted'] = 0
+                    subjob['vcpu_seconds'] = 0
 
-        if(counter % 1000 == 0):
-            percent = (counter / len(subjobids_to_check)) * 100
-            print(f".... {percent: .2f}%")
+                    last_attempt_index = len(job['attempts']) - 1
+                    for attempt_index, attempt in enumerate(job['attempts']):
+                        if ( 'stoppedAt' in attempt and 'startedAt' in attempt):
+                            vcpu_time = (attempt['stoppedAt'] - attempt['startedAt']) / 1000 * vcpus_per_job
 
-    print("\nLooking for updated subtask status - done")
+                            if(attempt_index == last_attempt_index):
+                                subjob['vcpu_seconds'] = vcpu_time
+                            else:
+                                subjob['vcpu_seconds_interrupted'] += vcpu_time
 
-    print("Generating summary")
+                    complete['summary']['vcpu_seconds'] += subjob['vcpu_seconds']
+                    complete['summary']['vcpu_seconds_interrupted'] += subjob['vcpu_seconds_interrupted']
 
-    # Update all of the status information
-    # -- ligands being processed
-    # -- current number of workunits running
-    # 	-- current number of subworkunits runnning
-    #	-- total vCPUs running
-    #	-- total vCPU hours consumed by completed ligands and average time
 
-    total_stats = {
-        'active_vcpus': 0,
-        'vcpu_min_from_completed': 0.0,
-        'vcpu_min_from_failed_tasks': 0.0,
-        'vcpu_min_from_successful_tasks': 0.0,
-        'vcpu_min_from_retried': 0.0,
-        'total_reattempts': 0
-    }
+                else:
+                    pass
+                    # Non-final state.
 
-    total_stats_by_status = {}
 
-    for category in ("ligands", "jobs", "subjobs", "vcpu_min"):
-        total_stats_by_status[category] = {}
-        for key in batch_job_statuses:
-            total_stats_by_status[category][key] = 0
 
-    for workunit_key in workunits:
+    # Now, we need to go check the files to see how many ligands there actually were
 
-        workunit = workunits[workunit_key]
+    download_queue = Queue()
+    summary_queue = Queue()
 
-        if 'status' not in workunit:
+    number_of_downloaders = multiprocessing.cpu_count() * 2
+    downloader_processes = []
+    for i in range(number_of_downloaders):
+        downloader_processes.append(Process(target=downloader, args=(download_queue, summary_queue, config['temp_dir'], config)))
+        downloader_processes[i].start()
+
+
+    for item in subjobs_to_parse:
+        workunit_id = item['workunit_id']
+        subjob_id = item['subjob_id']
+
+        # Get the link to the output
+        item['s3_path'] = f"{config['object_store_job_prefix']}/{config['job_name']}/summary/{workunit_id}/{subjob_id}.json.gz"
+
+        download_queue.put(item)
+
+    for i in range(number_of_downloaders):
+        download_queue.put(None)
+
+
+    print("Downloading result files ")
+
+    download_procs_finished = 0
+    download_count = 0
+    while True:
+        try:
+            item = summary_queue.get()
+        except Empty:
+            #print('unpacker: gave up waiting...', flush=True)
             continue
 
-        # Update workunit status
-        total_stats_by_status['jobs'][workunit['status']
-                                      ['aws_batch_status']] += 1
-
-        for subjob_key in workunit['subjobs']:
-            subjob = workunit['subjobs'][subjob_key]
-
-            # How many ligands are there in this subjob
-            total_ligands_in_subjob = 0
-            for collection_key in subjob['collections']:
-                collection_count = subjob['collections'][collection_key]['ligand_count']
-                total_ligands_in_subjob += collection_count
-
-            # What status is it in?
-
-            # If we already have it set ... use that
-            subjob_status = "UNKNOWN"
-            if('status' in subjob):
-                subjob_status = subjob['status']
-            elif('aws_batch_status' in workunit['status']):
-                parent_status = workunit['status']['aws_batch_status']
-                subjob_status = parent_status
-
-            # Update Subjob status
-            total_stats_by_status['subjobs'][subjob_status] += 1
-            total_stats_by_status['ligands'][subjob_status] += int(
-                total_ligands_in_subjob)
-
-            # Determine the cores used for this
-            if(batch_job_statuses[subjob_status]['completed'] == 1):
-
-                # How many vcpus?
-                vcpus = int(subjob['detailed_status']['container']['vcpus'])
-
-                vcpu_total_min = 0.0
-                vcpu_successful_attempt_min = 0.0
-
-                # Look at each attempt
-                for attempt in subjob['detailed_status']['attempts']:
-                    if 'startedAt' not in attempt:
-                        continue
-
-                    start_msec = int(attempt['startedAt'])
-                    stop_msec = int(attempt['stoppedAt'])
-
-                    vcpu_min = ((stop_msec - start_msec) / 1000) * vcpus / 60
-
-                    if(attempt['statusReason'] == "Essential container in task exited"):
-                        vcpu_successful_attempt_min = vcpu_min
-
-                    vcpu_total_min += vcpu_min
-
-                # Update attempts #
-                total_stats['total_reattempts'] += len(
-                    subjob['detailed_status']['attempts']) - 1
-
-                # Update the summary
-                total_stats['vcpu_min_from_completed'] += vcpu_total_min
-                total_stats['vcpu_min_from_retried'] += vcpu_total_min - \
-                    vcpu_successful_attempt_min
-                total_stats_by_status['vcpu_min'][subjob_status] += vcpu_total_min
-
-                subjob['stats'] = {
-                    'vcpu_min_from_completed': vcpu_total_min,
-                    'vcpu_min_from_retried': vcpu_total_min - vcpu_successful_attempt_min
-                }
-
-            elif(subjob_status == "RUNNING"):
-                # How many vcpus?
-                vcpus = int(subjob['detailed_status']['container']['vcpus'])
-                total_stats['active_vcpus'] += vcpus
-
-    for category in ("ligands", "jobs", "subjobs", "vcpu_min"):
-        total_stats_by_status[category]['TOTAL'] = 0
-        for key in batch_job_statuses:
-            total_stats_by_status[category]['TOTAL'] += total_stats_by_status[category][key]
-
-    total_stats_by_status['vcpu_hours'] = {}
-    for key in total_stats_by_status['vcpu_min']:
-        if(key == "SUCCEEDED" or key == "FAILED" or key == "TOTAL"):
-            total_stats_by_status['vcpu_hours'][key] = f"{(total_stats_by_status['vcpu_min'][key] / 60):.2f}"
-        else:
-            total_stats_by_status['vcpu_hours'][key] = "-"
-
-    print("SUMMARY BASED ON AWS BATCH COMPLETION STATUS (different than actual docking status):\n")
-
-    job_print = {}
-
-    print(f'{"category":>14}', end="")
-    for key, value in sorted(batch_job_statuses.items(), key=lambda x: x[1]['order']):
-        print(f'{key:>14}', end="")
-
-    print(f'{"TOTAL":>14}')
-
-    for category in ("ligands", "jobs", "subjobs", "vcpu_hours"):
-
-        print(f'{category:>14}', end="")
-
-        job_print[category] = [total_stats_by_status[category]['TOTAL']]
-
-        for key, value in sorted(batch_job_statuses.items(), key=lambda x: x[1]['order']):
-            job_print[category].append(total_stats_by_status[category][key])
-            print(f'{total_stats_by_status[category][key]:>14}', end="")
-
-        job_print[f'{category}.str'] = [str(s) for s in job_print[category]]
-        print(f"{total_stats_by_status[category]['TOTAL']:>14}")
-
-    # Also provide more information on VCPU hours
-
-    print("")
-    print(f"vCPU hours total: {total_stats_by_status['vcpu_hours']['TOTAL']}")
-    print(
-        f"vCPU hours interrupted: {total_stats['vcpu_min_from_retried'] / 60:0.2f}")
-
-    if(total_stats_by_status['ligands']['SUCCEEDED'] != 0):
-        vcpu_seconds_per_successful_ligand = total_stats_by_status['vcpu_min'][
-            'SUCCEEDED'] * 60 / total_stats_by_status['ligands']['SUCCEEDED']
-        print(
-            f"vCPU seconds per ligand: {vcpu_seconds_per_successful_ligand:0.2f} [excludes failed count and time]")
-    print("")
-    print(f"Active vCPUs: {total_stats['active_vcpus']}")
-
-    # Now get the data from each of the runs and see how successful we have been
-
-    if(args.detailed):
-
-        print("Detailed Results: Processing results files")
-
-        storage_workdir = "../workflow/completed_status"
-        os.makedirs(storage_workdir, exist_ok=True)
-
-        s3 = boto3.client('s3')
-
-        # Start by getting the completed collection information
-
-        ligands_removed = 0
-        ligands_failed_docking = 0
-        ligands_succeeded_docking = 0
-        unknown_event = 0
-
-        counter = 0
-
-        for workunit_key in workunits:
-            workunit = workunits[workunit_key]
-
-            counter += 1
-
-            if(counter % 10 == 0):
-                percent = (counter / len(workunits)) * 100
-                print(f".... {percent: .2f}%")
-
-            if 'status' not in workunit:
-                continue
-
-            # Look at each subjob
-            for subjob_key in workunit['subjobs']:
-
-                subjob = workunit['subjobs'][subjob_key]
-
-                if('status' not in subjob):
-                    continue
-
-                if(subjob['status'] == "SUCCEEDED" or subjob['status'] == "FAILED"):
-
-                    if('processed' not in subjob or subjob['processed'] == 0):
-
-                        for collection_key in subjob['collections']:
-
-                            collection_tranche = subjob['collections'][collection_key]['collection_tranche']
-                            collection_name = subjob['collections'][collection_key]['collection_name']
-                            collection_number = subjob['collections'][collection_key]['collection_number']
-
-                            if collection_key not in collections:
-                                collections[collection_key] = {}
-
-                            collection = collections[collection_key]
-                            if('status' not in collection):
-                                collection['status'] = {
-                                    'ligands_removed': 0,
-                                    'ligands_failed_docking': 0,
-                                    'ligands_succeeded_docking': 0,
-                                    'unknown_event': 0,
-                                }
-
-                            collection_status_path = os.path.join(
-                                storage_workdir, collection_tranche, collection_name, f"{collection_number}.json.gz")
-
-                            # Have we already downloaded the file?
-                            if(not os.path.exists(collection_status_path)):
-
-                                os.makedirs(os.path.join(
-                                    storage_workdir, collection_tranche, collection_name), exist_ok=True)
-
-                                if(config['object_store_job_addressing_mode'] == "hash"):
-                                    hash_string = get_collection_hash(collection_name, collection_number)
-                                    collection_number_formatted = get_formatted_collection_number(collection_number)
-
-                                    object_path = [
-                                        config['object_store_job_prefix'],
-                                        hash_string[0:2],
-                                        hash_string[2:4],
-                                        config['job_letter'],
-                                        "output",
-                                        "ligand-lists",
-                                        collection_name,
-                                        f"{collection_number_formatted}.json.gz"
-                                    ]
-
-                                    src_location = "/".join(object_path)
-
-                                else:
-                                    src_location = f"{config['object_store_job_prefix_full']}/output/ligand-lists/{collection_tranche}/{collection_name}/{collection_number}.json.gz"
-
-                                try:
-                                    with open(collection_status_path, 'wb') as f:
-                                        s3.download_fileobj(
-                                            config['object_store_job_bucket'], src_location, f)
-                                except Exception as err:
-                                    print(
-                                        f"Error downloading {src_location} [this is likely temporary]")
-                                    print(
-                                        f"--> jobline: {workunit_key}, subjob_index: {subjob_key}, jobid: {workunit['status']['job_id']}:{subjob_key}")
-
-                                    if os.path.exists(collection_status_path):
-                                        os.remove(collection_status_path)
-
-                                    continue
-
-                            try:
-                                with gzip.open(collection_status_path, 'rt') as f:
-                                    log_events = json.load(f)
-
-                                    for event in log_events:
-                                        if(event['status'] == "failed"):
-                                            collection['status']['ligands_removed'] += 1
-                                        elif(event['status'] == "failed(docking)"):
-                                            collection['status']['ligands_failed_docking'] += 1
-                                        elif(event['status'] == "succeeded"):
-                                            collection['status']['ligands_succeeded_docking'] += 1
-                                        else:
-                                            collection['status']['unknown_event'] += 1
-
-                                subjob['processed'] = 1
-
-                            except Exception as err:
-                                print(f"Error opening {collection_status_path}")
-                                print(
-                                    f"--> jobline: {workunit_key}, subjob_index: {subjob_key}, jobid: {workunit['status']['job_id']}:{subjob_key}")
-                                if os.path.exists(collection_status_path):
-                                    os.remove(collection_status_path)
-
-        # Roll up information from all collections
-
-        total_collections = {
-            'status': {
-                'ligands_removed': 0,
-                'ligands_failed_docking': 0,
-                'ligands_succeeded_docking': 0,
-                'unknown_event': 0,
-            },
-            'status_percent': {}
+        # check for stop
+        if item is None:
+            download_procs_finished += 1
+            if(download_procs_finished == number_of_downloaders):
+                break
+            continue
+
+
+        download_count += 1
+
+        # Print  flush=True
+        if(download_count % 100 == 0):
+            print(f".", flush=True, end="")
+
+
+        # Otherwise process
+        workunit_id = item['workunit_id']
+        subjob_id = item['subjob_id']
+        subjob = status[workunit_id]['subjobs'][subjob_id]
+
+        subjob['overview'] = {
+           'total_dockings' : item['result']['total_dockings'],
+           'docking_succeeded' : item['result']['dockings_status']['success'],
+           'docking_failed' : item['result']['dockings_status']['failed'],
+           'skipped_ligands' : item['result']['skipped_ligands'],
+           'failed_downloads' : item['result']['failed_downloads'],
+           'failed_downloads_dockings' : item['result']['failed_downloads_dockings']
         }
 
-        for collection_key in collections:
-            collection = collections[collection_key]
-            if('status' in collection):
-                for event_type in collection['status']:
-                    total_collections['status'][event_type] += collection['status'][event_type]
+        for log_item in item['result']['failed_downloads_log']:
+            failed_downloads.append([str(workunit_id), str(subjob_id), log_item['base_collection_key'], str(log_item['dockings']), log_item['reason']  ])
 
-        total_events = 0
-        for event_type in total_collections['status']:
-            total_events += total_collections['status'][event_type]
+        for attr, attr_val in subjob['overview'].items():
+            complete['summary'][attr] += attr_val
 
-        # Get the percentages
-        for event_type in total_collections['status']:
-            if(total_events > 0):
-                metric = (total_collections['status']
-                          [event_type] / total_events) * 100
-                total_collections['status_percent'][event_type] = f"{metric: .2f}"
-            else:
-                total_collections['status_percent'][event_type] = "--"
-
-        print("")
-        for category in ['ligands_succeeded_docking', 'ligands_removed', 'ligands_failed_docking', 'unknown_event']:
-            metric = total_collections['status'][category]
-            metric_percent = total_collections['status_percent'][category]
-            print(f"{category}: {metric} ({metric_percent}%)")
-        print("")
+    print("")
 
 
-#	vcpu_seconds = total_stats_by_status['vcpu_min']['SUCCEEDED'] * 60 / ligands_succeeded_docking
-#	print(f"vCPU seconds per ligand: {vcpu_seconds:0.2f} [excludes failed and removed - based on actual]")
-#
-
-    print("Writing the json status file out")
-
-    # Output all of the information about the workunits into JSON so we can easily grab this data in the future
-    with open("../workflow/status.json.tmp", "w") as json_out:
-        json.dump(status, json_out)
-
-    with open("../workflow/collections_status.json.tmp", "w") as json_out:
-        json.dump(collections, json_out)
-
-
-    print("*** Going to move files -- do not interrupt! ***\n")
-    time.sleep(1)
-    Path("../workflow/status.json.tmp").rename("../workflow/status.json")
-    Path("../workflow/collections_status.json.tmp").rename("../workflow/collections_status.json")
-    print("Done")
-
-
-def process_shared_fs(config):
-
-    # load the status file that is keeping track of the data
-    with open("../workflow/status.json", "r") as read_file:
-        status = json.load(read_file)
-
-    workunits = status['workunits']
-    workunits_to_check = []
-
-    not_yet_submitted = 0;
-    for workunit_key in workunits:
-        current_workunit = workunits[workunit_key]
-
-        # Has this even been submitted?
-        if 'status' in current_workunit and current_workunit['status']['vf_job_status'] == "SUBMITTED":
-            workunits_to_check.append(workunit_key)
-        else:
-            not_yet_submitted += 1
-
-    if not_yet_submitted > 0:
-        print(f"** There are {not_yet_submitted} not yet submitted workunits out of {len(workunits)}")
+    # submitted only workunits
 
 
 
+    # re-calc workunits as needed
+
+    for workunit_id in workunits_to_recompute:
+        workunit = status[workunit_id]
+
+        workunit['overview_status'] = {}
+        for status_val in statuses:
+            workunit['overview_status'][status_val] = {
+                'ligands': 0,
+                'workunits': 0,
+                'subjobs': 0
+            }
+
+        workunit['overview_status'][workunit['status']]['workunits'] += 1
+
+        for subjob_id, subjob in workunit['subjobs'].items():
+            subjob_status = subjob['status']
+
+            workunit['overview_status'][subjob_status]['subjobs'] += 1
+            workunit['overview_status'][subjob_status]['ligands'] += subjob['ligands_expected']
+
+    # now do new sum
+
+    complete['overview_status'] = {}
+    for status_val in statuses:
+        complete['overview_status'][status_val] = {
+            'ligands': 0,
+            'workunits': 0,
+            'subjobs': 0
+        }
+
+    for workunit_id, workunit in status.items():
+        if 'status' not in workunit:
+            # workunit has not been submitted yet
+            continue
+
+        for status_val in statuses:
+            complete['overview_status'][status_val]['ligands'] += workunit['overview_status'][status_val]['ligands']
+            complete['overview_status'][status_val]['workunits'] += workunit['overview_status'][status_val]['workunits']
+            complete['overview_status'][status_val]['subjobs'] += workunit['overview_status'][status_val]['subjobs']
+
+
+    # Output all failed downloads
+
+    with open("../workflow/failed_downloads.csv", "a") as failed_downloads_out:
+        for failed_download in failed_downloads:
+            failed_downloads_out.write(",".join(failed_download))
+            failed_downloads_out.write("\n")
+
+
+
+    # output a nice summary
+
+    status_header = "Status"
+    workunits_header = "Workunits"
+    subjobs_header = "Subjobs"
+    ligands_header = "Dockings (est.)"
+
+    print(f"-----------------------------------------------------------------")
+    print("AWS Batch Progress")
+    print(f"-----------------------------------------------------------------")
+    print(f"")
+
+
+    print(f"Docking count is inaccurate for sensor screens. Correct value will")
+    print(f"be in 'Completed Summary' when finished.")
+    print(f"")
+
+    print(f"{status_header:>15}   {workunits_header:^10}   {subjobs_header:^15}  {ligands_header:^15}")
+    for status_val in statuses:
+        print(f"{status_val:>15}   {complete['overview_status'][status_val]['workunits']:^10}   {complete['overview_status'][status_val]['subjobs']:^15}   {complete['overview_status'][status_val]['ligands']:^15}")
+
+
+    vcpu_hrs = complete['summary']['vcpu_seconds'] / 60 / 60
+    vcpu_hrs_interrupted = complete['summary']['vcpu_seconds_interrupted'] / 60 / 60
+
+    print(f"")
+    active_vcpus = (complete['overview_status']['RUNNING']['subjobs'] + complete['overview_status']['STARTING']['subjobs']) * vcpus_per_job
+    print(f"Active vCPUs: {active_vcpus}")
+
+
+    print(f"")
+    print(f"-----------------------------------------------------------------")
+    print("Completed Summary")
+    print(f"-----------------------------------------------------------------")
+    print(f"")
+    print(f"* Total Dockings  : {complete['summary']['total_dockings']}")
+    print(f"  - Succeeded     : {complete['summary']['docking_succeeded']}")
+    print(f"  - Failed        : {complete['summary']['docking_failed']}")
+    print(f"* Skipped ligands : {complete['summary']['skipped_ligands']}")
+    print(f"* Failed Downloads: {complete['summary']['failed_downloads']} (est. {complete['summary']['failed_downloads_dockings']} dockings)")
+    if(complete['summary']['failed_downloads'] != 0):
+        print(f"     (failed downloads are in '../workflow/failed_downloads.csv')")
+    print(f"")
+
+
+    if(complete['summary']['total_dockings'] != 0):
+        vcpu_sec = complete['summary']['vcpu_seconds'] / complete['summary']['total_dockings']
+        print(f"* vCPU seconds per docking: {vcpu_sec:0.2f}")
+    else:
+        print(f"* vCPU seconds per docking: N/A")
+    print(f"* vCPU hours total        : {vcpu_hrs:0.2f}")
+    print(f"* vCPU hours interrupted  : {vcpu_hrs_interrupted:0.2f}")
+    print(f"")
+
+    # Output the condensed version
+    with open("../workflow/status.tmp.json", "w") as json_out:
+        json.dump(complete, json_out)
+
+    shutil.move("../workflow/status.tmp.json", "../workflow/status.json")
 
 
 
@@ -651,9 +470,10 @@ def main():
 
     config = parse_config("../workflow/config.json")
 
-
     if(config['job_storage_mode'] == "s3" and config['batchsystem'] == "awsbatch"):
-        process(config)
+        with tempfile.TemporaryDirectory(prefix=os.path.join(config['tempdir_default'], '')) as temp_dir:
+            config['temp_dir'] = temp_dir
+            process(config)
     else:
         print(f"Configuration with job_storage_mode={config['job_storage_mode']} and batchsystem={config['batchsystem']} is not supported")
 

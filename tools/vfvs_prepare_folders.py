@@ -31,6 +31,7 @@
 import json
 import re
 import os
+import csv
 import argparse
 from pathlib import Path
 import shutil
@@ -57,9 +58,35 @@ def parse_config(filename):
     config['docking_scenario_inputfolders'] = config['docking_scenario_inputfolders'].split(
         ":")
 
+
+
+    config['docking_scenarios_internal'] = {}
+    for index, scenario in enumerate(config['docking_scenario_names']):
+        config['docking_scenarios_internal'][scenario] = {
+            'key': scenario,
+            'replicas': int(config['docking_scenario_replicas'][index])
+        }
+
+
     if('summary_formats' in config):
         config['summary_formats'] = config['summary_formats'].split(",")
 
+
+    if('print_attrs_in_summary' in config):
+        config['print_attrs_in_summary'] = config['print_attrs_in_summary'].split(",")
+    elif('print_smi_in_summary' in config and int(config['print_smi_in_summary']) == 1):
+        config['print_attrs_in_summary'] = ['smi']
+    else:
+        config['print_attrs_in_summary'] = []
+
+
+    if 'collection_list_type' not in config:
+        config['collection_list_type'] = "standard"
+
+    if 'collection_list_file' not in config:
+        config['collection_list_file'] = "templates/todo.all"
+
+    config['tempdir_default'] = os.path.join(config['tempdir_default'], '')
 
     return config
 
@@ -171,7 +198,7 @@ def check_parameters(config):
             if(empty_value(config, 'aws_batch_subjob_timeout')):
                 print("* 'aws_batch_subjob_timeout' must be set if batchsystem is 'awsbatch'")
                 error = 1
-            if(empty_value(config, 'tempdir_default') or config['tempdir_default'] != "/dev/shm"):
+            if(empty_value(config, 'tempdir_default') or config['tempdir_default'] != "/dev/shm/"):
                 print("* RECOMMENDED that 'tempdir_default' be '/dev/shm' if awsbatch is used")
                 error = 1
         elif(config['batchsystem'] == "slurm"):
@@ -212,6 +239,18 @@ def check_parameters(config):
         error = 1
 
     config['object_store_job_prefix_full'] = f"{config['object_store_job_prefix']}/{config['job_letter']}"
+
+    if(empty_value(config, 'sensor_screen_mode')):
+        config['sensor_screen_mode'] = 0
+        config['sensor_screen_count'] = 0
+    elif(int(config['sensor_screen_mode']) == 1):
+        config['sensor_screen_mode'] = 1
+        if(empty_value(config, 'sensor_screen_count')):
+            print("* If 'sensor_screen_mode=1' then 'sensor_screen_count' must be set in all.ctrl")
+        else:
+            config['sensor_screen_count'] = int(config['sensor_screen_count'])
+    else:
+        config['sensor_screen_count'] = 0
 
     return error
 
@@ -266,7 +305,11 @@ then re-run vfvs_prepare_folders.py --skip_errors (Not recommended!)
         workunits_path = workflow_dir / "workunits"
         workunits_path.mkdir(parents=True, exist_ok=True)
 
-        #
+
+        outputfiles_dir = Path("/".join(["..", "output-files"]))
+        outputfiles_dir.mkdir(parents=True, exist_ok=True)
+
+        config['sharedfs_output_files_path'] = outputfiles_dir.resolve().as_posix()
         config['sharedfs_workunit_path'] = workunits_path.resolve().as_posix()
         config['sharedfs_workflow_path'] = workflow_dir.resolve().as_posix()
         config['sharedfs_collection_path'] = Path(config['collection_folder']).resolve().as_posix()
@@ -276,18 +319,57 @@ then re-run vfvs_prepare_folders.py --skip_errors (Not recommended!)
         json.dump(config, json_out, indent=4)
 
 
-    collection_values = {}
-    with open('templates/todo.all', "r") as read_file:
-        for line in read_file:
-            collection_key, ligand_count = line.strip().split(maxsplit=1)
-            if(re.search(r'^\d+$', ligand_count)):
-                collection_values[collection_key] = int(ligand_count)
-            else:
-                print(f"{collection_key} had non positive int count of '{ligand_count}'")
-        with open('../workflow/todo.all', "w") as write_file:
-            for collection_key in sorted(collection_values, key=collection_values.get, reverse=True):
-                write_file.write(f"{collection_key} {collection_values[collection_key]}\n")
+    collection_key_ligands = {}
 
+    if(config['collection_list_type'] == "standard"):
+
+        mode = "all"
+        if(config['sensor_screen_mode'] == 1):
+            mode = "sensor_screen_mode"
+
+        with open(config['collection_list_file'], "r") as read_file:
+            for line in read_file:
+                collection_key, ligand_count = line.strip().split(maxsplit=1)
+                if(re.search(r'^\d+$', ligand_count)):
+                    collection_key_ligands[collection_key] = {
+                        'count': int(ligand_count),
+                        'mode': mode
+                    }
+
+                    if(mode == "sensor_screen_mode"):
+                        collection_key_ligands[collection_key]['sensor_screen_count'] = config['sensor_screen_count']
+
+                else:
+                    print(f"{collection_key} had non positive int count of '{ligand_count}'")
+
+
+    elif(config['collection_list_type'] == "csv_collection_key_ligand"):
+
+        with open(config['collection_list_file'], newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                collection_name = row['collection_name']
+                collection_number = row['collection_number']
+                ligand = row['ligand']
+
+                collection_key = f"{collection_name}_{collection_number}"
+                if collection_key not in collection_key_ligands:
+                    collection_key_ligands[collection_key] = {
+                        'count': 0,
+                        'mode': "named",
+                        'ligands': []
+                    }
+
+                collection_key_ligands[collection_key]['ligands'].append(ligand)
+                collection_key_ligands[collection_key]['count'] += 1
+    else:
+        print("collection_list_type in all.ctrl must be 'standard', or 'csv_collection_key_ligand'")
+        exit(1)
+
+
+    # Output the collection data
+    with open("../workflow/collections.json", "w") as json_out:
+        json.dump(collection_key_ligands, json_out)
 
 
 if __name__ == '__main__':

@@ -20,13 +20,7 @@
 # along with VirtualFlow.  If not, see <https://www.gnu.org/licenses/>.
 
 # ---------------------------------------------------------------------------
-#
-# Description: Kill AWS Batch jobs
-#
-# Revision history:
-# 2021-06-29  Original version
-#
-# ---------------------------------------------------------------------------
+
 
 
 import os
@@ -55,6 +49,11 @@ def process(config):
         region_name=config['aws_region']
     )
 
+    running_states = ['RUNNING', 'STARTING']
+    finished_states = ['SUCCEEDED', 'FAILED']
+    pending_states = ['PENDING', 'RUNNABLE', 'SUBMITTED']
+
+
     client = boto3.client('batch', config=aws_config)
 
     # load the status file that is keeping track of the data
@@ -65,21 +64,62 @@ def process(config):
 
     workunits_to_check = []
 
-    for workunit_key in workunits:
-        current_workunit = workunits[workunit_key]
+    for workunit_key, workunit in workunits.items():
+        if 'status' not in workunit:
+            continue
 
-        # Has this even been submitted?
-        if 'status' in current_workunit:
-            jobid = current_workunit['status']['job_id']
-            print(f"Killing {jobid}")
-            try:
-                response = client.terminate_job(
-                    jobId=jobid,
-                    reason="killed by vfvs_killall"
-                )
-            except botocore.exceptions.ClientError as error: 
-                print("invalid")
-                raise error
+        if workunit['status'] in finished_states:
+            continue
+
+        jobid = workunit['job_id']
+        print(f"Killing {jobid}")
+        try:
+            response = client.terminate_job(
+                jobId=jobid,
+                reason="killed by vfvs_killall"
+            )
+        except botocore.exceptions.ClientError as error:
+            print("invalid")
+            raise error
+
+
+
+    for workunit_key, workunit in workunits.items():
+        if 'status' not in workunit:
+            continue
+
+        if workunit['status'] in finished_states:
+            continue
+
+        for subjob_id, subjob in workunit['subjobs'].items():
+            if 'status' in subjob:
+                subjob_id = f"{workunit['job_id']}:{subjob_id}"
+
+                if subjob['status'] in finished_states:
+                    continue
+
+                if(subjob['status'] in running_states):
+                    print(f"Killing {subjob_id}")
+                    try:
+                        response = client.terminate_job(
+                            jobId=subjob_id,
+                            reason="killed by vfvs_killall"
+                        )
+                    except botocore.exceptions.ClientError as error:
+                        print("invalid")
+                        raise error
+
+                elif(subjob['status'] in pending_states):
+                    print(f"Cancelling {subjob_id}")
+                    try:
+                        response = client.cancel_job(
+                            jobId=subjob_id,
+                            reason="killed by vfvs_killall"
+                        )
+                    except botocore.exceptions.ClientError as error:
+                        print("invalid")
+                        raise error
+
 
 
 
