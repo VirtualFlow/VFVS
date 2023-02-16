@@ -55,8 +55,6 @@ import math
 import sys
 import uuid
 
-# TODO: testing version 
-
 # Download
 # -
 # Get the file and move it to a local location
@@ -1271,7 +1269,7 @@ def docking_start_Molegro(task):
 def docking_finish_Molegro(item, ret): 
     try: 
         
-        cmd_run = ret.stdout.decode("utf-8").split('\n')[-2]
+        cmd_run = ret.stdout.split('\n')[-2]
         cmd_run = [x for x in cmd_run if 'Pose:' in x]
         scores = []
         for item in cmd_run: 
@@ -1446,7 +1444,7 @@ def docking_start_autodock_koto(task):
 
 def docking_finish_autodock_koto(item, ret): 
     try: 
-        docking_out = ret.stdout.decode("utf-8")
+        docking_out = ret.stdout
         A = docking_out.split('\n')
         docking_score = []
         for item in A: 
@@ -1583,12 +1581,12 @@ def docking_start_plants(task):
 def docking_finish_plants(item, ret):
 
     try:
-        plants_cmd = ret.stdout.decode("utf-8").split('\n')[-6]
+        plants_cmd = ret.stdout.split('\n')
+        plants_cmd = [x for x in plants_cmd if 'best score:' in x][-1]
         item['score'] = float(plants_cmd.split(' ')[-1])
         item['status'] = "success"
     except:
         logging.error("failed parsing")
-
 
 ## adfr
 
@@ -1606,7 +1604,7 @@ def docking_start_adfr(item):
 def docking_finish_adfr(item, ret):
 
     try:
-        docking_out = ret.stdout.decode("utf-8")
+        docking_out = ret.stdout
         docking_scores = []
         for line_item in docking_out:
             A = line_item.split(' ')
@@ -2045,7 +2043,7 @@ def docking_start_idock(item):
 
 def docking_finish_idock(item, ret):
     try:
-        docking_out = ret.stdout.decode("utf-8")
+        docking_out = ret.stdout
         docking_out = float([x for x in docking_out.split(' ') if x != ''][-2])
         item['score'] = min(docking_out)
         item['status'] = "success"
@@ -2145,7 +2143,7 @@ def docking_start_autodock(item, arch_type):
 
 def docking_finish_autodock(item, ret):
     try :
-        output = ret.stdout.decode("utf-8").split('\n')[-6]
+        output = ret.stdout.split('\n')[-6]
         lines = [x.strip() for x in output if 'best energy' in x][0]
         docking_score = float(lines.split(',')[1].split(' ')[-2])
         item['score'] = min(docking_score)
