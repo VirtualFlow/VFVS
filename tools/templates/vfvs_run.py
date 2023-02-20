@@ -1565,10 +1565,6 @@ def docking_start_plants(task):
 
     task['plants_tmp_file'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.txt")
     shutil.copy(task['config_path'], task['plants_tmp_file'])
-    
-    if '.pdbqt' in task['ligand_path']: 
-        os.system('obabel {} -O {}'.format(task['ligand_path'], task['ligand_path'].replace('.pdbqt', '.mol2')))
-        task['ligand_path'] = task['ligand_path'].replace('.pdbqt', '.mol2')
         
     with open(task['plants_tmp_file'], 'a+') as f:
         f.writelines('ligand_file {}\n'.format(task['ligand_path']))
