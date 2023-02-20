@@ -20,6 +20,7 @@ A config.txt file is required for running PLANTS. An example of the config file 
     cluster_structures 10
     cluster_rmsd 2.0
 ```
+Please ensure that the lines specifying the output_dir and ligand_file are not in the config.txt file. These will be added by VFVS on it's own.
 
 ### Running with AutodockZN: 
 For AutodockZN, the config.txt file must contain: 
