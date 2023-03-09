@@ -89,7 +89,6 @@ def downloader(download_queue, unpack_queue, summary_queue, tmp_dir):
         item['temp_dir'] = tempfile.mkdtemp(prefix=tmp_dir)
         item['local_path'] = f"{item['temp_dir']}/tmp.{item['ext']}"
 
-
         # Move the data either from S3 or a shared filesystem
 
         if('s3_download_path' in item['collection']):
