@@ -384,7 +384,7 @@ def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, coll
 
 def read_config_line(line):
     key, sep, value = line.strip().partition("=")
-    return key, value
+    return key.strip(), value.strip()
 
 
 def docking_process(docking_queue, summary_queue):
