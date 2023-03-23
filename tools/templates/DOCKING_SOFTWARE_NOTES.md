@@ -172,7 +172,7 @@ The config.txt file should contain:
 ```
  
 ### Running with autodock_gpu
-A autodock_cpu executable (of name 'autodock_gpu') should be placed in directory: /tools/bin <br>
+A autodock_gpu executable (of name 'autodock_gpu') should be placed in directory: /tools/bin <br>
 The config.txt file should contain: 
 ```
     receptor=./protein.maps.fld # The prepared receptor file
