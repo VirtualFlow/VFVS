@@ -1024,7 +1024,9 @@ def program_runstring_array(task):
             or task['program'] == "vina_xb"
             or task['program'] == "gwovina"
             or task['program'] == "AutodockVina_1.2"
+            or task['program'] == "AutodockVina_1.1.2"
        ):
+        
         cmd = docking_start_vina(task)
     elif(task['program'] == "smina"):
         cmd = docking_start_smina(task)
