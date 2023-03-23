@@ -1596,7 +1596,7 @@ def docking_start_adfr(item):
     with open(item['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
 
-    cmd = ['adfr',
+    cmd = ['{}/adfr'.format(item['tools_path']),
            '-t', '{}'.format(config_['receptor']),
            '-l', '{}'.format(item['ligand_path']),
            '--jobName', '{}'.format(item['output_path'])

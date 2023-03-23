@@ -3,10 +3,9 @@
 For running ADFR, a trg receptor file (generated during pre-processing) needs to be provided by the user. The config.txt file <br>
 can contain the line: 
 ```
-    receptor=test.tmp
+    receptor=../input-files/receptor/test.tmp
 ```
-Note: ADFR needs to be installed such that it can run by using the word 'adfr' in shell (from any location).
-
+An adfr executable (of name adfr) should be placed in directory: /tools/bin directory. An executable needs to be compiled based on a user’s system using instructions described in https://ccsb.scripps.edu/adfr/downloads/.
 
 ### Running with PLANTS:
 A PLANTS executable (with the exact name PLANTS) must be downloaded from http://www.tcd.uni-konstanz.de/research/plants.php, and 
