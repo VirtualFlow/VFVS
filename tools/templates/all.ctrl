@@ -91,12 +91,22 @@ slurm_array_job_size=100
 ** Storage configuration
 ************************************************
 
-job_storage_mode=s3
-# This mode determines where data is retrieved and stored from as part of 
-# VFVS. Valid modes:
+data_storage_mode=s3
+# This mode determines where data is retrieved as part of VFVS
 #   * s3: Job data is stored on S3 object store, which is the required
 #         mode if using AWS Batch. Items under the "S3 Object Store" 
-#         heading in the configuration are required if this mode is used
+#         heading (object_store_data_bucket, object_store_data_collection_prefix)
+#         are needed if this is the mode used.
+#   * sharedfs: This mode requires that all running jobs have access to the
+#         same shared filesystem that will allow for both input and output
+#         of data. This only allowed if Slurm is set at the scheduler
+
+job_storage_mode=s3
+# This mode determines where data is stored after a run
+#   * s3: Job data is stored on S3 object store, which is the required
+#         mode if using AWS Batch. Items under the "S3 Object Store" 
+#         of 'object_store_job_bucket' and 'object_store_job_prefix'
+#         are required.
 #   * sharedfs: This mode requires that all running jobs have access to the
 #         same shared filesystem that will allow for both input and output
 #         of data. This is required if using Slurm
