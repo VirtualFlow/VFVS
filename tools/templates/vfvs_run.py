@@ -1008,6 +1008,8 @@ def process_docking_completion(item, ret):
         docking_finish_SEED(item, ret) 
     elif(item['program'] == "MpSDockZN"):
         docking_finish_MpSDockZN(item, ret) 
+    elif(item['program'] == "dock6"):
+        docking_finish_dock6(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1078,6 +1080,8 @@ def program_runstring_array(task):
         cmd = docking_start_SEED(task)  
     elif(task['program'] == "MpSDockZN"):
         cmd = docking_start_MpSDockZN(task)   
+    elif(task['program'] == "dock6"):
+        cmd = docking_start_dock6(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1174,6 +1178,109 @@ def docking_finish_SEED(item, ret):
     except: 
         logging.error("failed parsing")
         
+
+## dock6
+def docking_start_dock6(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Generate dock6 input file: 
+    with open(os.path.join(task['tmp_run_dir'], "dock.in"), 'w') as f: 
+        f.writelines(['conformer_search_type                                        flex\n'])
+        f.writelines(['user_specified_anchor                                        no\n'])
+        f.writelines(['limit_max_anchors                                            no\n'])
+        f.writelines(['min_anchor_size                                              40\n'])
+        f.writelines(['pruning_use_clustering                                       yes\n'])
+        f.writelines(['pruning_max_orients                                          100\n'])
+        f.writelines(['pruning_clustering_cutoff                                    100\n'])
+        f.writelines(['pruning_conformer_score_cutoff                               25.0\n'])
+        f.writelines(['pruning_conformer_score_scaling_factor                       1.0\n'])
+        f.writelines(['use_clash_overlap                                            no\n'])
+        f.writelines(['write_growth_tree                                            no\n'])
+        f.writelines(['use_internal_energy                                          yes\n'])
+        f.writelines(['internal_energy_cutoff                                       100.0\n'])
+        f.writelines(['ligand_atom_file                                             {}\n'.format(task['ligand_path'])])
+        f.writelines(['limit_max_ligands                                            no\n'])
+        f.writelines(['receptor_site_file                                           {}\n'.format(config_['receptor_site_file'])])
+        f.writelines(['max_orientations                                             500\n'])
+        f.writelines(['chemical_matching                                            no\n'])
+        f.writelines(['use_ligand_spheres                                           no\n'])
+        f.writelines(['bump_filter                                                  no\n'])
+        f.writelines(['score_molecules                                              yes\n'])
+        f.writelines(['contact_score_primary                                        no\n'])
+        f.writelines(['contact_score_secondary                                      no\n'])
+        f.writelines(['grid_score_primary                                           yes\n'])
+        f.writelines(['grid_score_secondary                                         no\n'])
+        f.writelines(['grid_score_rep_rad_scale                                     1\n'])
+        f.writelines(['grid_score_vdw_scale                                         1\n'])
+        f.writelines(['grid_score_grid_prefix                                       grid\n'])
+        f.writelines(['dock3.5_score_secondary                                      no\n'])
+        f.writelines(['continuous_score_secondary                                   no\n'])
+        f.writelines(['footprint_similarity_score_secondary                         no\n'])
+        f.writelines(['pharmacophore_score_secondary                                no\n'])
+        f.writelines(['descriptor_score_secondary                                   no\n'])
+        f.writelines(['gbsa_zou_score_secondary                                     no\n'])
+        f.writelines(['gbsa_hawkins_score_secondary                                 no\n'])
+        f.writelines(['SASA_score_secondary                                         no\n'])
+        f.writelines(['amber_score_secondary                                        no\n'])
+        f.writelines(['minimize_ligand                                              yes\n'])
+        f.writelines(['minimize_anchor                                              yes\n'])
+        f.writelines(['minimize_flexible_growth                                     yes\n'])
+        f.writelines(['use_advanced_simplex_parameters                              no\n'])
+        f.writelines(['simplex_max_cycles                                           1\n'])
+        f.writelines(['simplex_score_converge                                       0.1\n'])
+        f.writelines(['simplex_cycle_converge                                       1.0\n'])
+        f.writelines(['simplex_trans_step                                           1.0\n'])
+        f.writelines(['simplex_rot_step                                             0.1\n'])
+        f.writelines(['simplex_tors_step                                            10.0\n'])
+        f.writelines(['simplex_anchor_max_iterations                                500\n'])
+        f.writelines(['simplex_grow_max_iterations                                  500\n'])
+        f.writelines(['simplex_grow_tors_premin_iterations                          0\n'])
+        f.writelines(['simplex_random_seed                                          0\n'])
+        f.writelines(['simplex_restraint_min                                        no\n'])
+        f.writelines(['atom_model                                                   all\n'])
+        f.writelines(['vdw_defn_file                                                {}/parameters\n'.format(config_['dock6_path'])])
+        f.writelines(['flex_defn_file                                               {}/parameters/flex.defn\n'.format(config_['dock6_path'])])
+        f.writelines(['flex_drive_file                                              {}/parameters/flex_drive.tbl\n'.format(config_['dock6_path'])])
+        f.writelines(['vdw_defn_file                                                {}/parameters/vdw_AMBER_parm99.defn\n'.format(config_['dock6_path'])])
+        f.writelines(['flex_defn_file                                               {}/parameters/flex.defn\n'.format(config_['dock6_path'])])
+        f.writelines(['ligand_outfile_prefix                                        ligand_out\n'])
+        f.writelines(['write_orientations                                           no\n'])
+        f.writelines(['num_scored_conformers                                        1\n'])
+        f.writelines(['rank_ligands                                                 no\n'])
+    
+    cmd = ['{}/bin/dock6'.format(config_['dock6_path']), '-i', os.path.join(task['tmp_run_dir'], "dock.in")]
+
+    return cmd
+
+def docking_finish_dock6(item, ret): 
+    try: 
+        # score_path = os.path.join(item['tmp_run_dir'], "seed_best.dat")
+        # with open(score_path, 'r') as f: 
+        #     lines = f.readlines()
+        # docking_score = float([x for x in lines[1].split(' ') if x != ''][4])
+        # item['score'] = min(docking_score)   
+        # pose_path = os.path.join(item['tmp_run_dir'], "ligand_seed_best.mol2")
+        
+        dock_file = [x for x in os.listdir(item['tmp_run_dir']) if 'ligand_out' in x]
+        dock_file = [x for x in dock_file if 'mol2' in x][0]
+        os.system('cp {} {}'.format(dock_file, item['output_dir']))
+        
+        # Save the results: 
+        with open('./ligand_out_scored.mol2', 'r') as f: 
+            lines = f.readlines()
+        docking_score = float(lines[2].split(' ')[-1])           
+
+        item['score'] = docking_score   
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
+
 
 ## rosetta-ligand
 def docking_start_rosetta_ligand(task): 

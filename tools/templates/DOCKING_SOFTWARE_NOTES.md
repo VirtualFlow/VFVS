@@ -333,3 +333,13 @@ The config.txt file should contain:
     grid_in=./grid.in
     dock_in=./dock.in
 ```
+
+
+### Running with dock6
+The config.txt file should contain: 
+```
+    dock6_path=/home/dock6
+    receptor_site_file=./selected_spheres.sph
+```
+
+
