@@ -2338,7 +2338,7 @@ def docking_start_ledock(item):
         if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
 
     docking_file = cmd[-1]
-    ligand_list_file = docking_file.split('.')[0] + '.list'
+    # ligand_list_file = docking_file.split('.')[0] + '.list'
 
     with open(docking_file, 'w') as f:
         f.writelines(['Receptor'])

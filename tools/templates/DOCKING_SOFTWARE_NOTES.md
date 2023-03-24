@@ -206,10 +206,9 @@ The config.txt file should contain:
 ```
 
 ### Running with idock
-An idock executable (of name 'idock') should be placed in directory: /tools/bin <br>
 The config.txt file should contain: 
 ```
-    receptor=./receptor.pdb 
+    receptor=./receptor.pdbqt 
     center_x=10
     center_y=10
     center_z=10
