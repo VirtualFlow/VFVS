@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Sample template for launching VirtualFlow login node'
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name for tagging purpose
+  MainNodeInstance:
+    Type: String
+    Description: Instance that should be used for the main node.
+    Default: m6i.xlarge
+  KeyName:
+    Description: Key name to use for login to main node
+    Type: String
+  MainNodeAMI:
+    Description: AMI for the Main Node
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  VPCStackParameter:
+    Type: String
+    Description: Name of the VPC Stack previously deployed
+  S3BucketName:
+    Description: Bucket for storing data
+    Type: String
+
+
+Resources:
+
+  S3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-${AWS::Region}-VFS3Access
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetBucketLocation
+              - s3:ListAllMyBuckets
+            Resource: 'arn:aws:s3:::'
+          - Effect: Allow
+            Action: 's3:*'
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3BucketName}'
+              - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+      Roles:
+        - !Ref MainNodeRole
+
+  MainNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSBatchFullAccess
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+
+  MainNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref MainNodeRole
+      InstanceProfileName: !Sub ${AWS::StackName}-${AWS::Region}-MainNodeProfile
+
+
+  ## EC2 instance ##
+  MainNode:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: !Ref MainNodeAMI
+      InstanceType: !Ref MainNodeInstance
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref MainNodeInstanceProfile
+      BlockDeviceMappings:
+       - DeviceName: "/dev/xvda"
+         Ebs:
+             DeleteOnTermination: true
+             VolumeSize: 100
+             VolumeType: "gp3"
+      SecurityGroupIds: 
+       - !Ref MainNodeSecurityGroup
+      SubnetId: 
+        Fn::ImportValue: 
+          !Sub ${VPCStackParameter}-PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-main-node'
+        - Key: Project
+          Value: !Ref ProjectName
+      UserData:
+         Fn::Base64: !Sub |
+                Content-Type: multipart/mixed; boundary="===============1409001372156971182=="
+                MIME-Version: 1.0
+
+                --===============1409001372156971182==
+                Content-Type: text/cloud-config; charset="us-ascii"
+                MIME-Version: 1.0
+                Content-Transfer-Encoding: 7bit
+                Content-Disposition: attachment; filename="cloud-config"
+
+                #cloud-config
+
+                runcmd:
+                - yum update -y --security
+                - amazon-linux-extras install docker -y
+                - amazon-linux-extras install epel -y
+                - yum -y install python3 git patch parallel openbabel java-11-amazon-corretto-headless jq
+                - pip3 install boto3 jinja2
+                - service docker start
+                - usermod -a -G docker ec2-user
+                --===============1409001372156971182==
+
+
+  ## Security Groups ##
+  
+  # Allow only SSH access into the main node
+  MainNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+      GroupDescription: "VirtualFlow Login node"
+      VpcId:
+        Fn::ImportValue:
+          !Sub ${VPCStackParameter}-VPC
+      SecurityGroupIngress:
+       - IpProtocol: tcp
+         CidrIp: 0.0.0.0/0
+         FromPort: 22
+         ToPort: 22
+      SecurityGroupEgress:
+       - IpProtocol: tcp
+         CidrIp: 0.0.0.0/0
+         FromPort: 0
+         ToPort: 9999
+
+#############
+## Outputs ##
+#############
+Outputs:
+  MainNodeInstanceID:
+    Value: !Ref MainNode
+    Description: InstanceID
+    Export:
+      Name: !Sub ${AWS::StackName}-InstanceID
+  MainNodePublicDNS:
+    Value: !GetAtt MainNode.PublicDnsName
+    Description: Public DNS name for the main node
+    Export:
+      Name: !Sub ${AWS::StackName}-MainNodePublicDNS
+

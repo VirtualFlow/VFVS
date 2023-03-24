@@ -1,0 +1,333 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Sample template for launching VirtualFlow in AWS Batch'
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Project name for tagging purpose
+  AllocationStrategy:
+    Type: String
+    Default: SPOT_CAPACITY_OPTIMIZED
+  AMI:
+    Description: Default ECS Optimized AMI (AL2) or your own AMI ID (which needs to be setup for ECS)
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id
+  CEInstanceTypes:
+    Type: String
+    Default: c5.24xlarge,c5d.24xlarge,c5.18xlarge,c5d.18xlarge,c5n.18xlarge,c5.12xlarge,c5d.12xlarge,c5.4xlarge,c5d.4xlarge,c5n.4xlarge,c5a.24xlarge,c5a.16xlarge,c5a.4xlarge
+  CEType:
+    Type: String
+    Default: SPOT
+  CEvCPUs:
+    Description: Max vCPUs in a single CE
+    Type: Number
+    Default: 512
+  S3BucketName:
+    Description: Bucket for storing data
+    Type: String
+  VPCStackParameter:
+    Type: String
+    Description: Name of the VPC Stack previously deployed
+  ContainerTimeout:
+    Description: How long before a container is aborted in seconds
+    Type: Number
+    Default: 7200
+  SharedMemorySize:
+    Description: How much memory for /dev/shm
+    Type: Number
+    Default: 6144
+
+Resources:
+
+  S3Policy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyName: !Sub ${AWS::StackName}-${AWS::Region}-VFS3Access
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: 
+              - s3:GetBucketLocation
+              - s3:ListAllMyBuckets
+            Resource: 'arn:aws:s3:::'
+          - Effect: Allow
+            Action: 's3:*'
+            Resource: 
+              - !Sub 'arn:aws:s3:::${S3BucketName}'
+              - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+      Roles:
+        - !Ref ECSTaskServiceRole
+
+  BatchInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - batch.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  ECSTaskServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  ECSTaskInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref ECSTaskServiceRole
+      InstanceProfileName: !Sub ${AWS::StackName}-${AWS::Region}-ECSTaskInstanceProfileIAM
+
+
+
+  BatchComputeEnvironment1:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      Tags: { "Project": !Ref ProjectName }
+      ComputeEnvironmentName: !Sub ${AWS::StackName}-CE1
+      ComputeResources:
+        AllocationStrategy: !Ref AllocationStrategy
+        InstanceRole: !Ref ECSTaskInstanceProfile
+        InstanceTypes: !Split [ ',',  !Ref CEInstanceTypes ]
+        LaunchTemplate:
+          LaunchTemplateId: !Ref BatchLaunchTemplate
+          Version: $Latest
+        MaxvCpus: !Ref CEvCPUs
+        MinvCpus: 0
+        DesiredvCpus: 0
+        SecurityGroupIds:
+          - Ref: BatchSecurityGroup
+        Subnets: !Split
+          - ','
+          - Fn::ImportValue:
+              !Sub ${VPCStackParameter}-PrivateSubnets
+        Type: !Ref CEType
+      ServiceRole: !Ref BatchInstanceRole
+      State: ENABLED
+      Type: MANAGED
+
+  BatchComputeEnvironment2:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      Tags: { "Project": !Ref ProjectName }
+      ComputeEnvironmentName: !Sub ${AWS::StackName}-CE2
+      ComputeResources:
+        AllocationStrategy: !Ref AllocationStrategy
+        InstanceRole: !Ref ECSTaskInstanceProfile
+        InstanceTypes: !Split [ ',',  !Ref CEInstanceTypes ]
+        LaunchTemplate:
+          LaunchTemplateId: !Ref BatchLaunchTemplate
+          Version: $Latest
+        MaxvCpus: !Ref CEvCPUs
+        MinvCpus: 0
+        DesiredvCpus: 0
+        SecurityGroupIds:
+          - Ref: BatchSecurityGroup
+        Subnets: !Split
+          - ','
+          - Fn::ImportValue:
+              !Sub ${VPCStackParameter}-PrivateSubnets
+        Type: !Ref CEType
+      ServiceRole: !Ref BatchInstanceRole
+      State: ENABLED
+      Type: MANAGED
+
+  BatchComputeEnvironment3:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      Tags: { "Project": !Ref ProjectName }
+      ComputeEnvironmentName: !Sub ${AWS::StackName}-CE3
+      ComputeResources:
+        AllocationStrategy: !Ref AllocationStrategy
+        InstanceRole: !Ref ECSTaskInstanceProfile
+        InstanceTypes: !Split [ ',',  !Ref CEInstanceTypes ]
+        LaunchTemplate:
+          LaunchTemplateId: !Ref BatchLaunchTemplate
+          Version: $Latest
+        MaxvCpus: !Ref CEvCPUs
+        MinvCpus: 0
+        DesiredvCpus: 0
+        SecurityGroupIds:
+          - Ref: BatchSecurityGroup
+        Subnets: !Split
+          - ','
+          - Fn::ImportValue:
+              !Sub ${VPCStackParameter}-PrivateSubnets
+        Type: !Ref CEType
+      ServiceRole: !Ref BatchInstanceRole
+      State: ENABLED
+      Type: MANAGED
+
+
+
+  # Launch template
+  BatchLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref AMI
+        BlockDeviceMappings:
+           - DeviceName: "/dev/xvda"
+             Ebs:
+               DeleteOnTermination: true
+               VolumeSize: 30
+               VolumeType: "gp3"
+        UserData:
+           Fn::Base64: !Sub |
+                Content-Type: multipart/mixed; boundary="===============1409001372156971182=="
+                MIME-Version: 1.0
+
+                --===============1409001372156971182==
+                Content-Type: text/cloud-config; charset="us-ascii"
+                MIME-Version: 1.0
+                Content-Transfer-Encoding: 7bit
+                Content-Disposition: attachment; filename="cloud-config"
+
+                #cloud-config
+
+                --===============1409001372156971182==
+                Content-Type: text/x-shellscript; charset="us-ascii"
+                MIME-Version: 1.0
+                Content-Transfer-Encoding: 7bit
+                Content-Disposition: attachment; filename="vflp-ecs.txt"
+                #
+                #!/bin/bash
+                echo ECS_IMAGE_PULL_BEHAVIOR=prefer-cached
+                echo ECS_IMAGE_PULL_INACTIVITY_TIMEOUT=2m
+                echo ECS_POLLING_METRICS_WAIT_DURATION=60s
+                --===============1409001372156971182==
+
+
+  BatchJobQueue1:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      Tags: { "Project": !Ref ProjectName }
+      ComputeEnvironmentOrder:
+        - ComputeEnvironment: !Ref BatchComputeEnvironment1
+          Order: 1
+        - ComputeEnvironment: !Ref BatchComputeEnvironment2
+          Order: 2
+        - ComputeEnvironment: !Ref BatchComputeEnvironment3
+          Order: 3
+      JobQueueName: !Sub ${AWS::StackName}-queue1
+      Priority: 1
+      State: ENABLED
+     
+  ## Create a job definition
+
+  VFJobDefinition8vflp:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      Tags: { "Project": !Ref ProjectName }
+      PropagateTags: True
+      JobDefinitionName: !Sub ${AWS::StackName}-jobdef-vflp
+      Type: Container
+      ContainerProperties:
+              ResourceRequirements:
+                - Type: "VCPU"
+                  Value: 8
+                - Type: "MEMORY"
+                  Value: 14000
+              Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${AWS::StackName}-vflp-ecr:latest"
+              LinuxParameters:
+                      SharedMemorySize: !Sub ${SharedMemorySize}
+      Timeout:
+              AttemptDurationSeconds: !Sub ${ContainerTimeout}
+      RetryStrategy:
+              Attempts: 4
+              EvaluateOnExit: 
+                      - OnStatusReason: "Host EC2*"
+                        Action: RETRY
+                      - OnReason: "*"
+                        Action: EXIT
+
+  VFJobDefinition8vfvs:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      Tags: { "Project": !Ref ProjectName }
+      PropagateTags: True
+      JobDefinitionName: !Sub ${AWS::StackName}-jobdef-vfvs
+      Type: Container
+      ContainerProperties:
+              ResourceRequirements:
+                - Type: "VCPU"
+                  Value: 8
+                - Type: "MEMORY"
+                  Value: 14000
+              Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${AWS::StackName}-vfvs-ecr:latest"
+              LinuxParameters:
+                      SharedMemorySize: !Sub ${SharedMemorySize}
+      Timeout:
+              AttemptDurationSeconds: !Sub ${ContainerTimeout}
+      RetryStrategy:
+              Attempts: 4
+              EvaluateOnExit: 
+                      - OnStatusReason: "Host EC2*"
+                        Action: RETRY
+                      - OnReason: "*"
+                        Action: EXIT
+
+  ## Create the ECR repo
+  ContainerRepositoryVFLP:
+    Type: AWS::ECR::Repository
+    Properties: 
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+      RepositoryName: !Sub ${AWS::StackName}-vflp-ecr
+
+  ContainerRepositoryVFVS:
+    Type: AWS::ECR::Repository
+    Properties: 
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+      RepositoryName: !Sub ${AWS::StackName}-vfvs-ecr
+
+  ## Security Groups ##
+  
+  # Compute nodes / Batch can egress, but no ingress
+  BatchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+      GroupDescription: "VF Batch"
+      VpcId:  
+        Fn::ImportValue: 
+          !Sub ${VPCStackParameter}-VPC
+      SecurityGroupEgress:
+       - IpProtocol: tcp
+         CidrIp: 0.0.0.0/0
+         FromPort: 0
+         ToPort: 9999
+
+
