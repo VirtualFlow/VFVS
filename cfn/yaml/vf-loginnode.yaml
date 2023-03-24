@@ -65,6 +65,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSBatchFullAccess
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+        - arn:aws:iam::aws:policy/AmazonAthenaFullAccess
 
   MainNodeInstanceProfile:
     Type: AWS::IAM::InstanceProfile
