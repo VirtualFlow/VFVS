@@ -151,6 +151,44 @@ A valid Schrödinger license is required to run CovDock.The config.txt file shou
     covalent_bond_constraints=A 1 CYS SG B 1 LIG C1
 ```
 
+### Running with GlideHTVS
+A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
+```
+    receptor=receptor.maegz
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
+
+### Running with GlideSP
+A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
+```
+    receptor=receptor.maegz
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
+
+
+### Running with GlideXP
+A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
+```
+    receptor=receptor.maegz
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
+
+
 
 ### Running with iGemDock
 An iGemDock executable (of name 'mod_ga') should be placed in directory: /tools/bin <br>
