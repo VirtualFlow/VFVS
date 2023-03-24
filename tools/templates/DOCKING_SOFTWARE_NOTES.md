@@ -101,6 +101,9 @@ Format for the mdock_dock.par file:
 
 ### Running with MCDock
 A MCDock executable (of name 'mcdock') should be placed in the directory: /tools/bin
+```
+    receptor=./receptor.xyz # Location of receptor file
+```
 
 ### Running with LigandFit
 A LigandFit executable (of name 'ligandfit') should be placed in directory: /tools/bin <br>
