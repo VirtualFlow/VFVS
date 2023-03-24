@@ -1400,7 +1400,7 @@ def docking_finish_Molegro(item, ret):
         
     return 
 
-## LigandFit
+## FitDock
 def docking_start_FitDock(task): 
 
     with open(task['config_path']) as fd:
@@ -1415,9 +1415,9 @@ def docking_start_FitDock(task):
             '-Tlig', config_['ligand_reference'],
             '-Qprot', config_['receptor'],
             '-Qlig', task['ligand_path'], 
-            '-ot', 'ot.mol2', 
-            '-os', 'os.mol2', 
-            '-o', 'o.mol2'
+            '-ot', item['tmp_run_dir']+'ot.mol2', 
+            '-os', item['tmp_run_dir']+'os.mol2', 
+            '-o', item['tmp_run_dir']+'o.mol2'
           ]
         
     return cmd
