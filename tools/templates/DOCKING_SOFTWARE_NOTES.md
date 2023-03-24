@@ -281,6 +281,7 @@ The config.txt file should contain:
 ```
     receptor=./receptor.pdb # Location of receptor file
     exhaustiveness=10
+    lightdock_path=$HOME/lightdock # Path to LightDock installation
 ```
 
 ### Running with FitDock

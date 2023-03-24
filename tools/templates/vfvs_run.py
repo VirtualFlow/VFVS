@@ -1526,9 +1526,9 @@ def docking_start_LightDock(task):
     task['lightdock_tmp_file'] = os.path.join(task['tmp_run_dir'], "run_.sh")
     
     with open(task['lightdock_tmp_file'], 'w') as f: 
-        f.writelines('./lightdock/bin/lightdock3_setup.py {} {} --noxt --noh --now -anm\n'.format(config_['receptor'], task['ligand_path']))
-        f.writelines('./lightdock/bin/lightdock3.py setup.json 100 -c 1 -l 0\n')
-        f.writelines('./lightdock/bin/lgd_generate_conformations.py {} {} swarm_0/gso_100.out {}\n'.format(config_['receptor'], task['ligand_path'], config_['exhaustiveness']))
+        f.writelines('{}/bin/lightdock3_setup.py {} {} --noxt --noh --now -anm\n'.format(config_['lightdock_path'], config_['receptor'], task['ligand_path']))
+        f.writelines('{}/bin/lightdock3.py setup.json 100 -c 1 -l 0\n')
+        f.writelines('{}/bin/lgd_generate_conformations.py {} {} swarm_0/gso_100.out {}\n'.format(config_['lightdock_path'], config_['receptor'], task['ligand_path'], config_['exhaustiveness']))
 
     os.system('chmod 0700 {}'.format(task['lightdock_tmp_file'])) # Assign execution permisions on script
     
