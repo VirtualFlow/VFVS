@@ -581,10 +581,10 @@ def docking_process_batch(summary_queue, scenario, items, temp_dir):
 
 def move_batch_logs(item, scenario_directories):
 
-    scenario_dest = scenario_directories[item['scenario_key']]
+    scenario_dest = Path(scenario_directories[item['scenario_key']]) / "batch_exec" / item['uuid']
     batch_output = Path(item['output_dir'])
     for dir_file in batch_output.iterdir():
-        shutil.move(str(dir_file), f"{scenario_dest}/")
+        shutil.move(str(dir_file), f"{str(scenario_dest)}/")
     shutil.rmtree(item['output_dir'])
 
 def check_for_completion_of_collection_key(collection_completions, collection_key, scenario_directories):
