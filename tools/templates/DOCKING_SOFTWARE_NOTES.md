@@ -163,6 +163,13 @@ A valid Schrödinger license is required to run CovDock.The config.txt file shou
     size_z=10
 ```
 
+### HDock
+An HDock executable (of name hdock) should be placed in directory: /tools/bin directory. 
+An createpl executable (of name createpl) should be placed in directory: /tools/bin directory. 
+```
+    receptor=receptor.pdb
+```
+
 ### Running with GlideSP
 A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
 ```

@@ -1011,7 +1011,9 @@ def process_docking_completion(item, ret):
     elif(item['program'] == "dock6"):
         docking_finish_dock6(item, ret) 
     elif(item['program'] == "flexx"):
-        docking_finish_flexx(item, ret) 
+        docking_finish_flexx(item, ret)
+    elif(item['program'] == "HDock"):
+        docking_finish_HDock(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1086,6 +1088,8 @@ def program_runstring_array(task):
         cmd = docking_start_dock6(task)   
     elif(task['program'] == "flexx"):
         cmd = docking_start_flexx(task)   
+    elif(task['program'] == "HDock"):
+        cmd = docking_start_HDock(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1181,7 +1185,41 @@ def docking_finish_SEED(item, ret):
 
     except: 
         logging.error("failed parsing")
+
+
+## HDock
+def docking_start_HDock(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['HDock_tmp_file'] = os.path.join(task['tmp_run_dir'], "HDock_run.sh")
+    
+    with open(task['HDock_tmp_file'], 'a+') as f: 
+        f.writelines(['{}/hdock {} {} -out Hdock.out'.format(task['tools_path'], config_['receptor'], task['lig_path'])])
+        f.writelines(['{}/createpl Hdock.out top100.pdb -nmax 1 -complex -models'.format(task['tools_path']) ])
         
+    os.system('chmod 0700 {}'.format(task['HDock_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['HDock_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_HDock(item, ret): 
+    try: 
+        pose_path = os.path.join(item['tmp_run_dir'], "model_1.pdb")        
+        with open(pose_path, 'r') as f: 
+            lines = f.readlines()
+        docking_score = float(lines[3].split(' ')[-1])
+        
+        shutil.move(pose_path, item['output_dir'])  
+        item['status'] = "success"
+        item['score'] = docking_score   
+    except: 
+        logging.error("failed parsing")
+
 
 ## dock6
 def docking_start_dock6(task): 
@@ -1263,13 +1301,6 @@ def docking_start_dock6(task):
 
 def docking_finish_dock6(item, ret): 
     try: 
-        # score_path = os.path.join(item['tmp_run_dir'], "seed_best.dat")
-        # with open(score_path, 'r') as f: 
-        #     lines = f.readlines()
-        # docking_score = float([x for x in lines[1].split(' ') if x != ''][4])
-        # item['score'] = min(docking_score)   
-        # pose_path = os.path.join(item['tmp_run_dir'], "ligand_seed_best.mol2")
-        
         dock_file = [x for x in os.listdir(item['tmp_run_dir']) if 'ligand_out' in x]
         dock_file = [x for x in dock_file if 'mol2' in x][0]
         os.system('cp {} {}'.format(dock_file, item['output_dir']))
