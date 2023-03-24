@@ -22,7 +22,8 @@ program_timeout=90
 ************************************************
 
 batchsystem=awsbatch
-# Possible values: awsbatch, slurm
+# Possible values: awsbatch, slurm, bash
+# bash is single node only and designed more for debugging
 
 ****** AWS Batch Options (if batchsystem=awsbatch)
 
@@ -86,6 +87,14 @@ slurm_array_job_size=100
 # Maximum number of concurrent jobs from a single array job
 # that should be run
 
+****** Bash Options (if batchsystem=bash)
+
+bash_template=./templates/template1.bash
+# Template for the bash script used
+
+bash_array_job_size=100
+# How many to group under a single workunit
+
 
 ************************************************
 ** Storage configuration
@@ -109,7 +118,7 @@ job_storage_mode=s3
 #         are required.
 #   * sharedfs: This mode requires that all running jobs have access to the
 #         same shared filesystem that will allow for both input and output
-#         of data. This is required if using Slurm
+#         of data. This is required if using Slurm or bash
 
 
 data_collection_addressing_mode=metatranche
