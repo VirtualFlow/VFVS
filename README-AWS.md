@@ -66,6 +66,16 @@ Similarly, when you return and want to re-start the login node, there is a sampl
 ./11-start-loginnode.sh us-east-2```
 ```
 
+### Troubleshooting
+
+If the status returned from a command is `ROLLBACK_COMPLETE` this means that the deployment failed. It could be due to a number of reasons. You can see the stack events via:
+
+```bash
+aws cloudformation describe-stack-events --region <region> --stack-name <stackname>
+```
+
+The `<stackname>` will be `vf-vpc` for the networking stack, `vf` for the Batch resources, and `vf-loginnode` for the login node
+
 
 ## Getting Started with VirtualFlow Virtual Screening (VFVS)
 
