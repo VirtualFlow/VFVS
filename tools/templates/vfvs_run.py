@@ -1467,6 +1467,88 @@ def docking_finish_autodock_koto(item, ret):
     
     return 
 
+
+# CovDock
+def run_CovDock(task):
+
+    from schrodinger import structure
+    from schrodinger.job import jobcontrol
+    from schrodinger.application.covdock import covdock
+    from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+    
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    
+    smi = task['ligand_path']
+    receptor = config_['receptor']
+    center_x = config_['center_x']
+    center_y = config_['center_y']
+    center_z = config_['center_z']
+    size_x = config_['size_x']
+    size_y = config_['size_y']
+    size_z = config_['size_z']
+    covalent_bond_constraints = config_['size_z']
+    
+    if receptor.split('.')[-1] != 'maegz': 
+        logging.error("failed parsing")
+    
+    # Prepare the ligand
+    ligand_struct = structure.create_structure_from_smiles(smi)
+    ligand_output_file = os.path.join("ligands", f"ligand_{ligand_struct.title}.maegz")
+
+    ligprep_settings = LigprepSettings()
+    ligprep_settings.set_output_file(ligand_output_file)
+    ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+    ligprep_job.run()
+    ligprep_job.wait()
+
+    if ligprep_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Prepare the receptor and ligand structures
+    receptor_struct = structure.StructureReader(receptor).next()
+    ligand_struct = structure.StructureReader(ligand_output_file).next()
+
+    # Set up CovDock settings
+    settings = covdock.CovDockSettings()
+    settings.set_receptor(receptor_struct)
+    settings.set_ligand(ligand_struct)
+
+    output_file = os.path.join("outputs", f"output_covdock_{ligand_struct.title}.maegz")
+    settings.set_output_file(output_file)
+    settings.set_covalent_bond_atom_pairs(covalent_bond_constraints)  # Define covalent bond atom pairs
+
+    # Specify the ligand binding site as coordinates and box size
+    settings.set_site_box_center((center_x, center_y, center_z))
+    settings.set_site_box_size((size_x, size_y, size_z))
+
+    # Run the CovDock job
+    covdock_job = covdock.CovDock(settings)
+    covdock_job.run()
+    covdock_job.wait()
+
+    if covdock_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Read the output file
+    output_structures = list(structure.StructureReader(output_file))
+
+    # Extract the docking scores
+    docking_scores = []
+    for struct in output_structures:
+        docking_score = struct.property['r_i_docking_score']
+        docking_scores.append( docking_score ) 
+
+    item['score'] = min(docking_score)
+    item['status'] = "success"  
+
+    return docking_scores  
+
+
 ## PSOvina
 
 def docking_start_PSOVina(task):
