@@ -265,6 +265,18 @@ docking_scenario_replicas=1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
 
+docking_scenario_batchsizes=1
+# Purpose: How many ligands should be processed in a single invocation
+#     of the docking program (most programs do not allow more than 1)
+# Series of integers separated by colons ":"
+# The number of values has to equal the number of docking programs
+#     specified in the variable "docking_programs"
+# The values are in the same order as the docking programs specified in the
+#     variable "docking_scenario_programs
+#     e.g.: docking_scenario_batchsizes=1:1
+# Valid values are dependent based on the docking program being used
+# all currently supported docking programs are currently limited
+# to a batch size of 1
 
 docking_scenario_basefolder=../input-files
 # Relative path to tools directory

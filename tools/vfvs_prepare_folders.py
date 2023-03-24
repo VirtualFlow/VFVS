@@ -58,13 +58,17 @@ def parse_config(filename):
     config['docking_scenario_inputfolders'] = config['docking_scenario_inputfolders'].split(
         ":")
 
+    config['docking_scenario_batchsizes'] = config['docking_scenario_batchsizes'].split(
+        ":")
+
 
 
     config['docking_scenarios_internal'] = {}
     for index, scenario in enumerate(config['docking_scenario_names']):
         config['docking_scenarios_internal'][scenario] = {
             'key': scenario,
-            'replicas': int(config['docking_scenario_replicas'][index])
+            'replicas': int(config['docking_scenario_replicas'][index]),
+            'batchcount': int(config['docking_scenario_batchsizes'][index]),
         }
 
 

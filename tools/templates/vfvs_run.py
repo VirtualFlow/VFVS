@@ -57,6 +57,11 @@ import sys
 import uuid
 
 
+
+
+
+
+
 # Download
 # -
 # Get the file and move it to a local location
@@ -79,7 +84,6 @@ def downloader(download_queue, unpack_queue, summary_queue, tmp_dir):
         try:
             item = download_queue.get(timeout=20.5)
         except Empty:
-            #print('Consumer: gave up waiting...', flush=True)
             continue
 
         if item is None:
@@ -388,91 +392,200 @@ def read_config_line(line):
     return key, value
 
 
-def docking_process(docking_queue, summary_queue):
+def docking_process(ctx, docking_queue, summary_queue):
+
+    items_queue = {}
 
     while True:
         try:
-            item = docking_queue.get(timeout=20.5)
+            item = docking_queue.get(timeout=2)
         except Empty:
-            #print('unpacker: gave up waiting...', flush=True)
+            # We should go ahead and process what is in the queue,
+            # even though we might not have everything
+            for scenario_key in items_queue:
+                scenario = ctx['main_config']['docking_scenarios'][scenario_key]
+                docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'])
+                items_queue[scenario_key] = []
             continue
 
         # check for stop
         if item is None:
+            # Process what is left in our queue
+            for scenario_key in items_queue:
+                scenario = ctx['main_config']['docking_scenarios'][scenario_key]
+                docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'])
+                items_queue[scenario_key] = []
             break
 
-        print(f"processing {item['ligand_key']}")
+        scenario_key = item['scenario_key']
+        if scenario_key not in items_queue:
+            items_queue[scenario_key] = []
 
-        start_time = time.perf_counter()
-        ret = None
+        scenario = ctx['main_config']['docking_scenarios'][scenario_key]
+        items_queue[scenario_key].append(item)
 
-        # temporary directory that will be wiped after this docking is complete
+        if len(items_queue[scenario_key]) >= scenario['batchsizes']:
+            docking_process_batch(summary_queue, scenario, items_queue[scenario_key], ctx['temp_dir'])
+            items_queue[scenario_key] = []
 
-        item['tmp_run_dir'] = Path(item['output_dir']) / "tmp"
-        item['tmp_run_dir'].mkdir(parents=True, exist_ok=True)
 
-        # Make a copy of the input files so we have paths that make sense
 
-        item['tmp_run_dir_input'] = Path(item['tmp_run_dir']) / "input-files"
-        shutil.copytree(item['input_files_dir'], item['tmp_run_dir_input'])
+def docking_process_setup_common(item, docking_type, temp_dir):
+    item['start_time'] = time.perf_counter()
 
-        # Setup paths for things we want to save
+    # temporary directory that will be wiped after this docking is complete
 
+    item['uuid'] = str(uuid.uuid4())
+    item['tmp_run_dir'] = Path(temp_dir) / "run" / item['uuid']
+    item['tmp_run_dir'].mkdir(parents=True, exist_ok=True)
+
+    # Make a copy of the input files so we have paths that make sense
+
+    item['tmp_run_dir_input'] = Path(item['tmp_run_dir']) / "input-files"
+    shutil.copytree(item['input_files_dir'], item['tmp_run_dir_input'])
+
+    if docking_type == "batch":
+        item['output_dir'] = Path(temp_dir) / "logs" / item['uuid']
+        item['output_dir'].mkdir(parents=True, exist_ok=True)
+
+    item['log_path'] = f"{item['output_dir']}/stdout"
+
+
+def docking_process_clean_common(item):
+    shutil.rmtree(item['tmp_run_dir'])
+    item['seconds'] = time.perf_counter() - item['start_time']
+
+def docking_process_batch(summary_queue, scenario, items, temp_dir):
+
+    if(len(items) == 0):
+        return
+
+    batched_item = {
+        'items': items,
+        'program': scenario['program'],
+        'execution_type': DOCKING_PROGRAMS[scenario['program']]['ligands'],
+        'scenario_key': scenario['key']
+    }
+
+    for item in batched_item['items']:
         item['output_path'] = f"{item['output_dir']}/output"
-        item['log_path'] = f"{item['output_dir']}/stdout"
-
-        item['ligand_path'] = item['ligand_path']
         item['status'] = "failed"
-
+        item['log_path'] = f"{item['output_dir']}/stdout"
         item['log'] = {
-                'base_collection_key': item['base_collection_key'],
-                'collection_key': item['collection_key'],
-                'ligand_key': item['ligand_key'],
-                'reason': ""
+            'base_collection_key': item['base_collection_key'],
+            'collection_key': item['collection_key'],
+            'ligand_key': item['ligand_key'],
+            'reason': ""
         }
 
+    if batched_item['execution_type'] == "single":
+        for item in batched_item['items']:
+            ret = None
+            start = time.perf_counter()
+
+            docking_process_setup_common(item, "single", temp_dir)
+
+            print(f"processing {item['ligand_key']}")
+
+            try:
+                cmd = program_runstring_array(item)
+            except RuntimeError as err:
+                logging.error(f"Invalid cmd generation for {item['ligand_key']} (program: '{item['program']}')")
+                raise(err)
+
+            try:
+                ret = subprocess.run(cmd, capture_output=True,
+                         text=True, cwd=item['tmp_run_dir_input'], timeout=item['timeout'])
+            except subprocess.TimeoutExpired as err:
+                item['log']['reason'] = f"timeout on {item['ligand_key']}"
+                logging.error(item['log']['reason'])
+
+
+            if ret != None:
+                if ret.returncode == 0:
+                    process_docking_completion(item, ret)
+                else:
+                    item['log']['reason'] = f"Non zero return code for {item['collection_key']} {item['ligand_key']} {item['scenario_key']}"
+                    logging.error(item['log']['reason'])
+                    logging.error(f"stdout:\n{ret.stdout}\nstderr:{ret.stderr}\n")
+
+
+                # Place output into files
+                with open(item['log_path'], "w") as output_f:
+                    output_f.write(f"STDOUT:\n{ret.stdout}\n")
+                    output_f.write(f"STDERR:\n{ret.stderr}\n")
+
+                item['seconds'] = time.perf_counter() - item['start_time']
+
+                print(f"processing {item['ligand_key']} - done in {item['seconds']}")
+
+    elif batched_item['execution_type'] == "batch":
+        ret = None
+
+        docking_process_setup_common(batched_item, "batch", temp_dir)
+
+        print(f"processing batch of {len(batched_item['items'])} items")
+
+        # Mark which docking these ligands were associated with
+        for item in batched_item['items']:
+            with open(f"{item['output_dir']}/dock_uuid", "w") as output_f:
+                output_f.write(f"{item['uuid']}\n")
+
         try:
-            cmd = program_runstring_array(item)
+            cmd = program_runstring_array_batch(batched_item)
         except RuntimeError as err:
-            logging.error(f"Invalid cmd generation for {item['ligand_key']} (program: '{item['program']}')")
+            logging.error(f"Invalid cmd generation for batched execution (program: '{batched_item['program']}')")
             raise(err)
 
         try:
             ret = subprocess.run(cmd, capture_output=True,
-                         text=True, cwd=item['tmp_run_dir_input'], timeout=item['timeout'])
+                     text=True, cwd=batched_item['tmp_run_dir_input'], timeout=batched_item['timeout'])
         except subprocess.TimeoutExpired as err:
-            logging.error(f"timeout on {item['ligand_key']}")
-
+            reason = "Batched execution timed out"
+            for item in batched_item['items']:
+                item['log']['reason'] = reason
+            logging.error(reason)
 
         if ret != None:
             if ret.returncode == 0:
-                process_docking_completion(item, ret)
+                process_docking_completion_batch(batched_item, ret)
             else:
-                item['log']['reason'] = f"Non zero return code for {item['collection_key']} {item['ligand_key']} {item['scenario_key']}"
-                logging.error(item['log']['reason'])
+                reason = f"Non zero return code for batched execution"
+                for item in batched_item['items']:
+                    item['log']['reason'] = reason
+
+                logging.error(reason)
                 logging.error(f"stdout:\n{ret.stdout}\nstderr:{ret.stderr}\n")
 
 
             # Place output into files
-            with open(item['log_path'], "w") as output_f:
+            with open(batched_item['log_path'], "w") as output_f:
                 output_f.write(f"STDOUT:\n{ret.stdout}\n")
                 output_f.write(f"STDERR:\n{ret.stderr}\n")
 
-        # Cleanup
-        shutil.rmtree(item['tmp_run_dir'])
 
-        end_time = time.perf_counter()
+        print(f"processing - done in {batched_item['seconds']}")
 
-        item['seconds'] = end_time - start_time
-        print(f"processing {item['ligand_key']} - done in {item['seconds']}")
-
-        while summary_queue.qsize() > 200:
-            time.sleep(0.2)
-
-        item['type'] = "docking_complete"
-        summary_queue.put(item)
+    else:
+        logging.error(f"Invalid ligand processing model for program {task['program']}")
+        raise RuntimeError(f"Invalid ligand processing model for program {task['program']}")
 
 
+    while summary_queue.qsize() > 200:
+        time.sleep(0.2)
+
+    batched_item['type'] = "docking_complete"
+    summary_queue.put(batched_item)
+
+
+
+def move_batch_logs(item, scenario_directories):
+
+    scenario_dest = scenario_directories[item['scenario_key']]
+    batch_output = Path(item['output_dir'])
+    for dir_file in batch_output.iterdir():
+        shutil.move(str(dir_file), f"{scenario_dest}/")
+    shutil.rmtree(item['output_dir'])
 
 def check_for_completion_of_collection_key(collection_completions, collection_key, scenario_directories):
 
@@ -573,47 +686,52 @@ def summary_process(ctx, summary_queue, upload_queue, metadata):
             overview_data['skipped_ligand_list'].append(item['log'])
 
         elif(item['type'] == "docking_complete"):
-
-            overview_data['total_dockings'] += 1
-            overview_data['dockings_status'][item['status']] += 1
-
-            # Save off the data we need
             dockings_processed += 1
 
-            if(item['status'] == "success"):
+            for single_item in item['items']:
+                overview_data['total_dockings'] += 1
+                overview_data['dockings_status'][single_item['status']] += 1
 
-                summary_key = f"{item['ligand_key']}"
+                if(single_item['status'] == "success"):
+                    summary_key = f"{single_item['ligand_key']}"
 
-                if summary_key not in summary_data[item['scenario_key']]:
-                    summary_data[item['scenario_key']][summary_key] = {
-                        'ligand': item['ligand_key'],
-                        'collection_key': item['collection_key'],
-                        'scenario': item['scenario_key'],
-                        'scores': [ item['score'] ],
-                        'attrs': item['attrs']
+                    if summary_key not in summary_data[single_item['scenario_key']]:
+                        summary_data[single_item['scenario_key']][summary_key] = {
+                            'ligand': single_item['ligand_key'],
+                            'collection_key': single_item['collection_key'],
+                            'scenario': single_item['scenario_key'],
+                            'scores': [ single_item['score'] ],
+                            'attrs': single_item['attrs']
+                        }
+
+                    else:
+                        summary_data[single_item['scenario_key']][summary_key]['scores'].append(single_item['score'])
+                else:
+                    # Log the failure
+                    overview_data['failed_list'].append(single_item['log'])
+
+
+                # See if this was the last completion for this collection_key
+
+                if single_item['base_collection_key'] in collection_completions:
+                    collection_completions[single_item['base_collection_key']]['current_completions'] += 1
+                    check_for_completion_of_collection_key(collection_completions, single_item['base_collection_key'], scenario_directory)
+                else:
+                    collection_completions[single_item['base_collection_key']] = {
+                        'expected_completions': -1,
+                        'current_completions': 1,
+                        'temp_dir': ""
                     }
 
-                else:
-                    summary_data[item['scenario_key']][summary_key]['scores'].append(item['score'])
-            else:
-                # Log the failure
-                overview_data['failed_list'].append(item['log'])
+            # Copy data if this was a batch execution
+            if(item['execution_type'] == "batch"):
+                move_batch_logs(item, scenario_directory)
 
-
-            # See if this was the last completion for this collection_key
-
-            if item['base_collection_key'] in collection_completions:
-                collection_completions[item['base_collection_key']]['current_completions'] += 1
-                check_for_completion_of_collection_key(collection_completions, item['base_collection_key'], scenario_directory)
-            else:
-                collection_completions[item['base_collection_key']] = {
-                    'expected_completions': -1,
-                    'current_completions': 1,
-                    'temp_dir': ""
-                }
         else:
             logging.error(f"received invalid summary completion {item['type']}")
             raise
+
+
 
 
 def generate_tarfile(dir, tarname):
@@ -864,7 +982,8 @@ def process_config(ctx):
                                    ),
             'program': program,
             'program_long': program_long,
-            'replicas': int(ctx['main_config']['docking_scenario_replicas'][index])
+            'replicas': int(ctx['main_config']['docking_scenario_replicas'][index]),
+            'batchsizes': int(ctx['main_config']['docking_scenario_batchsizes'][index]),
         }
 
 
@@ -951,65 +1070,24 @@ def get_workunit_from_sharedfs(ctx, workunit_id, subjob_id, job_tar, download_di
 def process_docking_completion(item, ret):
     item['status'] = "failed"
 
-    if(item['program'] == "qvina02"
-        or item['program'] == "qvina_w"
-        or item['program'] == "vina"
-        or item['program'] == "vina_carb"
-        or item['program'] == "vina_xb"
-        or item['program'] == "gwovina"
-        or item['program'] == "AutodockVina_1.2"
-        or item['program'] == "AutodockZN"
-    ):
-        docking_finish_vina(item, ret)
-    elif(item['program'] == "smina"
-        or item['program'] == "gnina"
-    ):
-        docking_finish_smina(item, ret)
-    elif(item['program'] == "adfr"):
-        docking_finish_adfr(item, ret)
-    elif(item['program'] == "plants"):
-        docking_finish_plants(item, ret)
-    elif(item['program'] == "rDOCK"):
-        docking_finish_rdock(item, ret)
-    elif(item['program'] == "M-Dock"):
-        docking_finish_mdock(item, ret)
-    elif(item['program'] == "MCDock"):
-        docking_finish_mcdock(item, ret)
-    elif(item['program'] == "LigandFit"):
-        docking_finish_ligandfit(item, ret)
-    elif(item['program'] == "ledock"):
-        docking_finish_ledock(item, ret)
-    elif(item['program'] == "gold"):
-        docking_finish_gold(item, ret)
-    elif(item['program'] == "iGemDock"):
-        docking_finish_igemdock(item, ret)
-    elif(item['program'] == "idock"):
-        docking_finish_idock(item, ret)
-    elif(item['program'] == "GalaxyDock3"):
-        docking_finish_galaxydock3(item, ret)
-    elif(item['program'] == "autodock_cpu"
-        or item['program'] == "autodock_gpu"
-        ):
-        docking_finish_autodock(item, ret)
-    
-    elif(item['program'] == "autodock_koto"):
-        docking_finish_autodock_koto(item, ret)
-    elif(item['program'] == "RLDock"):
-        docking_finish_rldock(item, ret)
-    elif(item['program'] == "PSOVina"):
-        docking_finish_PSOVina(item, ret)
-    elif(item['program'] == "LightDock"):
-        docking_finish_LightDock(item, ret)
-    elif(item['program'] == "FitDock"):
-        docking_finish_FitDock(item, ret)
-    elif(item['program'] == "Molegro"):
-        docking_finish_Molegro(item, ret)
-    elif(item['program'] == "rosetta-ligand"):
-        docking_finish_rosetta_ligand(item, ret) 
-    elif(item['program'] == "SEED"):
-        docking_finish_SEED(item, ret) 
-    else:
+    if item['program'] not in DOCKING_PROGRAMS:
         raise RuntimeError(f"No completion function for {item['program']}")
+    elif 'end' not in DOCKING_PROGRAMS[item['program']]:
+        raise RuntimeError(f"No completion function for {item['program']}")
+    else:
+        DOCKING_PROGRAMS[item['program']]['end'](item, ret)
+
+
+def process_docking_completion_batch(batch_item, ret):
+    batch_item['status'] = "failed"
+
+    if batch_item['program'] not in DOCKING_PROGRAMS:
+        raise RuntimeError(f"No completion function for {item['program']}")
+    elif 'end' not in DOCKING_PROGRAMS[batch_item['program']]:
+        raise RuntimeError(f"No completion function for {item['program']}")
+    else:
+        DOCKING_PROGRAMS[batch_item['program']]['end'](batch_item, ret)
+
 
 # Generate the run command for a given program
 
@@ -1017,65 +1095,25 @@ def program_runstring_array(task):
 
     cmd = []
 
-    if(task['program'] == "qvina02"
-            or task['program'] == "qvina_w"
-            or task['program'] == "vina"
-            or task['program'] == "vina_carb"
-            or task['program'] == "vina_xb"
-            or task['program'] == "gwovina"
-            or task['program'] == "AutodockVina_1.2"
-       ):
-        cmd = docking_start_vina(task)
-    elif(task['program'] == "smina"):
-        cmd = docking_start_smina(task)
-    elif(task['program'] == "adfr"):
-        cmd = docking_start_adfr(task)
-    elif(task['program'] == "plants"):
-        cmd = docking_start_plants(task)
-    elif(task['program'] == "AutodockZN"):
-        cmd = docking_start_autodockzn(task)
-    elif(task['program'] == "gnina"):
-        cmd = docking_start_gnina(task)
-    elif(task['program'] == "rDock"):
-        cmd = docking_start_rdock(task)
-    elif(task['program'] == "M-Dock"):
-        cmd = docking_start_mdock(task)
-    elif(task['program'] == "MCDock"):
-        cmd = docking_start_mcdock(task)
-    elif(task['program'] == "LigandFit"):
-        cmd = docking_start_ligandfit(task)
-    elif(task['program'] == "ledock"):
-        cmd = docking_start_ledock(task)
-    elif(task['program'] == "gold"):
-        cmd = docking_start_gold(task)
-    elif(task['program'] == "iGemDock"):
-        cmd = docking_start_igemdock(task)
-    elif(task['program'] == "idock"):
-        cmd = docking_start_idock(task)
-    elif(task['program'] == "GalaxyDock3"):
-        cmd = docking_start_galaxydock3(task)
-    elif(task['program'] == "autodock_cpu"):
-        cmd = docking_start_autodock(task, "cpu")
-    elif(task['program'] == "autodock_gpu"):
-        cmd = docking_start_autodock(task, "gpu")
-    elif(task['program'] == "autodock_koto"):
-        cmd = docking_start_autodock_koto(task)    
-    elif(task['program'] == "RLDock"):
-        cmd = docking_start_rldock(task)     
-    elif(task['program'] == "PSOVina"):
-        cmd = docking_start_PSOVina(task)     
-    elif(task['program'] == "LightDock"):
-        cmd = docking_start_LightDock(task)   
-    elif(task['program'] == "FitDock"):
-        cmd = docking_start_FitDock(task)   
-    elif(task['program'] == "Molegro"):
-        cmd = docking_start_Molegro(task)   
-    elif(task['program'] == "rosetta-ligand"):
-        cmd = docking_start_rosetta_ligand(task)   
-    elif(task['program'] == "SEED"):
-        cmd = docking_start_SEED(task)   
+    if task['program'] not in DOCKING_PROGRAMS:
+        raise RuntimeError(f"No start function for {task['program']}")
+    elif 'start' not in DOCKING_PROGRAMS[task['program']]:
+        raise RuntimeError(f"No start function for {task['program']}")
     else:
-        raise RuntimeError(f"Invalid program type of {task['program']}")
+        cmd = DOCKING_PROGRAMS[task['program']]['start'](task)
+
+    return cmd
+
+def program_runstring_array_batch(batch_item):
+
+    cmd = []
+
+    if batch_item['program'] not in DOCKING_PROGRAMS:
+        raise RuntimeError(f"No start function for {task['program']}")
+    elif 'start' not in DOCKING_PROGRAMS[batch_item['program']]:
+        raise RuntimeError(f"No start function for {task['program']}")
+    else:
+        cmd = DOCKING_PROGRAMS[batch_item['program']]['start'](batch_item)
 
     return cmd
 
@@ -2078,6 +2116,12 @@ def docking_finish_galaxydock3(item, ret):
 
 ## Autodock
 
+def docking_start_autodock_gpu(item):
+    return docking_start_autodock(task, "gpu")
+
+def docking_start_autodock_cpu(item):
+    return docking_start_autodock(task, "cpu")
+
 def docking_start_autodock(item, arch_type):
 
     with open(item['config_path']) as fd:
@@ -2100,6 +2144,168 @@ def docking_finish_autodock(item, ret):
         item['status'] = "success"
     except:
         logging.error("failed parsing")
+
+
+
+DOCKING_PROGRAMS = {
+    'qvina02': {
+        'start': docking_start_vina,
+        'end': docking_finish_vina,
+        'ligands': "single"
+    },
+    'qvina_w': {
+        'start': docking_start_vina,
+        'end': docking_finish_vina,
+        'ligands': "single"
+    },
+    'vina': {
+        'start': docking_start_vina,
+        'end': docking_finish_vina,
+        'ligands': "single"
+    },
+    'vina_carb': {
+        'start': docking_start_vina,
+        'end': docking_finish_vina,
+        'ligands': "single"
+    },
+    'vina_xb': {
+        'start': docking_start_vina,
+        'end': docking_finish_vina,
+        'ligands': "single"
+    },
+    'gwovina': {
+        'start': docking_start_vina,
+        'end': docking_finish_vina,
+        'ligands': "single"
+    },
+    'AutodockVina_1.2': {
+        'start': docking_start_vina,
+        'end': docking_finish_vina,
+        'ligands': "single"
+    },
+    'AutodockZN': {
+        'start': docking_start_autodockzn,
+        'end': docking_finish_vina,
+        'ligands': "single"
+    },
+    'smina': {
+        'start': docking_start_smina,
+        'end': docking_finish_smina,
+        'ligands': "single"
+    },
+    'adfr': {
+        'start': docking_start_adfr,
+        'end': docking_finish_adfr,
+        'ligands': "single"
+    },
+    'plants': {
+        'start': docking_start_plants,
+        'end': docking_finish_plants,
+        'ligands': "single"
+    },
+    'gnina': {
+        'start': docking_start_gnina,
+        'end': docking_finish_smina,
+        'ligands': "single"
+    },
+    'rDock': {
+        'start': docking_start_rdock,
+        'end': docking_finish_rdock,
+        'ligands': "single"
+    },
+    'M-Dock': {
+        'start': docking_start_mdock,
+        'end': docking_finish_mdock,
+        'ligands': "single"
+    },
+    'MCDock': {
+        'start': docking_start_mcdock,
+        'end': docking_finish_mcdock,
+        'ligands': "single"
+    },
+    'LigandFit': {
+        'start': docking_start_ligandfit,
+        'end': docking_finish_ligandfit,
+        'ligands': "single"
+    },
+    'ledock': {
+        'start': docking_start_ledock,
+        'end': docking_finish_ledock,
+        'ligands': "single"
+    },
+    'gold': {
+        'start': docking_start_gold,
+        'end': docking_finish_gold,
+        'ligands': "single"
+    },
+    'iGemDock': {
+        'start': docking_start_igemdock,
+        'end': docking_finish_igemdock,
+        'ligands': "single"
+    },
+    'idock': {
+        'start': docking_start_idock,
+        'end': docking_finish_idock,
+        'ligands': "single"
+    },
+    'GalaxyDock3': {
+        'start': docking_start_galaxydock3,
+        'end': docking_finish_galaxydock3,
+        'ligands': "single"
+    },
+    'autodock_cpu': {
+        'start': docking_start_autodock_cpu,
+        'end': docking_finish_autodock,
+        'ligands': "single"
+    },
+    'autodock_gpu': {
+        'start': docking_start_autodock_gpu,
+        'end': docking_finish_autodock,
+        'ligands': "single"
+    },
+    'autodock_koto': {
+        'start': docking_start_autodock_koto,
+        'end': docking_finish_autodock_koto,
+        'ligands': "single"
+    },
+    'RLDock': {
+        'start': docking_start_rldock,
+        'end': docking_finish_rldock,
+        'ligands': "single"
+    },
+    'PSOVina': {
+        'start': docking_start_PSOVina,
+        'end': docking_finish_PSOVina,
+        'ligands': "single"
+    },
+    'LightDock': {
+        'start': docking_start_LightDock,
+        'end': docking_finish_LightDock,
+        'ligands': "single"
+    },
+    'FitDock': {
+        'start': docking_start_FitDock,
+        'end': docking_finish_FitDock,
+        'ligands': "single"
+    },
+    'Molegro': {
+        'start': docking_start_Molegro,
+        'end': docking_finish_Molegro,
+        'ligands': "single"
+    },
+    'rosetta-ligand': {
+        'start': docking_start_rosetta_ligand,
+        'end': docking_finish_rosetta_ligand,
+        'ligands': "single"
+    },
+    'SEED': {
+        'start': docking_start_SEED,
+        'end': docking_finish_SEED,
+        'ligands': "single"
+    },
+}
+
+
 
 
 
@@ -2229,7 +2435,7 @@ def process(ctx):
         docking_processes = []
         for i in range(0, ctx['vcpus_to_use']):
             # docking_process(docking_queue, summary_queue)
-            docking_processes.append(Process(target=docking_process, args=(docking_queue, summary_queue)))
+            docking_processes.append(Process(target=docking_process, args=(ctx, docking_queue, summary_queue)))
             docking_processes[i].start()
 
         # There should never be more than one summary process
