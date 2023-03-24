@@ -216,6 +216,10 @@ def check_parameters(config):
             if(empty_value(config, 'slurm_template')):
                 print("* 'slurm_template' must be set if batchsystem is 'slurm'")
                 error = 1
+        elif(config['batchsystem'] == "bash"):
+            if(empty_value(config, 'bash_template')):
+                print("* 'bash_template' must be set if batchsystem is 'bash'")
+                error = 1
         else:
             print(f"* batchsystem '{config['batchsystem']}' is not supported. Only awsbatch and slurm are supported")
 

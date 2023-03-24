@@ -329,7 +329,8 @@ def process(ctx):
         max_array_job_size = int(config['aws_batch_array_job_size'])
     elif(config['batchsystem'] == "slurm"):
         max_array_job_size = int(config['slurm_array_job_size'])
-
+    elif(config['batchsystem'] == "bash"):
+        max_array_job_size = int(config['bash_array_job_size'])
 
     for collection_key, collection_obj in collections.items():
 
