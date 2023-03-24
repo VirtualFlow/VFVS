@@ -334,6 +334,14 @@ The config.txt file should contain:
     dock_in=./dock.in
 ```
 
+### Running with Flexx
+A Flexx executable (of name 'flexx') should be placed in directory: /tools/bin <br>
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb 
+    ref_ligand=./ref_ligand.mol2 # Location for reference ligand 
+```
+
 
 ### Running with dock6
 The config.txt file should contain: 

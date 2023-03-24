@@ -1010,6 +1010,8 @@ def process_docking_completion(item, ret):
         docking_finish_MpSDockZN(item, ret) 
     elif(item['program'] == "dock6"):
         docking_finish_dock6(item, ret) 
+    elif(item['program'] == "flexx"):
+        docking_finish_flexx(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1082,6 +1084,8 @@ def program_runstring_array(task):
         cmd = docking_start_MpSDockZN(task)   
     elif(task['program'] == "dock6"):
         cmd = docking_start_dock6(task)   
+    elif(task['program'] == "flexx"):
+        cmd = docking_start_flexx(task)   
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -1431,6 +1435,47 @@ def docking_finish_FitDock(item, ret):
         item['score'] = min(docking_score)
 
         shutil.move(docking_out_file, item['output_dir'])             
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
+
+## Flexx
+def docking_start_flexx(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    output_file_path = item['output_dir'] + task['lig_path'].split('/')[-1].replace('.mol2', '.sdf')
+    
+    cmd = [f"{task['tools_path']}/flexx", 
+           '-i', task['lig_path'], 
+           '-o', output_file_path, 
+           '-p', config_['receptor'], 
+           '-r', config_['ref_ligand']
+          ]
+    
+    return cmd
+
+def docking_finish_flexx(item, ret): 
+    try: 
+        output_file_path = item['output_dir'] + item['lig_path'].split('/')[-1].replace('.mol2', '.sdf')
+        
+        with open(output_file_path, 'r') as f: 
+            lines = f.readlines()    
+        
+        for i,item in enumerate(lines): 
+            docking_scores = []
+            if '>  <docking-score>' in item : 
+                docking_score = float(lines[i+1])
+                docking_scores.append(docking_score)
+        
+        item['score'] = min(docking_scores)
         item['status'] = "success"
     except: 
         logging.error("failed parsing")
