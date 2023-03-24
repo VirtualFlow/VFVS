@@ -1482,7 +1482,6 @@ def run_CovDock(task):
         if '#' in config_[item]:
             config_[item] = config_[item].split('#')[0]
 
-    
     smi = task['ligand_path']
     receptor = config_['receptor']
     center_x = config_['center_x']
@@ -1491,14 +1490,14 @@ def run_CovDock(task):
     size_x = config_['size_x']
     size_y = config_['size_y']
     size_z = config_['size_z']
-    covalent_bond_constraints = config_['size_z']
+    covalent_bond_constraints = config_['covalent_bond_constraints']
     
     if receptor.split('.')[-1] != 'maegz': 
         logging.error("failed parsing")
     
     # Prepare the ligand
     ligand_struct = structure.create_structure_from_smiles(smi)
-    ligand_output_file = os.path.join("ligands", f"ligand_{ligand_struct.title}.maegz")
+    ligand_output_file = os.path.join(task['tmp_run_dir'], f"ligand_{ligand_struct.title}.maegz")
 
     ligprep_settings = LigprepSettings()
     ligprep_settings.set_output_file(ligand_output_file)
@@ -1518,7 +1517,7 @@ def run_CovDock(task):
     settings.set_receptor(receptor_struct)
     settings.set_ligand(ligand_struct)
 
-    output_file = os.path.join("outputs", f"output_covdock_{ligand_struct.title}.maegz")
+    output_file = task['output_path']
     settings.set_output_file(output_file)
     settings.set_covalent_bond_atom_pairs(covalent_bond_constraints)  # Define covalent bond atom pairs
 
@@ -1543,10 +1542,252 @@ def run_CovDock(task):
         docking_score = struct.property['r_i_docking_score']
         docking_scores.append( docking_score ) 
 
-    item['score'] = min(docking_score)
-    item['status'] = "success"  
+    task['score'] = min(docking_scores)
+    task['status'] = "success"  
 
-    return docking_scores  
+    return   
+
+
+# Glide SP 
+
+def run_Glide_SP(task):
+    from schrodinger import structure
+    from schrodinger.job import jobcontrol
+    from schrodinger.application.glide import glide
+    from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+    
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    smi = task['ligand_path']
+    receptor = config_['receptor']
+    center_x = config_['center_x']
+    center_y = config_['center_y']
+    center_z = config_['center_z']
+    size_x = config_['size_x']
+    size_y = config_['size_y']
+    size_z = config_['size_z']
+
+    if receptor.split('.')[-1] != 'maegz':
+        logging.error("failed parsing")
+
+    # Prepare the ligand
+    ligand_struct = structure.create_structure_from_smiles(smi)
+    ligand_output_file = os.path.join(task['tmp_run_dir'], f"ligand_{ligand_struct.title}.maegz")
+
+    ligprep_settings = LigprepSettings()
+    ligprep_settings.set_output_file(ligand_output_file)
+    ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+    ligprep_job.run()
+    ligprep_job.wait()
+
+    if ligprep_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Prepare the receptor and ligand structures
+    receptor_struct = structure.StructureReader(receptor).next()
+    ligand_struct = structure.StructureReader(ligand_output_file).next()
+
+    # Set up Glide settings
+    settings = glide.GlideSettings()
+    settings.set_receptor_file(receptor_struct)
+    settings.set_ligand_file(ligand_output_file)
+
+    output_file = task['output_path']
+    settings.set_output_file(output_file)
+
+    # Specify the ligand binding site as coordinates and box size
+    settings.set_site_box_center((center_x, center_y, center_z))
+    settings.set_site_box_size((size_x, size_y, size_z))
+
+    # Set Glide precision to SP
+    settings.set_precision("SP")
+
+    # Run the Glide job
+    glide_job = glide.Glide(settings)
+    glide_job.run()
+    glide_job.wait()
+
+    if glide_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Read the output file
+    output_structures = list(structure.StructureReader(output_file))
+
+    # Extract the docking scores
+    docking_scores = []
+    for struct in output_structures:
+        docking_score = struct.property['r_i_docking_score']
+        docking_scores.append(docking_score)
+
+    task['score'] = min(docking_scores)
+    task['status'] = "success"
+
+    return 
+
+
+# Glide XP 
+def run_Glide_XP(task):
+    from schrodinger import structure
+    from schrodinger.job import jobcontrol
+    from schrodinger.application.glide import glide
+    from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+    
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    smi = task['ligand_path']
+    receptor = config_['receptor']
+    center_x = config_['center_x']
+    center_y = config_['center_y']
+    center_z = config_['center_z']
+    size_x = config_['size_x']
+    size_y = config_['size_y']
+    size_z = config_['size_z']
+
+    if receptor.split('.')[-1] != 'maegz':
+        logging.error("failed parsing")
+
+    # Prepare the ligand
+    ligand_struct = structure.create_structure_from_smiles(smi)
+    ligand_output_file = os.path.join(task['tmp_run_dir'], f"ligand_{ligand_struct.title}.maegz")
+
+    ligprep_settings = LigprepSettings()
+    ligprep_settings.set_output_file(ligand_output_file)
+    ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+    ligprep_job.run()
+    ligprep_job.wait()
+
+    if ligprep_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Prepare the receptor and ligand structures
+    receptor_struct = structure.StructureReader(receptor).next()
+    ligand_struct = structure.StructureReader(ligand_output_file).next()
+
+    # Set up Glide settings
+    settings = glide.GlideSettings()
+    settings.set_receptor_file(receptor_struct)
+    settings.set_ligand_file(ligand_output_file)
+
+    output_file = task['output_path']
+    settings.set_output_file(output_file)
+
+    # Specify the ligand binding site as coordinates and box size
+    settings.set_site_box_center((center_x, center_y, center_z))
+    settings.set_site_box_size((size_x, size_y, size_z))
+
+    # Set Glide precision to XP
+    settings.set_precision("XP")
+
+    # Run the Glide job
+    glide_job = glide.Glide(settings)
+    glide_job.run()
+    glide_job.wait()
+
+    if glide_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Read the output file
+    output_structures = list(structure.StructureReader(output_file))
+
+    # Extract the docking scores
+    docking_scores = []
+    for struct in output_structures:
+        docking_score = struct.property['r_i_docking_score']
+        docking_scores.append(docking_score)
+
+    task['score'] = min(docking_scores)
+    task['status'] = "success"
+
+    return 
+
+
+
+# Glide HTVS
+def run_Glide_HTVS(task):
+    from schrodinger import structure
+    from schrodinger.job import jobcontrol
+    from schrodinger.application.glide import glide
+    from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    smi = task['ligand_path']
+    receptor = config_['receptor']
+    center_x = config_['center_x']
+    center_y = config_['center_y']
+    center_z = config_['center_z']
+    size_x = config_['size_x']
+    size_y = config_['size_y']
+    size_z = config_['size_z']
+
+    if receptor.split('.')[-1] != 'maegz':
+        logging.error("failed parsing")
+
+    # Prepare the ligand
+    ligand_struct = structure.create_structure_from_smiles(smi)
+    ligand_output_file = os.path.join(task['tmp_run_dir'], f"ligand_{ligand_struct.title}.maegz")
+
+    ligprep_settings = LigprepSettings()
+    ligprep_settings.set_output_file(ligand_output_file)
+    ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+    ligprep_job.run()
+    ligprep_job.wait()
+
+    if ligprep_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Prepare the receptor and ligand structures
+    receptor_struct = structure.StructureReader(receptor).next()
+    ligand_struct = structure.StructureReader(ligand_output_file).next()
+
+    # Set up Glide settings
+    settings = glide.GlideSettings()
+    settings.set_receptor_file(receptor_struct)
+    settings.set_ligand_file(ligand_output_file)
+
+    output_file = task['output_path']
+    settings.set_output_file(output_file)
+
+    # Specify the ligand binding site as coordinates and box size
+    settings.set_site_box_center((center_x, center_y, center_z))
+    settings.set_site_box_size((size_x, size_y, size_z))
+
+    # Set Glide precision to HTVS
+    settings.set_precision("HTVS")
+
+    # Run the Glide job
+    glide_job = glide.Glide(settings)
+    glide_job.run()
+    glide_job.wait()
+
+    if glide_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Read the output file
+    output_structures = list(structure.StructureReader(output_file))
+
+    # Extract the docking scores
+    docking_scores = []
+    for struct in output_structures:
+        docking_score = struct.property['r_i_docking_score']
+        docking_scores.append(docking_score)
+
+    task['score'] = min(docking_scores)
+    task['status'] = "success"
+
+    return 
 
 
 ## PSOvina
