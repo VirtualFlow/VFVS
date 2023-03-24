@@ -164,7 +164,6 @@ def check_parameters(config):
                 error = 1
             else:
                 config['object_store_job_prefix'].rstrip("/")
-            i
 
     if(empty_value(config, 'data_storage_mode') or (config['data_storage_mode'] != "s3" and config['data_storage_mode'] != "sharedfs")):
         print("* 'job_storage_mode' must be set to 's3' or 'sharedfs'")
