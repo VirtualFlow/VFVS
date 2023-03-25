@@ -957,7 +957,9 @@ def process_docking_completion(item, ret):
         or item['program'] == "vina_xb"
         or item['program'] == "gwovina"
         or item['program'] == "AutodockVina_1.2"
-        or item['program'] == "AutodockZN"
+        or item['program'] == "AutodockVina_1.1.2"
+        or item['program'] == "qvina_gpu"
+        or item['program'] == "qvina_w_gpu"
     ):
         docking_finish_vina(item, ret)
     elif(item['program'] == "smina"
@@ -1031,6 +1033,9 @@ def program_runstring_array(task):
             or task['program'] == "gwovina"
             or task['program'] == "AutodockVina_1.2"
             or task['program'] == "AutodockVina_1.1.2"
+            or task['program'] == "qvina_gpu"
+            or task['program'] == "qvina_w_gpu"
+
        ):
         
         cmd = docking_start_vina(task)
