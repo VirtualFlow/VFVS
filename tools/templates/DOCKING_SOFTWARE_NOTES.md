@@ -289,6 +289,37 @@ The config.txt file should contain:
 A qvina_gpu executable (of name 'qvina_gpu') should be placed in directory: /tools/bin <br>
 Instructions for compilation are provided in https://github.com/DeltaGroupNJUPT/QVina-W-GPU
 
+### Running with vina_gpu
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
+A vina_gpu executable (of name 'vina_gpu') should be placed in directory: /tools/bin <br>
+Instructions for compilation are provided in https://github.com/DeltaGroupNJUPT/Vina-GPU
+
+### Running with vina_gpu_2.0
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
+A vina_gpu_2.0 executable (of name 'vina_gpu_2.0') should be placed in directory: /tools/bin <br>
+Instructions for compilation are provided in https://github.com/DeltaGroupNJUPT/Vina-GPU-2.0
+
+
 ### Running with RLDock
 The config.txt file should contain: 
 ```

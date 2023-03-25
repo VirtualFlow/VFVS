@@ -960,6 +960,8 @@ def process_docking_completion(item, ret):
         or item['program'] == "AutodockVina_1.1.2"
         or item['program'] == "qvina_gpu"
         or item['program'] == "qvina_w_gpu"
+        or item['program'] == "vina_gpu"
+        or item['program'] == "vina_gpu_2.0"
     ):
         docking_finish_vina(item, ret)
     elif(item['program'] == "smina"

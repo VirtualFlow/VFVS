@@ -241,7 +241,7 @@ docking_scenario_programs=qvina02
 # Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, gwovina, adfr, AutodockVina_1.2, AutodockZN
 #                  gnina, rDock, M-Dock, MCDock, LigandFit, ledock, gold, iGemDock, idock, GalaxyDock3, autodock_gpu
 #                  autodock_cpu, autodock_koto, RLDock, PSOVina, LightDock, FitDock, Molegro, rosetta-ligand, SEED
-#                  MpSDockZN, AutodockVina_1.1.2, CovDock, dock6, flexx, HDock
+#                  MpSDockZN, AutodockVina_1.1.2, CovDock, dock6, flexx, HDock, vina_gpu, vina_gpu_2.0
 # Values have to be separated by colons ":" and without spaces, e.g: docking_scenario_programs=vina:smina
 # smina_rigid has to be used for rigid docking with smina, while smine_flexible for flexible receptor docking
 
