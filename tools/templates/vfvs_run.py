@@ -3035,6 +3035,44 @@ def scoring_finish_vinardo(item, ret):
     except: 
         logging.error("failed parsing")
 
+# vina scoring 
+def scoring_start_vina(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+    
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        print('Ligand needs to be in pdbqt format. Converting ligand format using obabel.')
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    smina_loc = '{}/smina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} -l {} --score_only --scoring vina > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_vina(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        vina_score = float([x for x in lines if 'Affinity' in x][0].split(' ')[1])
+        item['score'] = vina_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
 
 
 def get_workunit_information():
