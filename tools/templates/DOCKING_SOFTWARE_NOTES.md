@@ -441,14 +441,7 @@ A gnina executable (with the exact name 'gnina') must be downloaded from https:/
 placed within the directory /tools/bin (where other executables are located).<br>
 A config.txt file is required for running gnina. An example of the config file format is: 
 ```
-    center_x=16.0
-    center_y=10.0
-    center_z=3.0
-    size_x=4.0
-    size_y=4.0
-    size_z=4.0
-    exhaustiveness=8
-    receptor=receptor.pdb
+    receptor=receptor.pdbqt
 ```
 
 ### Scoring with Smina: 
