@@ -468,5 +468,11 @@ A config.txt file is required for running vina. An example of the config file fo
     receptor=receptor.pdbqt
 ```
 
+### Scoring with PLANTS_plp: 
+A config.txt file is required for running vina. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
 
 
