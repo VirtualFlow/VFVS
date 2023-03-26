@@ -1044,6 +1044,8 @@ def process_docking_completion(item, ret):
         scoring_finish_PLANTS_chemplp(item, ret) 
     elif(item['program'] == "PLANTS_plp_scoring"):
         scoring_finish_PLANTS_plp(item, ret) 
+    elif(item['program'] == "PLANTS_plp95_scoring"):
+        scoring_finish_PLANTS_plp95(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1149,6 +1151,8 @@ def program_runstring_array(task):
         cmd = scoring_start_PLANTS_chemplp(task) 
     elif(task['program'] == "PLANTS_plp_scoring"):
         cmd = scoring_start_PLANTS_plp(task) 
+    elif(task['program'] == "PLANTS_plp95_scoring"):
+        cmd = scoring_start_PLANTS_plp95(task) 
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -3133,7 +3137,6 @@ def scoring_start_PLANTS_plp(task):
     # Convert ligand format if needed:
     lig_format = task['output_path'].split('.')[-1]
     if lig_format != 'mol2': 
-        print('Ligand needs to be in mol2 format. Converting ligand format using obabel.')
         convert_ligand_format(task['output_path'], 'mol2')
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
 
@@ -3160,6 +3163,48 @@ def scoring_finish_PLANTS_plp(item, ret):
             lines = f.readlines()
         plp_score = float([x for x in lines if 'best score:' in x][-1].split(' ')[-1])
         item['score'] = plp_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+# PLANTS plp95
+def scoring_start_PLANTS_plp95(task):
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'mol2': 
+        convert_ligand_format(task['output_path'], 'mol2')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        
+    with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
+        f.writelines('scoring_function         plp95\n')
+        f.writelines('protein_file             {}\n'.format(config_['receptor']))
+        f.writelines('ligand_file              {}\n'.format(task['output_path']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_PLANTS_plp95(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        plp95_score = float([x for x in lines if 'best score:' in x][-1].split(' ')[-1])
+        item['score'] = plp95_score   
         item['status'] = "success"
     except: 
         logging.error("failed parsing")
