@@ -480,3 +480,17 @@ A config.txt file is required for running vina. An example of the config file fo
 ```
     receptor=receptor.pdbqt
 ```
+
+### Scoring with DOCK6-Contact Score: 
+A config.txt file is required for running vina. An example of the config file format is: 
+```
+    chimera_path=/home/chimera
+    dock6_path=/home/dock6
+    receptor=receptor.pdbq
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```

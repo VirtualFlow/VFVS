@@ -244,6 +244,7 @@ docking_scenario_programs=qvina02
 #                  MpSDockZN, AutodockVina_1.1.2, CovDock, dock6, flexx, HDock, vina_gpu, vina_gpu_2.0, glide_sp, 
 #                  glide_xp, glide_htvs, smina_scoring, gnina_scoring, nnscore2.0, rf-score-vs, ad4_scoring
 #                  vinandro_scoring, vina_scoring, PLANTS_chemplp_scoring, PLANTS_plp_scoring, PLANTS_plp95_scoring
+#                  dock6_contact_score, dock6_contact_score
 # Values have to be separated by colons ":" and without spaces, e.g: docking_scenario_programs=vina:smina
 # smina_rigid has to be used for rigid docking with smina, while smine_flexible for flexible receptor docking
 # scoring function can also be combined using the same strategy e.g. docking_scenario_programs=vina:nnscore2.0

@@ -1046,6 +1046,8 @@ def process_docking_completion(item, ret):
         scoring_finish_PLANTS_plp(item, ret) 
     elif(item['program'] == "PLANTS_plp95_scoring"):
         scoring_finish_PLANTS_plp95(item, ret) 
+    elif(item['program'] == "dock6_contact_score"):
+        scoring_finish_dock6_contact_score(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1153,6 +1155,8 @@ def program_runstring_array(task):
         cmd = scoring_start_PLANTS_plp(task) 
     elif(task['program'] == "PLANTS_plp95_scoring"):
         cmd = scoring_start_PLANTS_plp95(task) 
+    elif(task['program'] == "dock6_contact_score"):
+        cmd = scoring_start_dock6_contact_score(task) 
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -3205,6 +3209,138 @@ def scoring_finish_PLANTS_plp95(item, ret):
             lines = f.readlines()
         plp95_score = float([x for x in lines if 'best score:' in x][-1].split(' ')[-1])
         item['score'] = plp95_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+
+# Dock6 Contact Score
+def scoring_start_dock6_contact_score(task):
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config = dict(read_config_line(line) for line in fd)
+    for item in config:
+        if '#' in config[item]:
+            config[item] = config[item].split('#')[0]
+
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'mol2': 
+        print('Ligand needs to be in mol2 format. Converting ligand format using obabel.')
+        convert_ligand_format(task['output_path'], 'mol2')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines(['export Chimera={}\n'.format(config['chimera_path'])])
+        f.writelines(['export DOCK6={}\n'.format(config['dock6_path'])])
+        f.writelines(['$Chimera/bin/chimera --nogui {} dockprep.py\n'.format(config['receptor'])])
+
+        # Generate INSPH, box.in, grid.in, and Contact_Score.in files
+        insph_path = os.path.join(task['tmp_run_dir'], 'INSPH')
+        with open(insph_path, 'w') as f:
+            f.writelines('rec.ms\n')
+            f.writelines('R\n')
+            f.writelines('X\n')
+            f.writelines('0.0\n')
+            f.writelines('4.0\n')
+            f.writelines('1.4\n')
+            f.writelines('rec.sph\n')
+
+        box_path = os.path.join(task['tmp_run_dir'], 'box.in')
+        with open(box_path, 'w') as f:
+            f.writelines('N\n')
+            f.writelines('U\n')
+            f.writelines('{}   {}    {}\n'.format(config['center_x'], config['center_y'], config['center_z']))
+            f.writelines('{} {} {}\n'.format(config['size_x'], config['size_y'], config['size_z']))
+            f.writelines('rec_box.pdb\n')
+
+        grid_path = os.path.join(task['tmp_run_dir'], 'grid.in')
+        with open(grid_path, 'w') as f:
+            f.writelines('compute_grids                  yes\n')
+            f.writelines('energy_score                   yes\n')
+            f.writelines('energy_cutoff_distance         9999\n')
+            f.writelines('atom_model                     a\n')
+            f.writelines('bump_filter                    yes\n')
+            f.writelines('receptor_file                  {}\n'.format(config['receptor']))
+            f.writelines('box_file                       rec_box.pdb\n')
+            f.writelines('vdw_definition_file            {}/parameters/vdw_AMBER_parm99.defn\n'.format(config['dock6_path']))
+            f.writelines('score_grid_prefix              grid\n')
+            f.writelines('grid_spacing                   0.3\n')
+            f.writelines('output_molecule                no\n')
+            f.writelines('contact_score                  yes\n')
+            f.writelines('attractive_exponent            6\n')
+            f.writelines('repulsive_exponent             12\n')
+            f.writelines('distance_dielectric            yes\n')
+            f.writelines('dielectric_factor              4\n')
+            f.writelines('bump_overlap                   0.75\n')
+            f.writelines('contact_cutoff_distance        4.5\n')
+            
+        contact_score_path = os.path.join(task['tmp_run_dir'], 'Contact_Score.in')
+        with open(contact_score_path, 'w') as f:
+            f.writelines(['conformer_search_type                                        rigid\n'])
+            f.writelines(['use_internal_energy                                          yes\n'])
+            f.writelines(['internal_energy_rep_exp                                      12\n'])
+            f.writelines(['internal_energy_cutoff                                       100.0\n'])
+            f.writelines(['ligand_atom_file                                             {}\n'.format(task['output_path'])])
+            f.writelines(['limit_max_ligands                                            no\n'])
+            f.writelines(['skip_molecule                                                no\n'])
+            f.writelines(['read_mol_solvation                                           no\n'])
+            f.writelines(['calculate_rmsd                                               no\n'])
+            f.writelines(['use_database_filter                                          no\n'])
+            f.writelines(['orient_ligand                                                no\n'])
+            f.writelines(['bump_filter                                                  no\n'])
+            f.writelines(['score_molecules                                              yes\n'])
+            f.writelines(['contact_score_primary                                        yes\n'])
+            f.writelines(['contact_score_secondary                                      no\n'])
+            f.writelines(['contact_score_cutoff_distance                                4.5\n'])
+            f.writelines(['contact_score_clash_overlap                                  0.75\n'])
+            f.writelines(['contact_score_clash_penalty                                  50\n'])
+            f.writelines(['contact_score_grid_prefix                                    grid\n'])
+            f.writelines(['grid_score_secondary                                         no\n'])
+            f.writelines(['multigrid_score_secondary                                    no\n'])
+            f.writelines(['dock3.5_score_secondary                                      no\n'])
+            f.writelines(['continuous_score_secondary                                   no\n'])
+            f.writelines(['footprint_similarity_score_secondary                         no\n'])
+            f.writelines(['pharmacophore_score_secondary                                no\n'])
+            f.writelines(['descriptor_score_secondary                                   no\n'])
+            f.writelines(['gbsa_zou_score_secondary                                     no\n'])
+            f.writelines(['gbsa_hawkins_score_secondary                                 no\n'])
+            f.writelines(['SASA_score_secondary                                         no\n'])
+            f.writelines(['amber_score_secondary                                        no\n'])
+            f.writelines(['minimize_ligand                                              yes\n'])
+            f.writelines(['simplex_max_iterations                                       1000\n'])
+            f.writelines(['simplex_tors_premin_iterations                               0\n'])
+            f.writelines(['simplex_max_cycles                                           1\n'])
+            f.writelines(['simplex_score_converge                                       0.1\n'])
+            f.writelines(['simplex_cycle_converge                                       1.0\n'])
+            f.writelines(['simplex_trans_step                                           1.0\n'])
+            f.writelines(['simplex_rot_step                                             0.1\n'])
+            f.writelines(['simplex_tors_step                                            10.0\n'])
+            f.writelines(['simplex_random_seed                                          0\n'])
+            f.writelines(['simplex_restraint_min                                        no\n'])
+            f.writelines(['atom_model                                                   all\n'])
+            f.writelines(['vdw_defn_file                                                {}/parameters/vdw_AMBER_parm99.defn\n'.format(config['dock6_path'])])
+            f.writelines(['flex_defn_file                                               {}/parameters/flex.defn\n'.format(config['dock6_path'])])
+            f.writelines(['flex_drive_file                                              {}/parameters/flex_drive.tbl\n'.format(config['dock6_path'])])
+            f.writelines(['ligand_outfile_prefix                                        ligand_out\n'])
+            f.writelines(['write_orientations                                           no\n'])
+            f.writelines(['num_scored_conformers                                        1\n'])
+            f.writelines(['rank_ligands                                                 no\n'])
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_dock6_contact_score(item, ret): 
+    try:    
+        with open('{}/ligand_out_scored.mol2'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        score = float([x for x in lines[2].split(' ') if x != ''][-1])
+        item['score'] = score   
         item['status'] = "success"
     except: 
         logging.error("failed parsing")
