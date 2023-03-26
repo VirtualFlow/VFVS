@@ -1038,6 +1038,8 @@ def process_docking_completion(item, ret):
         scoring_finish_gnina(item, ret) 
     elif(item['program'] == "ad4_scoring"):
         scoring_finish_ad4(item, ret) 
+    elif(item['program'] == "vinandro_scoring"):
+        scoring_finish_vinardo(item, ret) 
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1137,6 +1139,8 @@ def program_runstring_array(task):
         cmd = scoring_start_gnina(task) 
     elif(task['program'] == "af4_scoring"):
         cmd = scoring_start_ad4(task) 
+    elif(task['program'] == "vinandro_scoring"):
+        cmd = scoring_start_vinardo(task) 
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -2990,6 +2994,47 @@ def scoring_finish_ad4(item, ret):
         item['status'] = "success"
     except: 
         logging.error("failed parsing")
+
+
+# vinandro scoring
+def scoring_start_vinardo(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        print('Ligand needs to be in pdbqt format. Converting ligand format using obabel.')
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    smina_loc = '{}/smina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} -l {} --score_only --scoring vinardo > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_vinardo(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        vinardo_score = float([x for x in lines if 'Affinity' in x][0].split(' ')[1])
+        item['score'] = vinardo_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
 
 
 def get_workunit_information():

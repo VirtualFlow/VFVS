@@ -456,3 +456,10 @@ A config.txt file is required for running gnina. An example of the config file f
     receptor=receptor.pdbqt
 ```
 
+### Scoring with Vinandro: 
+A config.txt file is required for running vinandro. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
+
