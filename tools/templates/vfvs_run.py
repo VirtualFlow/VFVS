@@ -1026,7 +1026,13 @@ def process_docking_completion(item, ret):
         docking_finish_glide_xp(item)
     elif(item['program'] == "glide_htvs"):
         docking_finish_glide_htvs(item)
-
+        
+    # Scoring Functions: 
+    elif(item['program'] == "nnscore2.0"):
+        scoring_finish_nnscore2(item, ret)
+    elif(item['program'] == "rf-score-vs"):
+        scoring_finish_rf(item, ret) 
+        
     else:
         raise RuntimeError(f"No completion function for {item['program']}")
 
@@ -1114,6 +1120,12 @@ def program_runstring_array(task):
         cmd = docking_start_glide_xp(task) 
     elif(task['program'] == "glide_htvs"):
         cmd = docking_start_glide_htvs(task) 
+    
+    # Scoring Functions: 
+    elif(task['program'] == "nnscore2.0"):
+        cmd = scoring_start_nnscore2(task) 
+    elif(task['program'] == "rf-score-vs"):
+        cmd = scoring_start_rf(task) 
     else:
         raise RuntimeError(f"Invalid program type of {task['program']}")
 
@@ -2744,6 +2756,111 @@ def docking_finish_autodock(item, ret):
         item['score'] = min(docking_score)
         item['status'] = "success"
     except:
+        logging.error("failed parsing")
+
+
+# Scoring functions: 
+def convert_ligand_format(ligand_, new_format): 
+    """Converts a ligand file to a different file format using the Open Babel tool.
+
+        Args:
+            ligand_ (str): The path to the input ligand file.
+            new_format (str): The desired output format for the ligand file.
+    
+        Returns:
+            None
+    
+        Raises:
+            Exception: If the input file does not exist, or if the Open Babel tool is not installed.
+    
+        Examples:
+            To convert a ligand file from mol2 format to pdbqt format:
+            >>> convert_ligand_format('./ligands/ligand1.mol2', 'pdbqt')
+    """
+    input_format = ligand_.split('.')[-1]
+    os.system('obabel {} -O {}'.format(ligand_, ligand_.replace(input_format, new_format)))
+
+    
+## nnscore2.0
+def scoring_start_nnscore2(task): 
+    
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format =  task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        convert_ligand_format( task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    vina_loc = '{}/vina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('export VINA_EXEC={}; python {}/NNScore2.py -receptor {} -ligand {} -vina_executable $VINA_EXEC > output.txt'.format(vina_loc, item['tools_path'], config_['receptor'], task['output_path']))
+    
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_nnscore2(item, ret): 
+    
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        scores = [x for x in lines if 'Best Score:' in x]
+        scores = [A.split('(')[-1].split(')')[0] for A in scores]
+        item['score'] = min(scores)   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+## rf-score-vs
+
+def scoring_start_rf(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        print('Ligand needs to be in pdbqt format. Converting ligand format using obabel.')
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    rf_score_vs_loc = '{}/rf-score-vs'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} {} -O {}/ligands_rescored.pdbqt'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} {} -ocsv > {}/temp.csv'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_rf(item, ret): 
+
+    try:    
+        with open('{}/temp.csv'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        rf_scores = []
+        for line_item in lines[1: ]: 
+            rf_scores.append( float(line_item.split(',')[-1]) )
+        item['score'] = min(rf_scores)   
+        item['status'] = "success"
+    except: 
         logging.error("failed parsing")
 
 

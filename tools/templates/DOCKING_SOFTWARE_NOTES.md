@@ -422,4 +422,17 @@ The config.txt file should contain:
     receptor_site_file=./selected_spheres.sph
 ```
 
+### Scoring with NNscore2.0
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdbqt
+```
+
+
+### Scoring with rf-score-vs
+A rf-score-vs executable (of name 'rf-score-vs') should be placed in directory: /tools/bin <br>
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdbqt
+```
 
