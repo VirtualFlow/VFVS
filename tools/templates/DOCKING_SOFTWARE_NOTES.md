@@ -449,3 +449,10 @@ A config.txt file is required for running gnina. An example of the config file f
 ```
     receptor=receptor.pdbqt
 ```
+
+### Scoring with AutoDock4: 
+A config.txt file is required for running gnina. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
