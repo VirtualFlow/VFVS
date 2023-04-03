@@ -128,7 +128,7 @@ def publish_workunit(ctx, index, workunit_subjobs):
 
         try:
             response = ctx['s3'].upload_file(
-                f'{temp_dir_tar.name}/{index}.tar.gz', ctx['config']['object_store_data_bucket'], object_name)
+                f'{temp_dir_tar.name}/{index}.tar.gz', ctx['config']['object_store_job_bucket'], object_name)
         except ClientError as e:
             logging.error(e)
 
