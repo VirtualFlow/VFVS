@@ -90,7 +90,7 @@ def downloader(download_queue, unpack_queue, summary_queue, tmp_dir):
             break
 
 
-        item['temp_dir'] = tempfile.mkdtemp(prefix=tmp_dir)
+        item['temp_dir'] = tempfile.mkdtemp(prefix=f"{tmp_dir}/")
         item['local_path'] = f"{item['temp_dir']}/tmp.{item['ext']}"
 
         # Move the data either from S3 or a shared filesystem
@@ -519,6 +519,8 @@ def docking_process_batch(summary_queue, scenario, items, temp_dir):
 
                 print(f"processing {item['ligand_key']} - done in {item['seconds']}")
 
+            docking_process_clean_common(item)
+
     elif batched_item['execution_type'] == "batch":
         ret = None
 
@@ -565,6 +567,7 @@ def docking_process_batch(summary_queue, scenario, items, temp_dir):
 
 
         print(f"processing - done in {batched_item['seconds']}")
+        docking_process_clean_common(batched_item)
 
     else:
         logging.error(f"Invalid ligand processing model for program {task['program']}")
@@ -2469,14 +2472,12 @@ def process(ctx):
             while download_queue.qsize() > 25:
                 time.sleep(0.2)
 
-
         flush_queue(download_queue, downloader_processes, "download")
         flush_queue(unpack_queue, unpacker_processes, "unpack")
         flush_queue(collection_queue, collection_processes, "collection")
         flush_queue(docking_queue, docking_processes, "docking")
         flush_queue(summary_queue, summary_processes, "summary")
         flush_queue(upload_queue, uploader_processes, "upload")
-
     except Exception as e:
         logging.error(f"Received exception {e}, terminating")
 
