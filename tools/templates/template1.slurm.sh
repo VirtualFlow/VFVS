@@ -40,6 +40,7 @@
 ##SBATCH --partition={{slurm_partition}}
 #SBATCH --output={{batch_workunit_base}}/%A_%a.out
 #SBATCH --error={{batch_workunit_base}}/%A_%a.err
+#SBATCH --account={{slurm_account}}
 
 
 # If you are using a virtualenv, make sure the correct one 
