@@ -1,0 +1,38 @@
+[
+  {
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "VirtualFlow-eu-west-1"
+  },
+  {
+    "ParameterKey": "AllocationStrategy",
+    "ParameterValue": "SPOT_CAPACITY_OPTIMIZED"
+  },
+  {
+    "ParameterKey": "CEInstanceTypes",
+    "ParameterValue": "c5.24xlarge,c5.4xlarge,c5.12xlarge,c5.9xlarge,c5.18xlarge,c5n.18xlarge,c5n.9xlarge,c5n.4xlarge"
+  },
+  {
+    "ParameterKey": "CEType",
+    "ParameterValue": "SPOT"
+  },
+  {
+    "ParameterKey": "CEvCPUs",
+    "ParameterValue": "64"
+  },
+  {
+    "ParameterKey": "S3BucketName",
+    "ParameterValue": "YourS3BucketName"
+  },
+  {
+    "ParameterKey": "VPCStackParameter",
+    "ParameterValue": "vf-vpc"
+  },
+  {
+    "ParameterKey": "ContainerTimeout",
+    "ParameterValue": "7200"
+  },
+  {
+    "ParameterKey": "SharedMemorySize",
+    "ParameterValue": "6144"
+  }
+]

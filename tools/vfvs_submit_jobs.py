@@ -20,10 +20,7 @@
 
 # ---------------------------------------------------------------------------
 #
-# Description: Submit jobs to AWS Batch
-#
-# Revision history:
-# 2021-06-29  Original version
+# Description: Submit jobs
 #
 # ---------------------------------------------------------------------------
 
@@ -51,9 +48,47 @@ def parse_config(filename):
 
 
 def run_bash(config, current_workunit, jobline):
-    # Yet to be implemented
-    pass
-    
+
+    # Get the template
+    try:
+        with open(config['bash_template']) as f:
+            bash_template = jinja2.Template(f.read())
+    except IOError as error:
+        print(f"Cannot open the bash_template ({config['bash_template']})")
+        raise error
+
+    jobline_str = str(jobline)
+
+    # how many jobs are there that we need to submit?
+    subjobs_count = len(current_workunit['subjobs'])
+
+    # Where are we putting this file?
+    batch_workunit_base=Path(config['sharedfs_workunit_path']) / jobline_str
+    batch_workunit_base.mkdir(parents=True, exist_ok=True)
+    batch_submit_file = batch_workunit_base / "run.bash"
+
+    template_values = {
+        "job_letter": config['job_letter'],
+        "job_name": config['job_name'],
+        "threads_to_use": config['threads_to_use'],
+        "array_start": "0",
+        "array_end": (subjobs_count - 1),
+        "workunit_id": jobline_str,
+        "job_storage_mode": config['job_storage_mode'],
+        "job_tgz": current_workunit['download_path'],
+        "batch_workunit_base": batch_workunit_base.resolve().as_posix()
+    }
+    render_output = bash_template.render(template_values)
+
+    try:
+        with open(batch_submit_file, "w") as f:
+            f.write(render_output)
+    except IOError as error:
+        print(f"Cannot write the workunit bash file ({batch_submit_file})")
+        raise error
+
+    with open("../workflow/run.bash", "a") as bash_out:
+        bash_out.write(f"{batch_submit_file}\n")
 
 def submit_slurm(config, client, current_workunit, jobline):
 
@@ -247,6 +282,11 @@ def process(config, start, stop):
     submit_type=config['batchsystem']
 
 
+    # If this is batch, let's init a file
+    if submit_type == "bash":
+        with open("../workflow/run.bash", "w") as bash_out:
+            bash_out.write("#!/usr/bin/env bash\n")
+
     # load the status file that is keeping track of the data
     with open("../workflow/status.json", "r") as read_file:
         status = json.load(read_file)
@@ -274,7 +314,9 @@ def process(config, start, stop):
                     run_bash(config, current_workunit, jobline)
                 else:
                     print(f"Unknown submit type {submit_type}")
-                
+
+
+
 
     # Output all of the information about the workunits into JSON so we can easily grab this data in the future
     
@@ -289,6 +331,11 @@ def process(config, start, stop):
     shutil.copyfile("../workflow/status.json", "../workflow/status.submission.json")
 
     print("Done")
+
+    if submit_type == "bash":
+        os.chmod('../workflow/run.bash', 0o755)
+        print("Run ../workflow/run.bash to run these job steps")
+
 
 def main():
 

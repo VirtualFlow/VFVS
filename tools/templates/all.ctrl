@@ -1,7 +1,4 @@
-# Each line that starts with '#' is a comment/description of the variable above the comment
-# Each line that starts with '*' belongs to a section heading
-
-****** Job Resource Configuration
+****** Job Resource Configuration 
 
 job_name=testing
 # alphabetic characters (i.e. letters from a-z or A-Z)
@@ -89,20 +86,38 @@ slurm_array_job_size=100
 # Maximum number of concurrent jobs from a single array job
 # that should be run
 
+****** Bash Options (if batchsystem=bash)
+
+bash_template=./templates/template1.bash
+# Template for the bash script used
+
+bash_array_job_size=100
+# How many to group under a single workunit
+
 
 ************************************************
 ** Storage configuration
 ************************************************
 
-job_storage_mode=s3
-# This mode determines where data is retrieved and stored from as part of 
-# VFVS. Valid modes:
+data_storage_mode=s3
+# This mode determines where data is retrieved as part of VFVS
 #   * s3: Job data is stored on S3 object store, which is the required
-#         mode if using AWS Batch. Items under the "S3 Object Store" 
-#         heading in the configuration are required if this mode is used
+#         mode if using AWS Batch. Items under the "S3 Object Store"
+#         heading (object_store_data_bucket, object_store_data_collection_prefix)
+#         are needed if this is the mode used.
 #   * sharedfs: This mode requires that all running jobs have access to the
 #         same shared filesystem that will allow for both input and output
-#         of data. This is required if using Slurm
+#         of data. This only allowed if Slurm is set at the scheduler
+
+job_storage_mode=s3
+# This mode determines where data is stored after a run
+#   * s3: Job data is stored on S3 object store, which is the required
+#         mode if using AWS Batch. Items under the "S3 Object Store" 
+#         of 'object_store_job_bucket' and 'object_store_job_prefix'
+#         are required.
+#   * sharedfs: This mode requires that all running jobs have access to the
+#         same shared filesystem that will allow for both input and output
+#         of data. This is required if using Slurm or bash
 
 
 data_collection_addressing_mode=metatranche
@@ -257,6 +272,19 @@ docking_scenario_replicas=1
 #     e.g.: docking_scenario_replicas=1:1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
+
+docking_scenario_batchsizes=1
+# Purpose: How many ligands should be processed in a single invocation
+#     of the docking program (most programs do not allow more than 1)
+# Series of integers separated by colons ":"
+# The number of values has to equal the number of docking programs
+#     specified in the variable "docking_programs"
+# The values are in the same order as the docking programs specified in the
+#     variable "docking_scenario_programs
+#     e.g.: docking_scenario_batchsizes=1:1
+# Valid values are dependent based on the docking program being used
+# all currently supported docking programs are currently limited
+# to a batch size of 1
 
 docking_scenario_basefolder=../input-files
 # Relative path to tools directory
