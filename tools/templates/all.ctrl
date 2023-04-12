@@ -22,7 +22,8 @@ program_timeout=90
 ************************************************
 
 batchsystem=awsbatch
-# Possible values: awsbatch, slurm
+# Possible values: awsbatch, slurm, bash
+# bash is single node only and designed more for debugging
 
 ****** AWS Batch Options (if batchsystem=awsbatch)
 
@@ -33,9 +34,9 @@ aws_batch_prefix=vf
 # Prefix for the name of the AWS Batch queues. This is normally 'vf'
 # if you used the CloudFormation template
 
-aws_batch_number_of_queues=2
+aws_batch_number_of_queues=1
 # Should be set to the number of queues that are setup for AWS Batch. 
-# Generally this number is 2 unless you have a large-scale (100K+ vCPUs)
+# Generally this number is 1 unless you have a large-scale (200K+ vCPUs)
 # setup
 
 aws_batch_jobdef=vf-jobdef-vfvs
@@ -86,20 +87,38 @@ slurm_array_job_size=100
 # Maximum number of concurrent jobs from a single array job
 # that should be run
 
+****** Bash Options (if batchsystem=bash)
+
+bash_template=./templates/template1.bash
+# Template for the bash script used
+
+bash_array_job_size=100
+# How many to group under a single workunit
+
 
 ************************************************
 ** Storage configuration
 ************************************************
 
-job_storage_mode=s3
-# This mode determines where data is retrieved and stored from as part of 
-# VFVS. Valid modes:
+data_storage_mode=s3
+# This mode determines where data is retrieved as part of VFVS
 #   * s3: Job data is stored on S3 object store, which is the required
 #         mode if using AWS Batch. Items under the "S3 Object Store" 
-#         heading in the configuration are required if this mode is used
+#         heading (object_store_data_bucket, object_store_data_collection_prefix)
+#         are needed if this is the mode used.
 #   * sharedfs: This mode requires that all running jobs have access to the
 #         same shared filesystem that will allow for both input and output
-#         of data. This is required if using Slurm
+#         of data. This only allowed if Slurm is set at the scheduler
+
+job_storage_mode=s3
+# This mode determines where data is stored after a run
+#   * s3: Job data is stored on S3 object store, which is the required
+#         mode if using AWS Batch. Items under the "S3 Object Store" 
+#         of 'object_store_job_bucket' and 'object_store_job_prefix'
+#         are required.
+#   * sharedfs: This mode requires that all running jobs have access to the
+#         same shared filesystem that will allow for both input and output
+#         of data. This is required if using Slurm or bash
 
 
 data_collection_addressing_mode=metatranche
@@ -259,6 +278,18 @@ docking_scenario_replicas=1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
 
+docking_scenario_batchsizes=1
+# Purpose: How many ligands should be processed in a single invocation
+#     of the docking program (most programs do not allow more than 1)
+# Series of integers separated by colons ":"
+# The number of values has to equal the number of docking programs
+#     specified in the variable "docking_programs"
+# The values are in the same order as the docking programs specified in the
+#     variable "docking_scenario_programs
+#     e.g.: docking_scenario_batchsizes=1:1
+# Valid values are dependent based on the docking program being used
+# all currently supported docking programs are currently limited
+# to a batch size of 1
 
 docking_scenario_basefolder=../input-files
 # Relative path to tools directory

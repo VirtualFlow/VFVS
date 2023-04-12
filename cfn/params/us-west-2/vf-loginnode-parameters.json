@@ -1,0 +1,22 @@
+[
+  {
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "VirtualFlow-us-west-2"
+  },
+  {
+    "ParameterKey": "MainNodeInstance",
+    "ParameterValue": "m6i.xlarge"
+  },
+  {
+    "ParameterKey": "KeyName",
+    "ParameterValue": "yourEC2keypairname"
+  },
+  {
+    "ParameterKey": "S3BucketName",
+    "ParameterValue": "YourS3BucketName"
+  },
+  {
+    "ParameterKey": "VPCStackParameter",
+    "ParameterValue": "vf-vpc"
+  }
+]

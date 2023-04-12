@@ -58,13 +58,17 @@ def parse_config(filename):
     config['docking_scenario_inputfolders'] = config['docking_scenario_inputfolders'].split(
         ":")
 
+    config['docking_scenario_batchsizes'] = config['docking_scenario_batchsizes'].split(
+        ":")
+
 
 
     config['docking_scenarios_internal'] = {}
     for index, scenario in enumerate(config['docking_scenario_names']):
         config['docking_scenarios_internal'][scenario] = {
             'key': scenario,
-            'replicas': int(config['docking_scenario_replicas'][index])
+            'replicas': int(config['docking_scenario_replicas'][index]),
+            'batchcount': int(config['docking_scenario_batchsizes'][index]),
         }
 
 
@@ -146,6 +150,7 @@ def check_parameters(config):
             error = 1
         config['object_store_job_addressing_mode'] = config['job_addressing_mode']
 
+
     if(empty_value(config, 'job_storage_mode') or (config['job_storage_mode'] != "s3" and config['job_storage_mode'] != "sharedfs")):
         print("* 'job_storage_mode' must be set to 's3' or 'sharedfs'")
         error = 1
@@ -159,6 +164,12 @@ def check_parameters(config):
                 error = 1
             else:
                 config['object_store_job_prefix'].rstrip("/")
+
+    if(empty_value(config, 'data_storage_mode') or (config['data_storage_mode'] != "s3" and config['data_storage_mode'] != "sharedfs")):
+        print("* 'job_storage_mode' must be set to 's3' or 'sharedfs'")
+        error = 1
+    else:
+        if(config['job_storage_mode'] == "s3"):
             if(empty_value(config, 'object_store_data_bucket')):
                 print("* 'object_store_data_bucket' must be set if job_storage_mode is 's3'")
                 error = 1
@@ -204,6 +215,10 @@ def check_parameters(config):
         elif(config['batchsystem'] == "slurm"):
             if(empty_value(config, 'slurm_template')):
                 print("* 'slurm_template' must be set if batchsystem is 'slurm'")
+                error = 1
+        elif(config['batchsystem'] == "bash"):
+            if(empty_value(config, 'bash_template')):
+                print("* 'bash_template' must be set if batchsystem is 'bash'")
                 error = 1
         else:
             print(f"* batchsystem '{config['batchsystem']}' is not supported. Only awsbatch and slurm are supported")

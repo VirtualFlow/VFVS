@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Setup for large scale computations on AWS in us-east-1. 
-  Creates one public subnet and 6 private subnets (one subnet in each availability zone).
+  Setup for large scale computations on AWS in us-east-2. 
+  Creates one public subnet and 'n' private subnets (one subnet in each availability zone).
 
 #########################
 ## VPC & Network Setup ##
@@ -119,7 +119,7 @@ Resources:
           Ref: AWS::Region
       Tags:
         - Key: Name
-          Value: !Sub '${ProjectName}-private-subnet-us-east-1a'
+          Value: !Sub '${ProjectName}-private-subnet-us-east-2a'
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
     DependsOn: [VpcCidrBlock1]
@@ -132,7 +132,7 @@ Resources:
           Ref: AWS::Region
       Tags:
         - Key: Name
-          Value: !Sub '${ProjectName}-private-subnet-us-east-1b'
+          Value: !Sub '${ProjectName}-private-subnet-us-east-2b'
   PrivateSubnet3:
     Type: AWS::EC2::Subnet
     DependsOn: [VpcCidrBlock2]
@@ -145,46 +145,8 @@ Resources:
           Ref: AWS::Region
       Tags:
         - Key: Name
-          Value: !Sub '${ProjectName}-private-subnet-us-east-1c'
-  PrivateSubnet4:
-    Type: AWS::EC2::Subnet
-    DependsOn: [VpcCidrBlock2]
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: !Select [ 1, !Cidr [ !Ref VpcCidr2, 2, 15 ]]
-      AvailabilityZone: !Select
-        - 3
-        - !GetAZs
-          Ref: AWS::Region
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-private-subnet-us-east-1d'
-  PrivateSubnet5:
-    Type: AWS::EC2::Subnet
-    DependsOn: [VpcCidrBlock2]
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: !Select [ 0, !Cidr [ !Ref VpcCidr3, 2, 15 ]]
-      AvailabilityZone: !Select
-        - 4
-        - !GetAZs
-          Ref: AWS::Region
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-private-subnet-us-east-1e'
-  PrivateSubnet6:
-    Type: AWS::EC2::Subnet
-    DependsOn: [VpcCidrBlock2]
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: !Select [ 1, !Cidr [ !Ref VpcCidr3, 2, 15 ]]
-      AvailabilityZone: !Select
-        - 5
-        - !GetAZs
-          Ref: AWS::Region
-      Tags:
-        - Key: Name
-          Value: !Sub '${ProjectName}-private-subnet-us-east-1f'
+          Value: !Sub '${ProjectName}-private-subnet-us-east-2c'
+
 
 
   # Create and set the public route table
@@ -208,36 +170,17 @@ Resources:
     DependsOn: VPC
     Properties:
       VpcId: !Ref VPC
-
   PrivateRouteTable2:
     Type: AWS::EC2::RouteTable
     DependsOn: VPC
     Properties:
       VpcId: !Ref VPC
-
   PrivateRouteTable3:
     Type: AWS::EC2::RouteTable
     DependsOn: VPC
     Properties:
       VpcId: !Ref VPC
 
-  PrivateRouteTable4:
-    Type: AWS::EC2::RouteTable
-    DependsOn: VPC
-    Properties:
-      VpcId: !Ref VPC
-
-  PrivateRouteTable5:
-    Type: AWS::EC2::RouteTable
-    DependsOn: VPC
-    Properties:
-      VpcId: !Ref VPC
-
-  PrivateRouteTable6:
-    Type: AWS::EC2::RouteTable
-    DependsOn: VPC
-    Properties:
-      VpcId: !Ref VPC
 
   PrivateRouteToInternet1:
     Type: AWS::EC2::Route
@@ -248,7 +191,6 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable1
       DestinationCidrBlock: '0.0.0.0/0'
       NatGatewayId: !Ref NATGateway1
-
   PrivateRouteToInternet2:
     Type: AWS::EC2::Route
     DependsOn:
@@ -258,7 +200,6 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable2
       DestinationCidrBlock: '0.0.0.0/0'
       NatGatewayId: !Ref NATGateway1
-
   PrivateRouteToInternet3:
     Type: AWS::EC2::Route
     DependsOn:
@@ -269,35 +210,6 @@ Resources:
       DestinationCidrBlock: '0.0.0.0/0'
       NatGatewayId: !Ref NATGateway1
 
-  PrivateRouteToInternet4:
-    Type: AWS::EC2::Route
-    DependsOn:
-      - VPC
-      - NATGateway1
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable4
-      DestinationCidrBlock: '0.0.0.0/0'
-      NatGatewayId: !Ref NATGateway1
-
-  PrivateRouteToInternet5:
-    Type: AWS::EC2::Route
-    DependsOn:
-      - VPC
-      - NATGateway1
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable5
-      DestinationCidrBlock: '0.0.0.0/0'
-      NatGatewayId: !Ref NATGateway1
-
-  PrivateRouteToInternet6:
-    Type: AWS::EC2::Route
-    DependsOn:
-      - VPC
-      - NATGateway1
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable6
-      DestinationCidrBlock: '0.0.0.0/0'
-      NatGatewayId: !Ref NATGateway1
 
   # Associate the public route table to the public subnet
   PublicSubnetRouteTableAssociation1:
@@ -326,73 +238,30 @@ Resources:
     Properties:
       SubnetId: !Ref PrivateSubnet3
       RouteTableId: !Ref PrivateRouteTable3
-  PrivateSubnet4RTAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PrivateSubnet4
-      RouteTableId: !Ref PrivateRouteTable4
-  PrivateSubnet5RTAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PrivateSubnet5
-      RouteTableId: !Ref PrivateRouteTable5
-  PrivateSubnet6RTAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PrivateSubnet6
-      RouteTableId: !Ref PrivateRouteTable6
+
 
 
   VPCEndpoint1:
     Type: AWS::EC2::VPCEndpoint
-    Properties: 
-      RouteTableIds: 
+    Properties:
+      RouteTableIds:
         - !Ref PrivateRouteTable1
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcEndpointType: Gateway
       VpcId: !Ref VPC
-
   VPCEndpoint2:
     Type: AWS::EC2::VPCEndpoint
-    Properties: 
-      RouteTableIds: 
+    Properties:
+      RouteTableIds:
         - !Ref PrivateRouteTable2
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcEndpointType: Gateway
       VpcId: !Ref VPC
-
   VPCEndpoint3:
     Type: AWS::EC2::VPCEndpoint
-    Properties: 
-      RouteTableIds: 
+    Properties:
+      RouteTableIds:
         - !Ref PrivateRouteTable3
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
-      VpcEndpointType: Gateway
-      VpcId: !Ref VPC
-
-  VPCEndpoint4:
-    Type: AWS::EC2::VPCEndpoint
-    Properties: 
-      RouteTableIds: 
-        - !Ref PrivateRouteTable4
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
-      VpcEndpointType: Gateway
-      VpcId: !Ref VPC
-
-  VPCEndpoint5:
-    Type: AWS::EC2::VPCEndpoint
-    Properties: 
-      RouteTableIds: 
-        - !Ref PrivateRouteTable5
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
-      VpcEndpointType: Gateway
-      VpcId: !Ref VPC
-
-  VPCEndpoint6:
-    Type: AWS::EC2::VPCEndpoint
-    Properties: 
-      RouteTableIds: 
-        - !Ref PrivateRouteTable6
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcEndpointType: Gateway
       VpcId: !Ref VPC
@@ -418,9 +287,6 @@ Outputs:
       - - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
         - !Ref PrivateSubnet3
-        - !Ref PrivateSubnet4
-        - !Ref PrivateSubnet5
-        - !Ref PrivateSubnet6
     Description: ID of PrivateSubnets
     Export:
       Name: !Sub ${AWS::StackName}-PrivateSubnets

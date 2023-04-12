@@ -128,7 +128,7 @@ def publish_workunit(ctx, index, workunit_subjobs):
 
         try:
             response = ctx['s3'].upload_file(
-                f'{temp_dir_tar.name}/{index}.tar.gz', ctx['config']['object_store_data_bucket'], object_name)
+                f'{temp_dir_tar.name}/{index}.tar.gz', ctx['config']['object_store_job_bucket'], object_name)
         except ClientError as e:
             logging.error(e)
 
@@ -207,9 +207,11 @@ def gen_s3_download_path(ctx, collection_name, collection_number):
 
     else:
 
+        collection_name_dir = collection_name.replace("_", "/")
+
         object_path = [
             ctx['config']['object_store_data_collection_prefix'],
-            collection_name,
+            collection_name_dir,
             f"{collection_number}.tar.gz"
         ]
         object_name = "/".join(object_path)
@@ -248,10 +250,11 @@ def gen_sharedfs_path(ctx, collection_name, collection_number):
         return object_name
 
     else:
+        collection_name_dir = collection_name.replace("_", "/")
 
         sharedfs_path = [
             ctx['config']['sharedfs_collection_path'],
-            collection_name,
+            collection_name_dir,
             f"{collection_number}.tar.gz"
         ]
         sharedfs_path_file = "/".join(sharedfs_path)
@@ -264,18 +267,21 @@ def add_collection_to_subjob(ctx, subjob, collection_key, collection_obj):
 
     subjob['collections'][collection_key] = collection_obj
 
-    collection_name, collection_number = collection_key.split("_", maxsplit=1)
+    match = re.search(r'(?P<collection_start>.*)_(?P<collection_number>\w+)$', collection_key)
+    if(match):
+        matches = match.groupdict()
+        collection_name = matches['collection_start']
+        collection_number = matches['collection_number']
 
-
-    if(ctx['config']['job_storage_mode'] == "s3"):
+    if(ctx['config']['data_storage_mode'] == "s3"):
         subjob['collections'][collection_key]['s3_bucket'] = ctx['config']['object_store_data_bucket']
         subjob['collections'][collection_key]['s3_download_path'] = gen_s3_download_path(ctx, collection_name, collection_number)
 
-    elif(ctx['config']['job_storage_mode'] == "sharedfs"):
+    elif(ctx['config']['data_storage_mode'] == "sharedfs"):
         subjob['collections'][collection_key]['sharedfs_path'] = gen_sharedfs_path(ctx, collection_name, collection_number)
 
     else:
-        print(f"job_storage_mode must be either s3 or sharedfs (currently: {ctx['config']['job_storage_mode']})")
+        print(f"data_storage_mode must be either s3 or sharedfs (currently: {ctx['config']['data_storage_mode']})")
         exit(1)
 
     subjob['collections'][collection_key]['dockings'] = dockings_per_ligand * collection_obj['count']
@@ -323,7 +329,8 @@ def process(ctx):
         max_array_job_size = int(config['aws_batch_array_job_size'])
     elif(config['batchsystem'] == "slurm"):
         max_array_job_size = int(config['slurm_array_job_size'])
-
+    elif(config['batchsystem'] == "bash"):
+        max_array_job_size = int(config['bash_array_job_size'])
 
     for collection_key, collection_obj in collections.items():
 

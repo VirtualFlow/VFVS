@@ -1,11 +1,7 @@
 [
   {
     "ParameterKey": "ProjectName",
-    "ParameterValue": "vfvs-test"
-  },
-  {
-    "ParameterKey": "MainNodeInstance",
-    "ParameterValue": "m6i.xlarge"
+    "ParameterValue": "VirtualFlow-us-east-2"
   },
   {
     "ParameterKey": "AllocationStrategy",
@@ -13,7 +9,7 @@
   },
   {
     "ParameterKey": "CEInstanceTypes",
-    "ParameterValue": "c5.4xlarge,c5.12xlarge,c5.9xlarge,c5.18xlarge,c5.24xlarge"
+    "ParameterValue": "c5.24xlarge,c5.4xlarge,c5.12xlarge,c5.9xlarge,c5.18xlarge,c5n.18xlarge,c5n.9xlarge,c5n.4xlarge,c6i.12xlarge,c6i.24xlarge,c6i.16xlarge,c6i.12xlarge"
   },
   {
     "ParameterKey": "CEType",
@@ -22,10 +18,6 @@
   {
     "ParameterKey": "CEvCPUs",
     "ParameterValue": "64"
-  },
-  {
-    "ParameterKey": "KeyName",
-    "ParameterValue": "yourEC2keypairname"
   },
   {
     "ParameterKey": "S3BucketName",
@@ -42,17 +34,5 @@
   {
     "ParameterKey": "SharedMemorySize",
     "ParameterValue": "6144"
-  },
-  {
-    "ParameterKey": "Order1",
-    "ParameterValue": "1"
-  },
-  {
-    "ParameterKey": "Order2",
-    "ParameterValue": "2"
-  },
-  {
-    "ParameterKey": "Order3",
-    "ParameterValue": "3"
   }
 ]
