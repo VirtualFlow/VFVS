@@ -30,7 +30,6 @@
 #
 # ---------------------------------------------------------------------------
 
-
 import tempfile
 import tarfile
 import gzip
@@ -55,11 +54,6 @@ from queue import Empty
 import math
 import sys
 import uuid
-
-
-
-
-
 
 
 # Download
@@ -90,7 +84,7 @@ def downloader(download_queue, unpack_queue, summary_queue, tmp_dir):
             break
 
 
-        item['temp_dir'] = tempfile.mkdtemp(prefix=tmp_dir)
+        item['temp_dir'] = tempfile.mkdtemp(prefix=f"{tmp_dir}/")
         item['local_path'] = f"{item['temp_dir']}/tmp.{item['ext']}"
 
         # Move the data either from S3 or a shared filesystem
@@ -389,7 +383,7 @@ def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, coll
 
 def read_config_line(line):
     key, sep, value = line.strip().partition("=")
-    return key, value
+    return key.strip(), value.strip()
 
 
 def docking_process(ctx, docking_queue, summary_queue):
@@ -519,6 +513,8 @@ def docking_process_batch(summary_queue, scenario, items, temp_dir):
 
                 print(f"processing {item['ligand_key']} - done in {item['seconds']}")
 
+            docking_process_clean_common(item)
+
     elif batched_item['execution_type'] == "batch":
         ret = None
 
@@ -565,6 +561,7 @@ def docking_process_batch(summary_queue, scenario, items, temp_dir):
 
 
         print(f"processing - done in {batched_item['seconds']}")
+        docking_process_clean_common(batched_item)
 
     else:
         logging.error(f"Invalid ligand processing model for program {task['program']}")
@@ -1120,6 +1117,54 @@ def program_runstring_array_batch(batch_item):
 
 ####### Docking program configurations
 
+## MpSDockZN
+
+def docking_start_MpSDockZN(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['MpSDockZN_tmp_file'] = os.path.join(task['tmp_run_dir'], "MpSDockZN_run.sh")
+    
+    with open(task['MpSDockZN_tmp_file'], 'a+') as f: 
+        f.writelines(['export Chimera={}\n'.format(config_['chimera_path'])])
+        f.writelines(['export DOCK6={}\n'.format(config_['dock6_path'])])
+        f.writelines(['charge=`$Chimera/bin/chimera --nogui --silent {} charges.py`\n'.format(task['ligand_path'])])
+        f.writelines(['antechamber -i {} -fi mol2 -o ligand_input.mol2 -fo mol2 -at sybyl -c gas -rn LIG -nc $charge -pf y\n'.format(task['ligand_path'])])
+        f.writelines(['$DOCK6/bin/showbox < {} \n'.format(config_['dock6_path'])])
+        f.writelines(['$DOCK6/bin/grid -i {} \n'.format(config_['grid_in'])])
+        f.writelines(['./executables/MpSDock -i {} \n'.format(config_['dock_in'])])
+        
+    os.system('chmod 0700 {}'.format(task['MpSDockZN_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['MpSDockZN_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_MpSDockZN(item, ret): 
+    try: 
+        score_path = os.path.join(item['tmp_run_dir'], "receptor_input_docked_result.list")
+        score_all = []
+        with open(score_path, 'r') as f: 
+            lines = f.readlines()
+        for item in lines: 
+            A = item.split(' ')
+            A = [x for x in A if x != '']
+            try: score_1, score_2, score_3, score_4, score_5 = float(A[0]), float(A[1]), float(A[2]),float(A[3]), float(A[4])
+            except: continue 
+            final_score = score_1 + score_2 + score_3 + score_4 + score_5
+            score_all.append(final_score)
+        item['score'] = min(score_all)   
+ 
+        pose_path = os.path.join(item['tmp_run_dir'], "receptor_input_docked_result.mol2")
+        shutil.move(pose_path, item['output_dir'])  
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
+
 ## SEED
 def docking_start_SEED(task): 
 
@@ -1159,7 +1204,137 @@ def docking_finish_SEED(item, ret):
 
     except: 
         logging.error("failed parsing")
+
+
+## HDock
+def docking_start_HDock(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    task['HDock_tmp_file'] = os.path.join(task['tmp_run_dir'], "HDock_run.sh")
+    
+    with open(task['HDock_tmp_file'], 'a+') as f: 
+        f.writelines(['{}/hdock {} {} -out Hdock.out'.format(task['tools_path'], config_['receptor'], task['lig_path'])])
+        f.writelines(['{}/createpl Hdock.out top100.pdb -nmax 1 -complex -models'.format(task['tools_path']) ])
         
+    os.system('chmod 0700 {}'.format(task['HDock_tmp_file'])) # Assign execution permisions on script
+    cmd = ['./{}'.format(task['HDock_tmp_file'])]
+        
+    return cmd
+
+def docking_finish_HDock(item, ret): 
+    try: 
+        pose_path = os.path.join(item['tmp_run_dir'], "model_1.pdb")        
+        with open(pose_path, 'r') as f: 
+            lines = f.readlines()
+        docking_score = float(lines[3].split(' ')[-1])
+        
+        shutil.move(pose_path, item['output_dir'])  
+        item['status'] = "success"
+        item['score'] = docking_score   
+    except: 
+        logging.error("failed parsing")
+
+
+## dock6
+def docking_start_dock6(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Generate dock6 input file: 
+    with open(os.path.join(task['tmp_run_dir'], "dock.in"), 'w') as f: 
+        f.writelines(['conformer_search_type                                        flex\n'])
+        f.writelines(['user_specified_anchor                                        no\n'])
+        f.writelines(['limit_max_anchors                                            no\n'])
+        f.writelines(['min_anchor_size                                              40\n'])
+        f.writelines(['pruning_use_clustering                                       yes\n'])
+        f.writelines(['pruning_max_orients                                          100\n'])
+        f.writelines(['pruning_clustering_cutoff                                    100\n'])
+        f.writelines(['pruning_conformer_score_cutoff                               25.0\n'])
+        f.writelines(['pruning_conformer_score_scaling_factor                       1.0\n'])
+        f.writelines(['use_clash_overlap                                            no\n'])
+        f.writelines(['write_growth_tree                                            no\n'])
+        f.writelines(['use_internal_energy                                          yes\n'])
+        f.writelines(['internal_energy_cutoff                                       100.0\n'])
+        f.writelines(['ligand_atom_file                                             {}\n'.format(task['ligand_path'])])
+        f.writelines(['limit_max_ligands                                            no\n'])
+        f.writelines(['receptor_site_file                                           {}\n'.format(config_['receptor_site_file'])])
+        f.writelines(['max_orientations                                             500\n'])
+        f.writelines(['chemical_matching                                            no\n'])
+        f.writelines(['use_ligand_spheres                                           no\n'])
+        f.writelines(['bump_filter                                                  no\n'])
+        f.writelines(['score_molecules                                              yes\n'])
+        f.writelines(['contact_score_primary                                        no\n'])
+        f.writelines(['contact_score_secondary                                      no\n'])
+        f.writelines(['grid_score_primary                                           yes\n'])
+        f.writelines(['grid_score_secondary                                         no\n'])
+        f.writelines(['grid_score_rep_rad_scale                                     1\n'])
+        f.writelines(['grid_score_vdw_scale                                         1\n'])
+        f.writelines(['grid_score_grid_prefix                                       grid\n'])
+        f.writelines(['dock3.5_score_secondary                                      no\n'])
+        f.writelines(['continuous_score_secondary                                   no\n'])
+        f.writelines(['footprint_similarity_score_secondary                         no\n'])
+        f.writelines(['pharmacophore_score_secondary                                no\n'])
+        f.writelines(['descriptor_score_secondary                                   no\n'])
+        f.writelines(['gbsa_zou_score_secondary                                     no\n'])
+        f.writelines(['gbsa_hawkins_score_secondary                                 no\n'])
+        f.writelines(['SASA_score_secondary                                         no\n'])
+        f.writelines(['amber_score_secondary                                        no\n'])
+        f.writelines(['minimize_ligand                                              yes\n'])
+        f.writelines(['minimize_anchor                                              yes\n'])
+        f.writelines(['minimize_flexible_growth                                     yes\n'])
+        f.writelines(['use_advanced_simplex_parameters                              no\n'])
+        f.writelines(['simplex_max_cycles                                           1\n'])
+        f.writelines(['simplex_score_converge                                       0.1\n'])
+        f.writelines(['simplex_cycle_converge                                       1.0\n'])
+        f.writelines(['simplex_trans_step                                           1.0\n'])
+        f.writelines(['simplex_rot_step                                             0.1\n'])
+        f.writelines(['simplex_tors_step                                            10.0\n'])
+        f.writelines(['simplex_anchor_max_iterations                                500\n'])
+        f.writelines(['simplex_grow_max_iterations                                  500\n'])
+        f.writelines(['simplex_grow_tors_premin_iterations                          0\n'])
+        f.writelines(['simplex_random_seed                                          0\n'])
+        f.writelines(['simplex_restraint_min                                        no\n'])
+        f.writelines(['atom_model                                                   all\n'])
+        f.writelines(['vdw_defn_file                                                {}/parameters\n'.format(config_['dock6_path'])])
+        f.writelines(['flex_defn_file                                               {}/parameters/flex.defn\n'.format(config_['dock6_path'])])
+        f.writelines(['flex_drive_file                                              {}/parameters/flex_drive.tbl\n'.format(config_['dock6_path'])])
+        f.writelines(['vdw_defn_file                                                {}/parameters/vdw_AMBER_parm99.defn\n'.format(config_['dock6_path'])])
+        f.writelines(['flex_defn_file                                               {}/parameters/flex.defn\n'.format(config_['dock6_path'])])
+        f.writelines(['ligand_outfile_prefix                                        ligand_out\n'])
+        f.writelines(['write_orientations                                           no\n'])
+        f.writelines(['num_scored_conformers                                        1\n'])
+        f.writelines(['rank_ligands                                                 no\n'])
+    
+    cmd = ['{}/bin/dock6'.format(config_['dock6_path']), '-i', os.path.join(task['tmp_run_dir'], "dock.in")]
+
+    return cmd
+
+def docking_finish_dock6(item, ret): 
+    try: 
+        dock_file = [x for x in os.listdir(item['tmp_run_dir']) if 'ligand_out' in x]
+        dock_file = [x for x in dock_file if 'mol2' in x][0]
+        os.system('cp {} {}'.format(dock_file, item['output_dir']))
+        
+        # Save the results: 
+        with open('./ligand_out_scored.mol2', 'r') as f: 
+            lines = f.readlines()
+        docking_score = float(lines[2].split(' ')[-1])           
+
+        item['score'] = docking_score   
+        item['status'] = "success"
+
+    except: 
+        logging.error("failed parsing")
+
 
 ## rosetta-ligand
 def docking_start_rosetta_ligand(task): 
@@ -1257,7 +1432,7 @@ def docking_start_Molegro(task):
 def docking_finish_Molegro(item, ret): 
     try: 
         
-        cmd_run = ret.stdout.decode("utf-8").split('\n')[-2]
+        cmd_run = ret.stdout.split('\n')[-2]
         cmd_run = [x for x in cmd_run if 'Pose:' in x]
         scores = []
         for item in cmd_run: 
@@ -1275,7 +1450,7 @@ def docking_finish_Molegro(item, ret):
         
     return 
 
-## LigandFit
+## FitDock
 def docking_start_FitDock(task): 
 
     with open(task['config_path']) as fd:
@@ -1290,9 +1465,9 @@ def docking_start_FitDock(task):
             '-Tlig', config_['ligand_reference'],
             '-Qprot', config_['receptor'],
             '-Qlig', task['ligand_path'], 
-            '-ot', 'ot.mol2', 
-            '-os', 'os.mol2', 
-            '-o', 'o.mol2'
+            '-ot', item['tmp_run_dir']+'ot.mol2', 
+            '-os', item['tmp_run_dir']+'os.mol2', 
+            '-o', item['tmp_run_dir']+'o.mol2'
           ]
         
     return cmd
@@ -1317,6 +1492,47 @@ def docking_finish_FitDock(item, ret):
     return 
 
 
+## Flexx
+def docking_start_flexx(task): 
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    output_file_path = item['output_dir'] + task['lig_path'].split('/')[-1].replace('.mol2', '.sdf')
+    
+    cmd = [f"{task['tools_path']}/flexx", 
+           '-i', task['lig_path'], 
+           '-o', output_file_path, 
+           '-p', config_['receptor'], 
+           '-r', config_['ref_ligand']
+          ]
+    
+    return cmd
+
+def docking_finish_flexx(item, ret): 
+    try: 
+        output_file_path = item['output_dir'] + item['lig_path'].split('/')[-1].replace('.mol2', '.sdf')
+        
+        with open(output_file_path, 'r') as f: 
+            lines = f.readlines()    
+        
+        for i,item in enumerate(lines): 
+            docking_scores = []
+            if '>  <docking-score>' in item : 
+                docking_score = float(lines[i+1])
+                docking_scores.append(docking_score)
+        
+        item['score'] = min(docking_scores)
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+    return 
+
+
 ## LightDock
 def docking_start_LightDock(task): 
 
@@ -1329,9 +1545,9 @@ def docking_start_LightDock(task):
     task['lightdock_tmp_file'] = os.path.join(task['tmp_run_dir'], "run_.sh")
     
     with open(task['lightdock_tmp_file'], 'w') as f: 
-        f.writelines('./lightdock/bin/lightdock3_setup.py {} {} --noxt --noh --now -anm\n'.format(config_['receptor'], task['ligand_path']))
-        f.writelines('./lightdock/bin/lightdock3.py setup.json 100 -c 1 -l 0\n')
-        f.writelines('./lightdock/bin/lgd_generate_conformations.py {} {} swarm_0/gso_100.out {}\n'.format(config_['receptor'], task['ligand_path'], config_['exhaustiveness']))
+        f.writelines('{}/bin/lightdock3_setup.py {} {} --noxt --noh --now -anm\n'.format(config_['lightdock_path'], config_['receptor'], task['ligand_path']))
+        f.writelines('{}/bin/lightdock3.py setup.json 100 -c 1 -l 0\n')
+        f.writelines('{}/bin/lgd_generate_conformations.py {} {} swarm_0/gso_100.out {}\n'.format(config_['lightdock_path'], config_['receptor'], task['ligand_path'], config_['exhaustiveness']))
 
     os.system('chmod 0700 {}'.format(task['lightdock_tmp_file'])) # Assign execution permisions on script
     
@@ -1432,7 +1648,7 @@ def docking_start_autodock_koto(task):
 
 def docking_finish_autodock_koto(item, ret): 
     try: 
-        docking_out = ret.stdout.decode("utf-8")
+        docking_out = ret.stdout
         A = docking_out.split('\n')
         docking_score = []
         for item in A: 
@@ -1452,6 +1668,392 @@ def docking_finish_autodock_koto(item, ret):
         logging.error("failed parsing")
     
     return 
+
+
+# CovDock
+def docking_start_covdock(task):
+    script_path = os.path.join(task['tmp_run_dir'], 'covdock_script.py')
+    with open(script_path, 'w') as script_file:
+        script_file.write(f"""\
+        from schrodinger import structure
+        from schrodinger.job import jobcontrol
+        from schrodinger.application.covdock import covdock
+        from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+        
+        config_ = {task['config']}
+        smi = '{task['ligand_path']}'
+        receptor = config_['receptor']
+        center_x = config_['center_x']
+        center_y = config_['center_y']
+        center_z = config_['center_z']
+        size_x = config_['size_x']
+        size_y = config_['size_y']
+        size_z = config_['size_z']
+        covalent_bond_constraints = config_['covalent_bond_constraints']
+        
+        # Prepare the ligand
+        ligand_struct = structure.create_structure_from_smiles(smi)
+        ligand_output_file = os.path.join('{task['tmp_run_dir']}', f"ligand_{{ligand_struct.title}}.maegz")
+        
+        ligprep_settings = LigprepSettings()
+        ligprep_settings.set_output_file(ligand_output_file)
+        ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+        ligprep_job.run()
+        ligprep_job.wait()
+        
+        # Prepare the receptor and ligand structures
+        receptor_struct = structure.StructureReader(receptor).next()
+        ligand_struct = structure.StructureReader(ligand_output_file).next()
+        
+        # Set up CovDock settings
+        settings = covdock.CovDockSettings()
+        settings.set_receptor(receptor_struct)
+        settings.set_ligand(ligand_struct)
+        
+        output_file = '{task['output_path']}'
+        settings.set_output_file(output_file)
+        settings.set_covalent_bond_atom_pairs(covalent_bond_constraints)
+        
+        # Specify the ligand binding site as coordinates and box size
+        settings.set_site_box_center((center_x, center_y, center_z))
+        settings.set_site_box_size((size_x, size_y, size_z))
+        
+        # Run the CovDock job
+        covdock_job = covdock.CovDock(settings)
+        covdock_job.run()
+        covdock_job.wait()
+        
+        # Extract the docking scores
+        output_structures = list(structure.StructureReader(output_file))
+        docking_scores = [struct.property['r_i_docking_score'] for struct in output_structures]
+        
+        # Save the minimum score to a file
+        with open('min_score_covdock.txt', 'w') as score_file:
+            score_file.write(str(min(docking_scores)))
+        """)
+    cmd = ['python3', script_path]
+    return cmd
+
+def docking_finish_covdock(task):
+    try:
+        min_score_file = os.path.join(task['tmp_run_dir'], 'min_score_covdock.txt')
+        with open(min_score_file, 'r') as score_file:
+            task['score'] = float(score_file.read())
+
+        task['status'] = "success"
+    except:
+        logging.error("failed parsing")
+
+    return
+
+
+# Glide SP 
+def docking_start_glide_sp(task):
+    script_path = os.path.join(task['tmp_run_dir'], 'glide_sp_script.py')
+    with open(script_path, 'w') as script_file:
+        script_file.write(f"""\
+            from schrodinger import structure
+            from schrodinger.job import jobcontrol
+            from schrodinger.application.glide import glide
+            from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+            
+            config_ = {task['config']}
+            smi = '{task['ligand_path']}'
+            receptor = config_['receptor']
+            center_x = config_['center_x']
+            center_y = config_['center_y']
+            center_z = config_['center_z']
+            size_x = config_['size_x']
+            size_y = config_['size_y']
+            size_z = config_['size_z']
+            
+            # Prepare the ligand
+            ligand_struct = structure.create_structure_from_smiles(smi)
+            ligand_output_file = os.path.join('{task['tmp_run_dir']}', f"ligand_{{ligand_struct.title}}.maegz")
+            
+            ligprep_settings = LigprepSettings()
+            ligprep_settings.set_output_file(ligand_output_file)
+            ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+            ligprep_job.run()
+            ligprep_job.wait()
+            
+            # Prepare the receptor and ligand structures
+            receptor_struct = structure.StructureReader(receptor).next()
+            ligand_struct = structure.StructureReader(ligand_output_file).next()
+            
+            # Set up Glide settings
+            settings = glide.GlideSettings()
+            settings.set_receptor_file(receptor_struct)
+            settings.set_ligand_file(ligand_output_file)
+            
+            output_file = '{task['output_path']}'
+            settings.set_output_file(output_file)
+            
+            # Specify the ligand binding site as coordinates and box size
+            settings.set_site_box_center((center_x, center_y, center_z))
+            settings.set_site_box_size((size_x, size_y, size_z))
+            
+            # Set Glide precision to SP
+            settings.set_precision("SP")
+            
+            # Run the Glide job
+            glide_job = glide.Glide(settings)
+            glide_job.run()
+            glide_job.wait()
+            
+            # Extract the docking scores
+            output_structures = list(structure.StructureReader(output_file))
+            docking_scores = [struct.property['r_i_docking_score'] for struct in output_structures]
+            
+            # Save the minimum score to a file
+            with open('min_score.txt', 'w') as score_file:
+                score_file.write(str(min(docking_scores)))
+            """)
+        
+        cmd = ['python3', script_path]
+        
+    return cmd
+
+def docking_finish_glide_sp(task):
+    try: 
+        min_score_file = os.path.join(task['tmp_run_dir'], 'min_score.txt')
+        with open(min_score_file, 'r') as score_file:
+            task['score'] = float(score_file.read()) 
+        task['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+    return 
+
+# Glide XP 
+def docking_start_glide_xp(task):
+    script_path = os.path.join(task['tmp_run_dir'], 'glide_xp_script.py')
+    with open(script_path, 'w') as script_file:
+        script_file.write(f"""\
+        from schrodinger import structure
+        from schrodinger.job import jobcontrol
+        from schrodinger.application.glide import glide
+        from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+        
+        config_ = {task['config']}
+        smi = '{task['ligand_path']}'
+        receptor = config_['receptor']
+        center_x = config_['center_x']
+        center_y = config_['center_y']
+        center_z = config_['center_z']
+        size_x = config_['size_x']
+        size_y = config_['size_y']
+        size_z = config_['size_z']
+        
+        # Prepare the ligand
+        ligand_struct = structure.create_structure_from_smiles(smi)
+        ligand_output_file = os.path.join('{task['tmp_run_dir']}', f"ligand_{{ligand_struct.title}}.maegz")
+        
+        ligprep_settings = LigprepSettings()
+        ligprep_settings.set_output_file(ligand_output_file)
+        ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+        ligprep_job.run()
+        ligprep_job.wait()
+        
+        # Prepare the receptor and ligand structures
+        receptor_struct = structure.StructureReader(receptor).next()
+        ligand_struct = structure.StructureReader(ligand_output_file).next()
+        
+        # Set up Glide settings
+        settings = glide.GlideSettings()
+        settings.set_receptor_file(receptor_struct)
+        settings.set_ligand_file(ligand_output_file)
+        
+        output_file = '{task['output_path']}'
+        settings.set_output_file(output_file)
+        
+        # Specify the ligand binding site as coordinates and box size
+        settings.set_site_box_center((center_x, center_y, center_z))
+        settings.set_site_box_size((size_x, size_y, size_z))
+        
+        # Set Glide precision to XP
+        settings.set_precision("XP")
+        
+        # Run the Glide job
+        glide_job = glide.Glide(settings)
+        glide_job.run()
+        glide_job.wait()
+        
+        # Extract the docking scores
+        output_structures = list(structure.StructureReader(output_file))
+        docking_scores = [struct.property['r_i_docking_score'] for struct in output_structures]
+        
+        # Save the minimum score to a file
+        with open('min_score_xp.txt', 'w') as score_file:
+            score_file.write(str(min(docking_scores)))
+        """)
+    cmd = ['python3', script_path]
+    return cmd
+
+def docking_finish_glide_xp(task):
+    try:
+        min_score_file = os.path.join(task['tmp_run_dir'], 'min_score_xp.txt')
+        with open(min_score_file, 'r') as score_file:
+            task['score'] = float(score_file.read())
+
+        task['status'] = "success"
+    except:
+        logging.error("failed parsing")
+
+    return
+
+
+# Glide HTVS
+    from schrodinger.job import jobcontrol
+    from schrodinger.application.glide import glide
+    from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    smi = task['ligand_path']
+    receptor = config_['receptor']
+    center_x = config_['center_x']
+    center_y = config_['center_y']
+    center_z = config_['center_z']
+    size_x = config_['size_x']
+    size_y = config_['size_y']
+    size_z = config_['size_z']
+
+    if receptor.split('.')[-1] != 'maegz':
+        logging.error("failed parsing")
+
+    # Prepare the ligand
+    ligand_struct = structure.create_structure_from_smiles(smi)
+    ligand_output_file = os.path.join(task['tmp_run_dir'], f"ligand_{ligand_struct.title}.maegz")
+
+    ligprep_settings = LigprepSettings()
+    ligprep_settings.set_output_file(ligand_output_file)
+    ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+    ligprep_job.run()
+    ligprep_job.wait()
+
+    if ligprep_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Prepare the receptor and ligand structures
+    receptor_struct = structure.StructureReader(receptor).next()
+    ligand_struct = structure.StructureReader(ligand_output_file).next()
+
+    # Set up Glide settings
+    settings = glide.GlideSettings()
+    settings.set_receptor_file(receptor_struct)
+    settings.set_ligand_file(ligand_output_file)
+
+    output_file = task['output_path']
+    settings.set_output_file(output_file)
+
+    # Specify the ligand binding site as coordinates and box size
+    settings.set_site_box_center((center_x, center_y, center_z))
+    settings.set_site_box_size((size_x, size_y, size_z))
+
+    # Set Glide precision to HTVS
+    settings.set_precision("HTVS")
+
+    # Run the Glide job
+    glide_job = glide.Glide(settings)
+    glide_job.run()
+    glide_job.wait()
+
+    if glide_job.status != jobcontrol.FINISHED:
+        logging.error("failed parsing")
+
+    # Read the output file
+    output_structures = list(structure.StructureReader(output_file))
+
+    # Extract the docking scores
+    docking_scores = []
+    for struct in output_structures:
+        docking_score = struct.property['r_i_docking_score']
+        docking_scores.append(docking_score)
+
+    task['score'] = min(docking_scores)
+    task['status'] = "success"
+
+    return 
+def docking_start_glide_htvs(task):
+    script_path = os.path.join(task['tmp_run_dir'], 'glide_htvs_script.py')
+    with open(script_path, 'w') as script_file:
+        script_file.write(f"""\
+        from schrodinger import structure
+        from schrodinger.job import jobcontrol
+        from schrodinger.application.glide import glide
+        from schrodinger.application.ligprep import LigprepJob, LigprepSettings
+        
+        config_ = {task['config']}
+        smi = '{task['ligand_path']}'
+        receptor = config_['receptor']
+        center_x = config_['center_x']
+        center_y = config_['center_y']
+        center_z = config_['center_z']
+        size_x = config_['size_x']
+        size_y = config_['size_y']
+        size_z = config_['size_z']
+        
+        # Prepare the ligand
+        ligand_struct = structure.create_structure_from_smiles(smi)
+        ligand_output_file = os.path.join('{task['tmp_run_dir']}', f"ligand_{{ligand_struct.title}}.maegz")
+        
+        ligprep_settings = LigprepSettings()
+        ligprep_settings.set_output_file(ligand_output_file)
+        ligprep_job = LigprepJob(ligprep_settings, input_structure=ligand_struct)
+        ligprep_job.run()
+        ligprep_job.wait()
+        
+        # Prepare the receptor and ligand structures
+        receptor_struct = structure.StructureReader(receptor).next()
+        ligand_struct = structure.StructureReader(ligand_output_file).next()
+        
+        # Set up Glide settings
+        settings = glide.GlideSettings()
+        settings.set_receptor_file(receptor_struct)
+        settings.set_ligand_file(ligand_output_file)
+        
+        output_file = '{task['output_path']}'
+        settings.set_output_file(output_file)
+        
+        # Specify the ligand binding site as coordinates and box size
+        settings.set_site_box_center((center_x, center_y, center_z))
+        settings.set_site_box_size((size_x, size_y, size_z))
+        
+        # Set Glide precision to HTVS
+        settings.set_precision("HTVS")
+        
+        # Run the Glide job
+        glide_job = glide.Glide(settings)
+        glide_job.run()
+        glide_job.wait()
+        
+        # Extract the docking scores
+        output_structures = list(structure.StructureReader(output_file))
+        docking_scores = [struct.property['r_i_docking_score'] for struct in output_structures]
+        
+        # Save the minimum score to a file
+        with open('min_score_htvs.txt', 'w') as score_file:
+            score_file.write(str(min(docking_scores)))
+        """)
+    cmd = ['python3', script_path]
+    return cmd
+
+def docking_finish_glide_htvs(task):
+    try:
+        min_score_file = os.path.join(task['tmp_run_dir'], 'min_score_htvs.txt')
+        with open(min_score_file, 'r') as score_file:
+            task['score'] = float(score_file.read())
+
+        task['status'] = "success"
+    except:
+        logging.error("failed parsing")
+
+    return
 
 ## PSOvina
 
@@ -1553,7 +2155,7 @@ def docking_start_plants(task):
 
     task['plants_tmp_file'] = os.path.join(task['tmp_run_dir'], "vfvs_tmp.txt")
     shutil.copy(task['config_path'], task['plants_tmp_file'])
-
+        
     with open(task['plants_tmp_file'], 'a+') as f:
         f.writelines('ligand_file {}\n'.format(task['ligand_path']))
         f.writelines('output_dir {}\n'.format(task['output_path']))
@@ -1569,12 +2171,12 @@ def docking_start_plants(task):
 def docking_finish_plants(item, ret):
 
     try:
-        plants_cmd = ret.stdout.decode("utf-8").split('\n')[-6]
+        plants_cmd = ret.stdout.split('\n')
+        plants_cmd = [x for x in plants_cmd if 'best score:' in x][-1]
         item['score'] = float(plants_cmd.split(' ')[-1])
         item['status'] = "success"
     except:
         logging.error("failed parsing")
-
 
 ## adfr
 
@@ -1582,7 +2184,7 @@ def docking_start_adfr(item):
     with open(item['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
 
-    cmd = ['adfr',
+    cmd = ['{}/adfr'.format(item['tools_path']),
            '-t', '{}'.format(config_['receptor']),
            '-l', '{}'.format(item['ligand_path']),
            '--jobName', '{}'.format(item['output_path'])
@@ -1592,7 +2194,7 @@ def docking_start_adfr(item):
 def docking_finish_adfr(item, ret):
 
     try:
-        docking_out = ret.stdout.decode("utf-8")
+        docking_out = ret.stdout
         docking_scores = []
         for line_item in docking_out:
             A = line_item.split(' ')
@@ -1818,7 +2420,7 @@ def docking_start_ledock(item):
         if '#' in config_[item]: config_[item] = config_[item].split('#')[0]
 
     docking_file = cmd[-1]
-    ligand_list_file = docking_file.split('.')[0] + '.list'
+    # ligand_list_file = docking_file.split('.')[0] + '.list'
 
     with open(docking_file, 'w') as f:
         f.writelines(['Receptor'])
@@ -2031,7 +2633,7 @@ def docking_start_idock(item):
 
 def docking_finish_idock(item, ret):
     try:
-        docking_out = ret.stdout.decode("utf-8")
+        docking_out = ret.stdout
         docking_out = float([x for x in docking_out.split(' ') if x != ''][-2])
         item['score'] = min(docking_out)
         item['status'] = "success"
@@ -2137,7 +2739,7 @@ def docking_start_autodock(item, arch_type):
 
 def docking_finish_autodock(item, ret):
     try :
-        output = ret.stdout.decode("utf-8").split('\n')[-6]
+        output = ret.stdout.split('\n')[-6]
         lines = [x.strip() for x in output if 'best energy' in x][0]
         docking_score = float(lines.split(',')[1].split(' ')[-2])
         item['score'] = min(docking_score)
@@ -2145,6 +2747,561 @@ def docking_finish_autodock(item, ret):
     except:
         logging.error("failed parsing")
 
+
+# Scoring functions: 
+def convert_ligand_format(ligand_, new_format): 
+    """Converts a ligand file to a different file format using the Open Babel tool.
+
+        Args:
+            ligand_ (str): The path to the input ligand file.
+            new_format (str): The desired output format for the ligand file.
+    
+        Returns:
+            None
+    
+        Raises:
+            Exception: If the input file does not exist, or if the Open Babel tool is not installed.
+    
+        Examples:
+            To convert a ligand file from mol2 format to pdbqt format:
+            >>> convert_ligand_format('./ligands/ligand1.mol2', 'pdbqt')
+    """
+    input_format = ligand_.split('.')[-1]
+    os.system('obabel {} -O {}'.format(ligand_, ligand_.replace(input_format, new_format)))
+
+    
+## nnscore2.0
+def scoring_start_nnscore2(task): 
+    
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format =  task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        convert_ligand_format( task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    vina_loc = '{}/vina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('export VINA_EXEC={}; python {}/NNScore2.py -receptor {} -ligand {} -vina_executable $VINA_EXEC > output.txt'.format(vina_loc, item['tools_path'], config_['receptor'], task['output_path']))
+    
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_nnscore2(item, ret): 
+    
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        scores = [x for x in lines if 'Best Score:' in x]
+        scores = [A.split('(')[-1].split(')')[0] for A in scores]
+        item['score'] = min(scores)   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+## rf-score-vs
+
+def scoring_start_rf(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        print('Ligand needs to be in pdbqt format. Converting ligand format using obabel.')
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    rf_score_vs_loc = '{}/rf-score-vs'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} {} -O {}/ligands_rescored.pdbqt'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} {} -ocsv > {}/temp.csv'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_rf(item, ret): 
+
+    try:    
+        with open('{}/temp.csv'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        rf_scores = []
+        for line_item in lines[1: ]: 
+            rf_scores.append( float(line_item.split(',')[-1]) )
+        item['score'] = min(rf_scores)   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+## smina scoring
+
+def scoring_start_smina(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    smina_loc = '{}/smina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_smina(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        smina_score = float([x for x in lines if 'Affinity' in x][0].split(' ')[1])
+        item['score'] = smina_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+## gnina scoring
+
+def scoring_start_gnina(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    smina_loc = '{}/gnina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_gnina(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        smina_score = float([x for x in lines if 'Affinity' in x][0].split(' ')[1])
+        item['score'] = smina_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+## ad4 scoring
+def scoring_start_ad4(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    smina_loc = '{}/smina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} -l {} --score_only --scoring ad4_scoring > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_ad4(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        ad4_score = float([x for x in lines if 'Affinity' in x][0].split(' ')[1])
+        item['score'] = ad4_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+
+# vinandro scoring
+def scoring_start_vinardo(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    smina_loc = '{}/smina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} -l {} --score_only --scoring vinardo > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_vinardo(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        vinardo_score = float([x for x in lines if 'Affinity' in x][0].split(' ')[1])
+        item['score'] = vinardo_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+# vina scoring 
+def scoring_start_vina(task):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+    
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'pdbqt': 
+        convert_ligand_format(task['output_path'], 'pdbqt')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    smina_loc = '{}/smina'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --receptor {} -l {} --score_only --scoring vina > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_vina(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        vina_score = float([x for x in lines if 'Affinity' in x][0].split(' ')[1])
+        item['score'] = vina_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+# PLANTS chemplp
+def scoring_start_PLANTS_chemplp(task):
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'mol2': 
+        convert_ligand_format(task['output_path'], 'mol2')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        
+    with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
+        f.writelines('scoring_function         chemplp\n')
+        f.writelines('protein_file             {}\n'.format(config_['receptor']))
+        f.writelines('ligand_file              {}\n'.format(task['output_path']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_PLANTS_chemplp(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        chemplp_score = float([x for x in lines if 'best score:' in x][-1].split(' ')[-1])
+        item['score'] = chemplp_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+# PLANTS plp
+def scoring_start_PLANTS_plp(task):
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'mol2': 
+        convert_ligand_format(task['output_path'], 'mol2')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        
+    with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
+        f.writelines('scoring_function         plp\n')
+        f.writelines('protein_file             {}\n'.format(config_['receptor']))
+        f.writelines('ligand_file              {}\n'.format(task['output_path']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_PLANTS_plp(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        plp_score = float([x for x in lines if 'best score:' in x][-1].split(' ')[-1])
+        item['score'] = plp_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+        
+# PLANTS plp95
+def scoring_start_PLANTS_plp95(task):
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'mol2': 
+        convert_ligand_format(task['output_path'], 'mol2')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        
+    with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
+        f.writelines('scoring_function         plp95\n')
+        f.writelines('protein_file             {}\n'.format(config_['receptor']))
+        f.writelines('ligand_file              {}\n'.format(task['output_path']))
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_PLANTS_plp95(item, ret): 
+
+    try:    
+        with open('{}/output.txt'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        plp95_score = float([x for x in lines if 'best score:' in x][-1].split(' ')[-1])
+        item['score'] = plp95_score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
+
+
+# Dock6 Contact Score
+def scoring_start_dock6_contact_score(task):
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config = dict(read_config_line(line) for line in fd)
+    for item in config:
+        if '#' in config[item]:
+            config[item] = config[item].split('#')[0]
+
+    # Convert ligand format if needed:
+    lig_format = task['output_path'].split('.')[-1]
+    if lig_format != 'mol2': 
+        print('Ligand needs to be in mol2 format. Converting ligand format using obabel.')
+        convert_ligand_format(task['output_path'], 'mol2')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+
+    with open(run_sh_script, 'w') as f:        
+        f.writelines(['export Chimera={}\n'.format(config['chimera_path'])])
+        f.writelines(['export DOCK6={}\n'.format(config['dock6_path'])])
+        f.writelines(['$Chimera/bin/chimera --nogui {} dockprep.py\n'.format(config['receptor'])])
+
+        # Generate INSPH, box.in, grid.in, and Contact_Score.in files
+        insph_path = os.path.join(task['tmp_run_dir'], 'INSPH')
+        with open(insph_path, 'w') as f:
+            f.writelines('rec.ms\n')
+            f.writelines('R\n')
+            f.writelines('X\n')
+            f.writelines('0.0\n')
+            f.writelines('4.0\n')
+            f.writelines('1.4\n')
+            f.writelines('rec.sph\n')
+
+        box_path = os.path.join(task['tmp_run_dir'], 'box.in')
+        with open(box_path, 'w') as f:
+            f.writelines('N\n')
+            f.writelines('U\n')
+            f.writelines('{}   {}    {}\n'.format(config['center_x'], config['center_y'], config['center_z']))
+            f.writelines('{} {} {}\n'.format(config['size_x'], config['size_y'], config['size_z']))
+            f.writelines('rec_box.pdb\n')
+
+        grid_path = os.path.join(task['tmp_run_dir'], 'grid.in')
+        with open(grid_path, 'w') as f:
+            f.writelines('compute_grids                  yes\n')
+            f.writelines('energy_score                   yes\n')
+            f.writelines('energy_cutoff_distance         9999\n')
+            f.writelines('atom_model                     a\n')
+            f.writelines('bump_filter                    yes\n')
+            f.writelines('receptor_file                  {}\n'.format(config['receptor']))
+            f.writelines('box_file                       rec_box.pdb\n')
+            f.writelines('vdw_definition_file            {}/parameters/vdw_AMBER_parm99.defn\n'.format(config['dock6_path']))
+            f.writelines('score_grid_prefix              grid\n')
+            f.writelines('grid_spacing                   0.3\n')
+            f.writelines('output_molecule                no\n')
+            f.writelines('contact_score                  yes\n')
+            f.writelines('attractive_exponent            6\n')
+            f.writelines('repulsive_exponent             12\n')
+            f.writelines('distance_dielectric            yes\n')
+            f.writelines('dielectric_factor              4\n')
+            f.writelines('bump_overlap                   0.75\n')
+            f.writelines('contact_cutoff_distance        4.5\n')
+            
+        contact_score_path = os.path.join(task['tmp_run_dir'], 'Contact_Score.in')
+        with open(contact_score_path, 'w') as f:
+            f.writelines(['conformer_search_type                                        rigid\n'])
+            f.writelines(['use_internal_energy                                          yes\n'])
+            f.writelines(['internal_energy_rep_exp                                      12\n'])
+            f.writelines(['internal_energy_cutoff                                       100.0\n'])
+            f.writelines(['ligand_atom_file                                             {}\n'.format(task['output_path'])])
+            f.writelines(['limit_max_ligands                                            no\n'])
+            f.writelines(['skip_molecule                                                no\n'])
+            f.writelines(['read_mol_solvation                                           no\n'])
+            f.writelines(['calculate_rmsd                                               no\n'])
+            f.writelines(['use_database_filter                                          no\n'])
+            f.writelines(['orient_ligand                                                no\n'])
+            f.writelines(['bump_filter                                                  no\n'])
+            f.writelines(['score_molecules                                              yes\n'])
+            f.writelines(['contact_score_primary                                        yes\n'])
+            f.writelines(['contact_score_secondary                                      no\n'])
+            f.writelines(['contact_score_cutoff_distance                                4.5\n'])
+            f.writelines(['contact_score_clash_overlap                                  0.75\n'])
+            f.writelines(['contact_score_clash_penalty                                  50\n'])
+            f.writelines(['contact_score_grid_prefix                                    grid\n'])
+            f.writelines(['grid_score_secondary                                         no\n'])
+            f.writelines(['multigrid_score_secondary                                    no\n'])
+            f.writelines(['dock3.5_score_secondary                                      no\n'])
+            f.writelines(['continuous_score_secondary                                   no\n'])
+            f.writelines(['footprint_similarity_score_secondary                         no\n'])
+            f.writelines(['pharmacophore_score_secondary                                no\n'])
+            f.writelines(['descriptor_score_secondary                                   no\n'])
+            f.writelines(['gbsa_zou_score_secondary                                     no\n'])
+            f.writelines(['gbsa_hawkins_score_secondary                                 no\n'])
+            f.writelines(['SASA_score_secondary                                         no\n'])
+            f.writelines(['amber_score_secondary                                        no\n'])
+            f.writelines(['minimize_ligand                                              yes\n'])
+            f.writelines(['simplex_max_iterations                                       1000\n'])
+            f.writelines(['simplex_tors_premin_iterations                               0\n'])
+            f.writelines(['simplex_max_cycles                                           1\n'])
+            f.writelines(['simplex_score_converge                                       0.1\n'])
+            f.writelines(['simplex_cycle_converge                                       1.0\n'])
+            f.writelines(['simplex_trans_step                                           1.0\n'])
+            f.writelines(['simplex_rot_step                                             0.1\n'])
+            f.writelines(['simplex_tors_step                                            10.0\n'])
+            f.writelines(['simplex_random_seed                                          0\n'])
+            f.writelines(['simplex_restraint_min                                        no\n'])
+            f.writelines(['atom_model                                                   all\n'])
+            f.writelines(['vdw_defn_file                                                {}/parameters/vdw_AMBER_parm99.defn\n'.format(config['dock6_path'])])
+            f.writelines(['flex_defn_file                                               {}/parameters/flex.defn\n'.format(config['dock6_path'])])
+            f.writelines(['flex_drive_file                                              {}/parameters/flex_drive.tbl\n'.format(config['dock6_path'])])
+            f.writelines(['ligand_outfile_prefix                                        ligand_out\n'])
+            f.writelines(['write_orientations                                           no\n'])
+            f.writelines(['num_scored_conformers                                        1\n'])
+            f.writelines(['rank_ligands                                                 no\n'])
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+
+    cmd = ['./{}'.format(run_sh_script)] 
+    
+    return cmd 
+
+def scoring_finish_dock6_contact_score(item, ret): 
+    try:    
+        with open('{}/ligand_out_scored.mol2'.format(item['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+        score = float([x for x in lines[2].split(' ') if x != ''][-1])
+        item['score'] = score   
+        item['status'] = "success"
+    except: 
+        logging.error("failed parsing")
 
 
 DOCKING_PROGRAMS = {
@@ -2469,14 +3626,12 @@ def process(ctx):
             while download_queue.qsize() > 25:
                 time.sleep(0.2)
 
-
         flush_queue(download_queue, downloader_processes, "download")
         flush_queue(unpack_queue, unpacker_processes, "unpack")
         flush_queue(collection_queue, collection_processes, "collection")
         flush_queue(docking_queue, docking_processes, "docking")
         flush_queue(summary_queue, summary_processes, "summary")
         flush_queue(upload_queue, uploader_processes, "upload")
-
     except Exception as e:
         logging.error(f"Received exception {e}, terminating")
 

@@ -3,10 +3,9 @@
 For running ADFR, a trg receptor file (generated during pre-processing) needs to be provided by the user. The config.txt file <br>
 can contain the line: 
 ```
-    receptor=test.tmp
+    receptor=../input-files/receptor/test.tmp
 ```
-Note: ADFR needs to be installed such that it can run by using the word 'adfr' in shell (from any location).
-
+An adfr executable (of name adfr) should be placed in directory: /tools/bin directory. An executable needs to be compiled based on a user’s system using instructions described in https://ccsb.scripps.edu/adfr/downloads/.
 
 ### Running with PLANTS:
 A PLANTS executable (with the exact name PLANTS) must be downloaded from http://www.tcd.uni-konstanz.de/research/plants.php, and 
@@ -20,6 +19,7 @@ A config.txt file is required for running PLANTS. An example of the config file 
     cluster_structures 10
     cluster_rmsd 2.0
 ```
+Please ensure that the lines specifying the output_dir and ligand_file are not in the config.txt file. These will be added by VFVS on it's own.
 
 ### Running with AutodockZN: 
 For AutodockZN, the config.txt file must contain: 
@@ -101,6 +101,9 @@ Format for the mdock_dock.par file:
 
 ### Running with MCDock
 A MCDock executable (of name 'mcdock') should be placed in the directory: /tools/bin
+```
+    receptor=./receptor.xyz # Location of receptor file
+```
 
 ### Running with LigandFit
 A LigandFit executable (of name 'ligandfit') should be placed in directory: /tools/bin <br>
@@ -138,6 +141,65 @@ The config.txt file should contain:
     center_z=10
 ```
 
+### Running with CovDock
+A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
+```
+    receptor=receptor.maegz
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    covalent_bond_constraints=A 1 CYS SG B 1 LIG C1
+```
+
+### Running with GlideHTVS
+A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
+```
+    receptor=receptor.maegz
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
+
+### HDock
+An HDock executable (of name hdock) should be placed in directory: /tools/bin directory. 
+An createpl executable (of name createpl) should be placed in directory: /tools/bin directory. 
+```
+    receptor=receptor.pdb
+```
+
+### Running with GlideSP
+A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
+```
+    receptor=receptor.maegz
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
+
+
+### Running with GlideXP
+A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
+```
+    receptor=receptor.maegz
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
+
+
+
 ### Running with iGemDock
 An iGemDock executable (of name 'mod_ga') should be placed in directory: /tools/bin <br>
 The config.txt file should contain: 
@@ -147,10 +209,9 @@ The config.txt file should contain:
 ```
 
 ### Running with idock
-An idock executable (of name 'idock') should be placed in directory: /tools/bin <br>
 The config.txt file should contain: 
 ```
-    receptor=./receptor.pdb 
+    receptor=./receptor.pdbqt 
     center_x=10
     center_y=10
     center_z=10
@@ -171,7 +232,7 @@ The config.txt file should contain:
 ```
  
 ### Running with autodock_gpu
-A autodock_cpu executable (of name 'autodock_gpu') should be placed in directory: /tools/bin <br>
+A autodock_gpu executable (of name 'autodock_gpu') should be placed in directory: /tools/bin <br>
 The config.txt file should contain: 
 ```
     receptor=./protein.maps.fld # The prepared receptor file
@@ -187,6 +248,19 @@ The config.txt file should contain:
 ### Running with AutoDock-Koto
 The config.txt file should contain: 
 ```
+    receptor=./receptor.pdbqt # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
+
+### Running with qvina_gpu
+The config.txt file should contain: 
+```
     receptor=./receptor.pdb # Location of receptor file
     center_x=10
     center_y=10
@@ -196,6 +270,55 @@ The config.txt file should contain:
     size_z=10
     exhaustiveness=10
 ```
+A qvina_gpu executable (of name 'qvina_gpu') should be placed in directory: /tools/bin <br>
+Instructions for compilation are provided in https://github.com/DeltaGroupNJUPT/QuickVina2-GPU
+
+
+### Running with qvina_w_gpu
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
+A qvina_gpu executable (of name 'qvina_gpu') should be placed in directory: /tools/bin <br>
+Instructions for compilation are provided in https://github.com/DeltaGroupNJUPT/QVina-W-GPU
+
+### Running with vina_gpu
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
+A vina_gpu executable (of name 'vina_gpu') should be placed in directory: /tools/bin <br>
+Instructions for compilation are provided in https://github.com/DeltaGroupNJUPT/Vina-GPU
+
+### Running with vina_gpu_2.0
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
+A vina_gpu_2.0 executable (of name 'vina_gpu_2.0') should be placed in directory: /tools/bin <br>
+Instructions for compilation are provided in https://github.com/DeltaGroupNJUPT/Vina-GPU-2.0
+
 
 ### Running with RLDock
 The config.txt file should contain: 
@@ -223,6 +346,7 @@ The config.txt file should contain:
 ```
     receptor=./receptor.pdb # Location of receptor file
     exhaustiveness=10
+    lightdock_path=$HOME/lightdock # Path to LightDock installation
 ```
 
 ### Running with FitDock
@@ -269,3 +393,104 @@ The config.txt file should contain:
     mol2seed4_receptor_script=./mol2seed4_receptor.py
 ```
 
+### Running with MpSDockZN
+A MpSDockZN executable (of name 'MpSDockZN') should be placed in directory: /tools/bin <br>
+AmberTools needs to be loaded in for using SEED. 
+The config.txt file should contain: 
+```
+    chimera_path=/home/chimera
+    dock6_path=/home/dock6
+    receptor=./receptor.mol2 
+    box_in=./box.in
+    grid_in=./grid.in
+    dock_in=./dock.in
+```
+
+### Running with Flexx
+A Flexx executable (of name 'flexx') should be placed in directory: /tools/bin <br>
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb 
+    ref_ligand=./ref_ligand.mol2 # Location for reference ligand 
+```
+
+
+### Running with dock6
+The config.txt file should contain: 
+```
+    dock6_path=/home/dock6
+    receptor_site_file=./selected_spheres.sph
+```
+
+### Scoring with NNscore2.0
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdbqt
+```
+
+
+### Scoring with rf-score-vs
+A rf-score-vs executable (of name 'rf-score-vs') should be placed in directory: /tools/bin <br>
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdbqt
+```
+
+### Scoring with Gnina: 
+A gnina executable (with the exact name 'gnina') must be downloaded from https://github.com/gnina/gnina, and 
+placed within the directory /tools/bin (where other executables are located).<br>
+A config.txt file is required for running gnina. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
+### Scoring with Smina: 
+A config.txt file is required for running gnina. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
+### Scoring with AutoDock4: 
+A config.txt file is required for running gnina. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
+### Scoring with Vinandro: 
+A config.txt file is required for running vinandro. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
+### Scoring with Vina: 
+A config.txt file is required for running vina. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
+### Scoring with PLANTS_chemplp: 
+A config.txt file is required for running vina. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
+
+### Scoring with PLANTS_plp: 
+A config.txt file is required for running vina. An example of the config file format is: 
+```
+    receptor=receptor.pdbqt
+```
+
+### Scoring with DOCK6-Contact Score: 
+A config.txt file is required for running vina. An example of the config file format is: 
+```
+    chimera_path=/home/chimera
+    dock6_path=/home/dock6
+    receptor=receptor.pdbq
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
