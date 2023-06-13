@@ -2787,10 +2787,10 @@ def scoring_start_nnscore2(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    vina_loc = '{}/vina'.format(item['tools_path'])
+    vina_loc = '{}/vina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('export VINA_EXEC={}; python {}/NNScore2.py -receptor {} -ligand {} -vina_executable $VINA_EXEC > output.txt'.format(vina_loc, item['tools_path'], config_['receptor'], task['output_path']))
+        f.writelines('export VINA_EXEC={}; python {}/NNScore2.py -receptor {} -ligand {} -vina_executable $VINA_EXEC > output.txt'.format(vina_loc, task['tools_path'], config_['receptor'], task['output_path']))
     
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2809,6 +2809,75 @@ def scoring_finish_nnscore2(item, ret):
     except: 
         logging.error("failed parsing")
         
+## GOLD scoring
+def _scoring_start_gold(task, scoring_function):
+
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format =  task['output_path'].split('.')[-1]
+    if lig_format not in ['mol2', 'mol', 'mdl', 'sdf']: 
+        convert_ligand_format( task['output_path'], 'mol2')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2') 
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    gold_loc = '{}/gold_auto'.format(task['tools_path'])
+
+    with open(run_sh_script, 'w') as f:
+        pass
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+
+    output_dir = 'gold_output'
+    os.mkdir(output_dir)
+    with open('input.conf', mode='w') as input_conf:
+        input_conf.writelines([
+            'protein_datafile = {}\n'.format(config_['receptor']),
+            'ligand_data_file = {} 10\n'.format(task['output_path']),
+            'param_file = DEFAULT\n',
+            f'directory = {output_dir}\n',
+            f'gold_fitfunc_path {scoring_function}\n',
+            'run_flag = RESCORE\n',
+        ])
+
+        cmd = ['./executables/gold_auto', input_conf.name]
+    
+    return cmd 
+
+
+def _scoring_finish_fold(item, ret):
+    pass
+
+def scoring_start_gold_asp(task):
+    pass
+
+def scoring_finish_gold_asp(item, ret):
+    pass
+
+def scoring_start_gold_chemscore(task):
+    pass
+
+def scoring_finish_gold_chemscore(item, ret):
+    pass
+
+def scoring_start_gold_goldscore(task):
+    pass
+
+def scoring_finish_gold_goldscore(item, ret):
+    pass
+
+def scoring_start_gold_plp(task):
+    pass
+
+def scoring_finish_gold_plp(item, ret):
+    pass
+
 ## rf-score-vs
 
 def scoring_start_rf(task):
@@ -2828,11 +2897,11 @@ def scoring_start_rf(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    rf_score_vs_loc = '{}/rf-score-vs'.format(item['tools_path'])
+    rf_score_vs_loc = '{}/rf-score-vs'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} {} -O {}/ligands_rescored.pdbqt'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
-        f.writelines('{} --receptor {} {} -ocsv > {}/temp.csv'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} {} -O {}/ligands_rescored.pdbqt'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
+        f.writelines('{} --receptor {} {} -ocsv > {}/temp.csv'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2870,10 +2939,10 @@ def scoring_start_smina(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/smina'.format(item['tools_path'])
+    smina_loc = '{}/smina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2909,10 +2978,10 @@ def scoring_start_gnina(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/gnina'.format(item['tools_path'])
+    smina_loc = '{}/gnina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2947,10 +3016,10 @@ def scoring_start_ad4(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/smina'.format(item['tools_path'])
+    smina_loc = '{}/smina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only --scoring ad4_scoring > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only --scoring ad4_scoring > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2986,10 +3055,10 @@ def scoring_start_vinardo(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/smina'.format(item['tools_path'])
+    smina_loc = '{}/smina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only --scoring vinardo > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only --scoring vinardo > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -3024,10 +3093,10 @@ def scoring_start_vina(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/smina'.format(item['tools_path'])
+    smina_loc = '{}/smina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only --scoring vina > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only --scoring vina > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -3061,10 +3130,10 @@ def scoring_start_PLANTS_chemplp(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+    plants_loc = '{}/PLANTS'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, task['tmp_run_dir'], task['tmp_run_dir']))
         
     with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
         f.writelines('scoring_function         chemplp\n')
@@ -3103,10 +3172,10 @@ def scoring_start_PLANTS_plp(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+    plants_loc = '{}/PLANTS'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, task['tmp_run_dir'], task['tmp_run_dir']))
         
     with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
         f.writelines('scoring_function         plp\n')
@@ -3145,10 +3214,10 @@ def scoring_start_PLANTS_plp95(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+    plants_loc = '{}/PLANTS'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, task['tmp_run_dir'], task['tmp_run_dir']))
         
     with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
         f.writelines('scoring_function         plp95\n')
