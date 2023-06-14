@@ -2826,16 +2826,11 @@ def _scoring_start_gold(task, scoring_function):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2') 
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    input_conf = os.path.join(task['tmp_run_dir'], 'input.conf')
     gold_loc = '{}/gold_auto'.format(task['tools_path'])
 
-    with open(run_sh_script, 'w') as f:
-        pass
-
-    os.system('chmod 0700 {}'.format(run_sh_script))
-    cmd = ['./{}'.format(run_sh_script)] 
-
     output_dir = 'gold_output'
-    os.mkdir(output_dir)
+    os.mkdir(os.path.join(task['tmp_run_dir'], output_dir))
     with open('input.conf', mode='w') as input_conf:
         input_conf.writelines([
             'protein_datafile = {}\n'.format(config_['receptor']),
@@ -2845,38 +2840,49 @@ def _scoring_start_gold(task, scoring_function):
             f'gold_fitfunc_path {scoring_function}\n',
             'run_flag = RESCORE\n',
         ])
-
-        cmd = ['./executables/gold_auto', input_conf.name]
     
+    with open(run_sh_script, 'w') as f:
+        f.writelines(f'{gold_loc} {input_conf}')
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+
     return cmd 
 
-
-def _scoring_finish_fold(item, ret):
-    pass
+def _scoring_finish_gold(item, ret):
+    try:
+        with open(f"{item['tmp_run_dir']}/{'gold_output'}/rescore.log") as rescore_log:
+            for line in rescore_log:
+                pass
+        last_line = [i for i in line.split(sep=' ') if i]
+        item['score'] = last_line[4]
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
 
 def scoring_start_gold_asp(task):
-    pass
+    return _scoring_start_gold(task=task, scoring_function='asp')
 
 def scoring_finish_gold_asp(item, ret):
-    pass
+    return _scoring_finish_gold(item=item, ret=ret)
 
 def scoring_start_gold_chemscore(task):
-    pass
+    return _scoring_start_gold(task=task, scoring_function='chemscore')
 
 def scoring_finish_gold_chemscore(item, ret):
-    pass
+    return _scoring_finish_gold(item=item, ret=ret)
 
 def scoring_start_gold_goldscore(task):
-    pass
+    return _scoring_start_gold(task=task, scoring_function='goldscore')
 
 def scoring_finish_gold_goldscore(item, ret):
-    pass
+    return _scoring_finish_gold(item=item, ret=ret)
 
 def scoring_start_gold_plp(task):
-    pass
+    return _scoring_start_gold(task=task, scoring_function='plp')
 
 def scoring_finish_gold_plp(item, ret):
-    pass
+    return _scoring_finish_gold(item=item, ret=ret)
 
 ## rf-score-vs
 
