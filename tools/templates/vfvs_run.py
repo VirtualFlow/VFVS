@@ -2810,8 +2810,7 @@ def scoring_finish_nnscore2(item, ret):
         logging.error("failed parsing")
         
 ## GOLD scoring
-def _scoring_start_gold(task, scoring_function):
-
+def _scoring_start_gold(task, scoring_function: str):
     # Load in config file: 
     with open(task['config_path']) as fd:
         config_ = dict(read_config_line(line) for line in fd)
@@ -2822,7 +2821,7 @@ def _scoring_start_gold(task, scoring_function):
     # Convert ligand format if needed:
     lig_format =  task['output_path'].split('.')[-1]
     if lig_format not in ['mol2', 'mol', 'mdl', 'sdf']: 
-        convert_ligand_format( task['output_path'], 'mol2')
+        convert_ligand_format(task['output_path'], 'mol2')
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2') 
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
@@ -2831,8 +2830,8 @@ def _scoring_start_gold(task, scoring_function):
 
     output_dir = 'gold_output'
     os.mkdir(os.path.join(task['tmp_run_dir'], output_dir))
-    with open('input.conf', mode='w') as input_conf:
-        input_conf.writelines([
+    with open(input_conf, mode='w') as f:
+        f.writelines([
             'protein_datafile = {}\n'.format(config_['receptor']),
             'ligand_data_file = {} 10\n'.format(task['output_path']),
             'param_file = DEFAULT\n',
@@ -2851,7 +2850,7 @@ def _scoring_start_gold(task, scoring_function):
 
 def _scoring_finish_gold(item, ret):
     try:
-        with open(f"{item['tmp_run_dir']}/{'gold_output'}/rescore.log") as rescore_log:
+        with open(f"{item['tmp_run_dir']}/gold_output/rescore.log") as rescore_log:
             for line in rescore_log:
                 pass
         last_line = [i for i in line.split(sep=' ') if i]
