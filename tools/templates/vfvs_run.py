@@ -3043,7 +3043,7 @@ def scoring_finish_ad4(item, ret):
         logging.error("failed parsing")
 
 
-# vinandro scoring
+# vinardo scoring
 def scoring_start_vinardo(task):
 
     # Load in config file: 
@@ -3379,6 +3379,46 @@ def scoring_finish_dock6_contact_score(item, ret):
 
 
 DOCKING_PROGRAMS = {
+    'MpSDockZN': {
+        'start': docking_start_MpSDockZN,
+        'end': docking_finish_MpSDockZN,
+        'ligands': 'single',
+    },
+    'HDock': {
+        'start': docking_start_HDock,
+        'end': docking_finish_HDock,
+        'ligands': 'single',
+    },
+    'dock6': {
+        'start': docking_start_dock6,
+        'end': docking_finish_dock6,
+        'ligands': 'single',
+    },
+    'Flexx': {
+        'start': docking_start_flexx,
+        'end': docking_finish_flexx,
+        'ligands': 'single',
+    },
+    'CovDock': {
+        'start': docking_start_covdock,
+        'end': docking_finish_covdock,
+        'ligands': 'single',
+    },
+    'Glide_SP': {
+        'start': docking_start_glide_sp,
+        'end': docking_finish_glide_sp,
+        'ligands': 'single',
+    },
+    'Glide_XP': {
+        'start': docking_start_glide_xp,
+        'end': docking_finish_glide_xp,
+        'ligands': 'single',
+    },
+    'Glide_HTVS': {
+        'start': docking_start_glide_htvs,
+        'end': docking_finish_glide_htvs,
+        'ligands': 'single',
+    },
     'qvina02': {
         'start': docking_start_vina,
         'end': docking_finish_vina,
@@ -3533,6 +3573,81 @@ DOCKING_PROGRAMS = {
         'start': docking_start_SEED,
         'end': docking_finish_SEED,
         'ligands': "single"
+    },
+    'scoring_nnscore2.0': {
+        'start': scoring_start_nnscore2,
+        'end': scoring_finish_nnscore2,
+        'ligands': 'single',
+    },
+    'scoring_asp': {
+        'start': scoring_start_gold_asp,
+        'end': scoring_finish_gold_asp,
+        'ligands': 'single',
+    },
+    'scoring_chemscore': {
+        'start': scoring_start_gold_chemscore,
+        'end': scoring_finish_gold_chemscore,
+        'ligands': 'single',
+    },
+    'scoring_goldscore': {
+        'start': scoring_start_gold_goldscore,
+        'end': scoring_finish_gold_goldscore,
+        'ligands': 'single',
+    },
+    'scoring_plp': {
+        'start': scoring_start_gold_plp,
+        'end': scoring_finish_gold_plp,
+        'ligands': 'single',
+    },
+    'scoring_rf-score-vs': {
+        'start': scoring_start_rf,
+        'end': scoring_finish_rf,
+        'ligands': 'single',
+    },
+    'scoring_smina': {
+        'start': scoring_start_smina,
+        'end': scoring_finish_smina,
+        'ligands': 'single',
+    },
+    'scoring_start_gnina': {
+        'start': scoring_start_gnina,
+        'end': scoring_finish_gnina,
+        'ligands': 'single',
+    },
+    'scoring_ad4': {
+        'start': scoring_start_ad4,
+        'end': scoring_finish_ad4,
+        'ligands': 'single',
+    },
+    'scoring_vinardo': {
+        'start': scoring_start_vinardo,
+        'end': scoring_finish_vinardo,
+        'ligands': 'single',
+    },
+    'scoring_vina': {
+        'start': scoring_start_vina,
+        'end': scoring_finish_vina,
+        'ligands': 'single',
+    },
+    'scoring_PLANTS_chemplp': {
+        'start': scoring_start_PLANTS_chemplp,
+        'end': scoring_finish_PLANTS_chemplp,
+        'ligands': 'single',
+    },
+    'scoring_PLANTS_plp': {
+        'start': scoring_start_PLANTS_plp,
+        'end': scoring_finish_PLANTS_plp,
+        'ligands': 'single',
+    },
+    'scoring_PLANTS_plp95': {
+        'start': scoring_start_PLANTS_plp95,
+        'end': scoring_finish_PLANTS_plp95,
+        'ligands': 'single',
+    },
+    'scoring_dock6': {
+        'start': scoring_start_dock6_contact_score,
+        'end': scoring_finish_dock6_contact_score,
+        'ligands': 'single',
     },
 }
 
