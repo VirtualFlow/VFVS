@@ -429,6 +429,22 @@ The config.txt file should contain:
     receptor_site_file=./selected_spheres.sph
 ```
 
+
+### Running with FRED
+Please install OpenEye: [https://docs.eyesopen.com/toolkits/python/quickstart-python/install.html](https://docs.eyesopen.com/toolkits/python/quickstart-python/install.html).
+Additionally, a valid OpenEye licence is required. Namely, a file named oe_license.txt needs to be placed in `/tools/bin`.
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
+
 ### Scoring with NNscore2.0
 The config.txt file should contain: 
 ```

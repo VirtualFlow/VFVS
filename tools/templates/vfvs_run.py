@@ -2718,10 +2718,10 @@ def docking_finish_galaxydock3(item, ret):
 
 ## Autodock
 
-def docking_start_autodock_gpu(item):
+def docking_start_autodock_gpu(task):
     return docking_start_autodock(task, "gpu")
 
-def docking_start_autodock_cpu(item):
+def docking_start_autodock_cpu(task):
     return docking_start_autodock(task, "cpu")
 
 def docking_start_autodock(item, arch_type):
@@ -2746,6 +2746,34 @@ def docking_finish_autodock(item, ret):
         item['status'] = "success"
     except:
         logging.error("failed parsing")
+
+## FRED
+
+def docking_start_fred(task):
+    if not os.path.exists('./oe_license.txt'): 
+        raise Exception('OpenEye license file (oe_license.txt) not found in tools path')
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = ['python {}/dock_fred.py'.format(task['tools_path']),
+           '--receptor-fn', config_['receptor'],
+           '--ligand-fn', task['ligand_path'],
+           '--center_x', config_['center_x'],
+           '--center_y', config_['center_y'],
+           '--center_z', config_['center_z'],
+           '--radius', max([config_['size_x'], config_['size_y'], config_['size_z']]),
+           '--num-poses', config_['exhaustiveness'],
+           '--out', '{}'.format(task['output_path'])]
+        
+    return cmd
+
+def docking_finish_fred(task, ret):
+    return
 
 
 # Scoring functions: 
