@@ -141,6 +141,13 @@ The config.txt file should contain:
     center_z=10
 ```
 
+### Scoring with GOLD
+A gold executable (of name 'gold_auto') should be placed in directory: /tools/bin <br>
+The config.txt file should contain: 
+```
+    receptor=receptor.mol2
+```
+
 ### Running with CovDock
 A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
 ```
