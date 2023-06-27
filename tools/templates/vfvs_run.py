@@ -55,6 +55,9 @@ import math
 import sys
 import uuid
 
+from .utils import load_config, format_ligand
+
+logger = logging.getLogger(__name__)
 
 # Download
 # -
@@ -3405,6 +3408,96 @@ def scoring_finish_dock6_contact_score(item, ret):
     except: 
         logging.error("failed parsing")
 
+def scoring_start_dock6_continuous_score(task):
+    config = load_config(config_path=task['config_path'])
+    task['output_path'] = format_ligand(ligand_path=task['output_path'], file_format='mol2')
+    
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+
+    with open(run_sh_script, 'w') as f: 
+        f.writelines(['export Chimera={}\n'.format(config['chimera_path'])])
+        f.writelines(['export DOCK6={}\n'.format(config['dock6_path'])])
+        f.writelines(['$Chimera/bin/chimera --nogui {} {}/dockprep.py\n'.format(config['receptor'], task['tools_path'])])
+        f.writelines(['$DOCK6/bin/dock6 -i Continuous_Score.in\n'])
+            
+    with open('./Continuous_Score.in', 'w') as f: 
+        f.writelines(['conformer_search_type                                        rigid\n'])
+        f.writelines(['use_internal_energy                                          yes\n'])
+        f.writelines(['internal_energy_rep_exp                                      12\n'])
+        f.writelines(['internal_energy_cutoff                                       100.0\n'])
+        f.writelines(['ligand_atom_file                                             {}\n'.format(task['output_path'])])
+        f.writelines(['limit_max_ligands                                            no\n'])
+        f.writelines(['skip_molecule                                                no\n'])
+        f.writelines(['read_mol_solvation                                           no\n'])
+        f.writelines(['calculate_rmsd                                               no\n'])
+        f.writelines(['use_database_filter                                          no\n'])
+        f.writelines(['orient_ligand                                                no\n'])
+        f.writelines(['bump_filter                                                  no\n'])
+        f.writelines(['score_molecules                                              yes\n'])
+        f.writelines(['contact_score_primary                                        no\n'])
+        f.writelines(['contact_score_secondary                                      no\n'])
+        f.writelines(['grid_score_primary                                           no\n'])
+        f.writelines(['grid_score_secondary                                         no\n'])
+        f.writelines(['multigrid_score_primary                                      no\n'])
+        f.writelines(['multigrid_score_secondary                                    no\n'])
+        f.writelines(['dock3.5_score_primary                                        no\n'])
+        f.writelines(['dock3.5_score_secondary                                      no\n'])
+        f.writelines(['continuous_score_primary                                     yes\n'])
+        f.writelines(['continuous_score_secondary                                   no\n'])
+        f.writelines(['cont_score_rec_filename                                      rec_charged.mol2\n'])
+        f.writelines(['cont_score_att_exp                                           6\n'])
+        f.writelines(['cont_score_rep_exp                                           12\n'])
+        f.writelines(['cont_score_rep_rad_scale                                     1.0\n'])
+        f.writelines(['cont_score_use_dist_dep_dielectric                           yes\n'])
+        f.writelines(['cont_score_dielectric                                        4.0\n'])
+        f.writelines(['cont_score_vdw_scale                                         yes\n'])
+        f.writelines(['cont_score_turn_off_vdw                                      yes\n'])
+        f.writelines(['cont_score_es_scale                                          1.0\n'])
+        f.writelines(['footprint_similarity_score_secondary                         no\n'])
+        f.writelines(['pharmacophore_score_secondary                                no\n'])
+        f.writelines(['descriptor_score_secondary                                   no\n'])
+        f.writelines(['gbsa_zou_score_secondary                                     no\n'])
+        f.writelines(['gbsa_hawkins_score_secondary                                 no\n'])
+        f.writelines(['SASA_score_secondary                                         no\n'])
+        f.writelines(['amber_score_secondary                                        no\n'])
+        f.writelines(['minimize_ligand                                              yes\n'])
+        f.writelines(['simplex_max_iterations                                       1000\n'])
+        f.writelines(['simplex_tors_premin_iterations                               0\n'])
+        f.writelines(['simplex_max_cycles                                           1\n'])
+        f.writelines(['simplex_score_converge                                       0.1\n'])
+        f.writelines(['simplex_cycle_converge                                       1.0\n'])
+        f.writelines(['simplex_trans_step                                           1.0\n'])
+        f.writelines(['simplex_rot_step                                             0.1\n'])
+        f.writelines(['simplex_tors_step                                            10.0\n'])
+        f.writelines(['simplex_random_seed                                          0\n'])
+        f.writelines(['simplex_restraint_min                                        no\n'])
+        f.writelines(['atom_model                                                   all\n'])
+        f.writelines(['vdw_defn_file                                                {}/parameters/vdw_AMBER_parm99.defn\n'.format(config['dock6_path'])])
+        f.writelines(['flex_defn_file                                               {}/parameters/flex.defn\n'.format(config['dock6_path'])])
+        f.writelines(['flex_drive_file                                              {}/parameters/flex_drive.tbl\n'.format(config['dock6_path'])])
+        f.writelines(['ligand_outfile_prefix                                        ligand_out\n'])
+        f.writelines(['write_orientations                                           no\n'])
+        f.writelines(['num_scored_conformers                                        1\n'])
+        f.writelines(['rank_ligands                                                 no\n'])
+    
+    os.system('chmod 0700 {}'.format(run_sh_script))
+
+    cmd = ['./{}'.format(run_sh_script)]
+            
+    return cmd
+
+def scoring_finish_dock6_continuous_score(task, ret):
+    try:
+        with open('{}/ligand_out_scored.mol2'.format(task['tmp_run_dir']), 'r') as f:
+            lines = f.readlines()
+        
+        score = float([x for x in lines[2].split(' ') if x][-1])
+        task['score'] = score
+        task['status'] = "success"
+    except:
+        logger.error("failed parsing")    
+
+    return
 
 DOCKING_PROGRAMS = {
     'MpSDockZN': {
@@ -3602,6 +3695,11 @@ DOCKING_PROGRAMS = {
         'end': docking_finish_SEED,
         'ligands': "single"
     },
+    'FRED': {
+        'start': docking_start_fred,
+        'end': docking_finish_fred,
+        'ligands': "single",
+    },
     'scoring_nnscore2.0': {
         'start': scoring_start_nnscore2,
         'end': scoring_finish_nnscore2,
@@ -3677,6 +3775,11 @@ DOCKING_PROGRAMS = {
         'end': scoring_finish_dock6_contact_score,
         'ligands': 'single',
     },
+    'scoring_dock6_continuous': {
+        'start': scoring_start_dock6_continuous_score,
+        'end': scoring_finish_dock6_continuous_score,
+        'ligands': 'single',
+    }
 }
 
 

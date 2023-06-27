@@ -505,7 +505,7 @@ A config.txt file is required for running vina. An example of the config file fo
 ```
 
 ### Scoring with DOCK6-Contact Score: 
-A config.txt file is required for running vina. An example of the config file format is: 
+A config.txt file is required for running DOCK6. An example of the config file format is: 
 ```
     chimera_path=/home/chimera
     dock6_path=/home/dock6
@@ -516,4 +516,12 @@ A config.txt file is required for running vina. An example of the config file fo
     size_x=10
     size_y=10
     size_z=10
+```
+
+### Scoring with DOCK6 Continuous Score: 
+A config.txt file is required for running DOCK6. An example of the config file format is: 
+```
+    chimera_path=/home/chimera
+    dock6_path=/home/dock6
+    receptor=receptor.pdbq
 ```
