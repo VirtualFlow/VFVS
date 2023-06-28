@@ -1082,9 +1082,9 @@ def process_docking_completion_batch(batch_item, ret):
     batch_item['status'] = "failed"
 
     if batch_item['program'] not in DOCKING_PROGRAMS:
-        raise RuntimeError(f"No completion function for {item['program']}")
+        raise RuntimeError(f"No completion function for {batch_item['program']}")
     elif 'end' not in DOCKING_PROGRAMS[batch_item['program']]:
-        raise RuntimeError(f"No completion function for {item['program']}")
+        raise RuntimeError(f"No completion function for {batch_item['program']}")
     else:
         DOCKING_PROGRAMS[batch_item['program']]['end'](batch_item, ret)
 
@@ -1109,9 +1109,9 @@ def program_runstring_array_batch(batch_item):
     cmd = []
 
     if batch_item['program'] not in DOCKING_PROGRAMS:
-        raise RuntimeError(f"No start function for {task['program']}")
+        raise RuntimeError(f"No start function for {batch_item['program']}")
     elif 'start' not in DOCKING_PROGRAMS[batch_item['program']]:
-        raise RuntimeError(f"No start function for {task['program']}")
+        raise RuntimeError(f"No start function for {batch_item['program']}")
     else:
         cmd = DOCKING_PROGRAMS[batch_item['program']]['start'](batch_item)
 
@@ -3499,6 +3499,50 @@ def scoring_finish_dock6_continuous_score(task, ret):
 
     return
 
+def scoring_start_mm_gbsa(task):
+    config = load_config(config_path=task['config_path'])
+    task['output_path'] = format_ligand(ligand_path=task['output_path'], file_format='mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    with open(run_sh_script, 'w') as f:
+        # Getting Ligand Parameters: 
+        f.writelines('export Chimera={}\n'.format(config['chimera_path']))
+        f.writelines('charge=`$Chimera/bin/chimera --nogui --silent {} {}/charges.py`\n'.format(task['output_path'], task['tools_path']))
+        f.writelines('antechamber -i {} -fi mol2 -o ligand_bcc.mol2 -fo mol2 -at gaff2 -c gas -rn LIG -nc $charge -pf y\n'.format(task['output_path']))
+        f.writelines('parmchk2 -i ligand_bcc.mol2 -f mol2 -o ligand.frcmod\n')
+
+        # Building Topology Files:
+        f.writelines('tleap -f {}/tleap_r.in\n'.format(task['tools_path']))
+        f.writelines('tleap -f {}/tleap_c.in\n'.format(task['tools_path']))
+        
+        # Run MD: 
+        f.writelines('sander -O -i {}/min.in -p complex.prmtop -c complex.inpcrd -r min.rst -ref complex.inpcrd -o minim.out\n'.format(task['tools_path']))
+        
+        # Running MMPBSA.py
+        f.writelines('MMPBSA.py -O -i {}/gbsa.in -cp complex.prmtop -rp receptor.prmtop -lp ligand.prmtop -y  min.rst\n'.format(task['tools_path']))
+
+    os.system(f'chmod 0700 {run_sh_script}')
+
+    cmd = [f'./{run_sh_script}']
+
+    return cmd
+
+def scoring_finish_mm_gbsa(task, ret):
+    try: 
+        with open('{}/FINAL_RESULTS_MMPBSA.dat'.format(task['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+
+        lines = [x for x in lines if 'DELTA TOTAL' in x][0]
+        score = float([x for x in lines.split(' ') if x][2])
+        
+        task['score'] = score
+        task['status'] = "success"
+    except: 
+        logger.error("failed parsing")
+    
+    return
+
+
 DOCKING_PROGRAMS = {
     'MpSDockZN': {
         'start': docking_start_MpSDockZN,
@@ -3779,7 +3823,12 @@ DOCKING_PROGRAMS = {
         'start': scoring_start_dock6_continuous_score,
         'end': scoring_finish_dock6_continuous_score,
         'ligands': 'single',
-    }
+    },
+    'scoring_MM_GBSA': {
+        'start': scoring_start_mm_gbsa,
+        'end': scoring_finish_mm_gbsa,
+        'ligands': 'single',
+    },
 }
 
 

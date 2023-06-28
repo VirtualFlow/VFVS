@@ -525,3 +525,6 @@ A config.txt file is required for running DOCK6. An example of the config file f
     dock6_path=/home/dock6
     receptor=receptor.pdbq
 ```
+
+### Scoring with MM-GBSA
+Please install AmberTools: [https://ambermd.org/GetAmber.php#ambertools](https://ambermd.org/GetAmber.php#ambertools). Additionally, please note: the variable `chimera_path` should be updated to the location of the Chimera on your system. Chimera can be downloaded: [https://www.cgl.ucsf.edu/chimera/download.html](https://www.cgl.ucsf.edu/chimera/download.html).
