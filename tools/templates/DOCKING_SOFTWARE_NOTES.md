@@ -528,7 +528,22 @@ A config.txt file is required for running DOCK6. An example of the config file f
 
 ### Scoring with MM-GBSA
 Please install AmberTools: [https://ambermd.org/GetAmber.php#ambertools](https://ambermd.org/GetAmber.php#ambertools). Additionally, please note: the variable `chimera_path` should be updated to the location of the Chimera on your system. Chimera can be downloaded: [https://www.cgl.ucsf.edu/chimera/download.html](https://www.cgl.ucsf.edu/chimera/download.html).
-A config.txt file is required for running DOCK6. An example of the config file format is: 
+A config.txt file is required for running MM-GBSA. An example of the config file format is: 
 ```
     chimera_path=/home/chimera
 ```
+
+### Scoring with Hawkins GBSA
+A config.txt file is required for running Hawkins GBSA. An example of the config file format is: 
+```
+    chimera_path=/home/chimera
+    dock6_path=/home/dock6
+    receptor=receptor.pdb
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
+The variable `chimera_path` should be updated to the location of the Chimera on your system. Chimera can be downloaded: [https://www.cgl.ucsf.edu/chimera/download.html](https://www.cgl.ucsf.edu/chimera/download.html).
