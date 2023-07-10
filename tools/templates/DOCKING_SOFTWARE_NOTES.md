@@ -445,6 +445,8 @@ The config.txt file should contain:
     exhaustiveness=10
 ```
 
+The docking result will be scored using Vina.
+
 ### Scoring with NNscore2.0
 The config.txt file should contain: 
 ```

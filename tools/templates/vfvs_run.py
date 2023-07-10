@@ -2776,6 +2776,13 @@ def docking_start_fred(task):
     return cmd
 
 def docking_finish_fred(task, ret):
+    cmd_scoring = scoring_start_vina(task)
+    try: 
+        subprocess.run(cmd_scoring, capture_output=True,check=True)
+        scoring_finish_vina(item=task, ret=ret)
+    except:
+        logging.error("failed scoring")
+
     return
 
 
