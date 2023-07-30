@@ -871,7 +871,7 @@ def generate_summary_file(ctx, summary_data, upload_queue, tmp_dir):
                 summmary_fp.write("\n")
 
                 for summary_key, summary_value in summary_data[scenario_key].items():
-                    ordered_summary_list = list(map(lambda key: str(summary_value[key]), csv_ordering))
+                    ordered_summary_list = list(map(lambda key: str(summary_value.get(key, "")), csv_ordering))
                     summmary_fp.write(",".join(ordered_summary_list))
                     summmary_fp.write("\n")
 
