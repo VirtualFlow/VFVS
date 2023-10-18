@@ -27,7 +27,6 @@ import argparse
 import json
 import os
 
-
 def parse_config(filename):
   with open(filename, "r") as read_file:
       config = json.load(read_file)
@@ -92,10 +91,14 @@ def main():
     parser.add_argument('--scenario-name', action='store', type=str, required=True)
 
 
+  parser.add_argument('--download', action='store_true', required=False)
+
+
 
   parser.add_argument('--top', action='store', type=int, required=False)
-  parser.add_argument('--download', action='store_true', required=False)
   args = parser.parse_args()
+
+
 
   botoconfig = Config(
   	region_name = ctx['config']['aws_region'],
@@ -228,7 +231,7 @@ def main():
   else:
     top_string = ""
 
-  select_statement = f"SELECT * from {table_name} ORDER BY score_min ASC {top_string};"
+  select_statement = f"SELECT *,\"$path\" from {table_name} ORDER BY score_min ASC {top_string};"
 
   select_response = client.start_query_execution(
       QueryString=select_statement,
@@ -247,16 +250,19 @@ def main():
   print(f"STATUS: {response['QueryExecution']['Status']['State']}")
   print(f"Output location: {response['QueryExecution']['ResultConfiguration']['OutputLocation']}")
 
-  if 'download' in args_dict and args_dict['download'] == 1:
+
+  if args_dict['download'] == True:
     if 'top' in args_dict and args_dict['top'] != None:
       os.system(f"aws s3 cp {response['QueryExecution']['ResultConfiguration']['OutputLocation']}" + " " + "../output-files/" + scenario + "." + "top-" +  str(args.top) + ".csv")
     else:
       os.system(f"aws s3 cp {response['QueryExecution']['ResultConfiguration']['OutputLocation']}" + " " + "../output-files/" + scenario + ".csv")
 
 
+
+
+
 if __name__ == '__main__':
     main()
-
 
 
 
