@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #Checking the input arguments
-usage="Usage: vfvs_atg-prescreen_postprocessing.sh <size 1> <size 2> ...
+usage="Usage: vfvs_postprocess_atg-prescreen.sh <size 1> <size 2> ...
 
 Description: Postprocessing the ATG Prescreen, and preparing the todo files for the ATG Primary Screens. The script can handle multiple docking scenarios in the ATG Prescreen.
 
