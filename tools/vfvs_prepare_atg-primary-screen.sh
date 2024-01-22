@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #Checking the input arguments
-usage="Usage: vfvs_prepare_atg-primary-screen.sh <jobname prefix> <size 1> <size 2> ...
+usage="Usage: vfvs_prepare_atg-primaryscreen-screen.sh <jobname prefix> <size 1> <size 2> ...
 
 Description: Preparing the folders for the ATG Primary Screens. For each docking scenario, and each specified screening size, one ATG Primary Screen folder will be created. The ATG Prescreen has to be postprocessed (with the command vfvs_postprocess_atg-prescreen.sh) before running this command with the same screening sizes. 
 
@@ -24,23 +24,23 @@ fi
 
 # Prepare next stage foldersparent_dir=$(basename $(dirname $(pwd)))
 prefix=$1
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do mkdir ../../stage1-atg-${size}-${ds} ; cp -vr ../.git* ../input-files/ ../tools/ ../../stage1-atg-${size}-${ds} ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s/job_name=.*/job_name=${prefix}-stage1-atg-${size}-${ds}/g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|athena_s3_location=.*|athena_s3_location=s3://sj-bskldt-useast2/VF2/VFVS/jobs/${prefix}-stage1-atg-${size}-${ds}/athena|g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|data_collection_identifier=.*|data_collection_identifier=Enamine_REAL_Space_2022q12|g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|sensor_screen_mode=.*|sensor_screeen_mode=0|g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_inputfolders=.*|docking_scenario_inputfolders=${ds}|g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_names=.*|docking_scenario_names=${ds}|g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_batchsizes=.*|docking_scenario_batchsizes=1|g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_replicas=.*|docking_scenario_replicas=1|g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_programs=.*|docking_scenario_programs=qvina02|g" ../../stage1-atg-${size}-${ds}/tools/templates/all.ctrl ; done; done
-for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do cp -v ../output-files/${ds}.all.todo.${size} ../../stage1-atg-${size}-${ds}/tools/templates/todo.all ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do mkdir ../../atg-primaryscreen_${size}_${ds} ; cp -vr ../.git* ../input-files/ ../tools/ ../../atg-primaryscreen_${size}_${ds} ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s/job_name=.*/job_name=${prefix}-atg-primaryscreen_${size}_${ds}/g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|athena_s3_location=.*|athena_s3_location=s3://sj-bskldt-useast2/VF2/VFVS/jobs/${prefix}-atg-primaryscreenq_${size}_${ds}/athena|g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|data_collection_identifier=.*|data_collection_identifier=Enamine_REAL_Space_2022q12|g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|sensor_screen_mode=.*|sensor_screeen_mode=0|g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_inputfolders=.*|docking_scenario_inputfolders=${ds}|g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_names=.*|docking_scenario_names=${ds}|g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_batchsizes=.*|docking_scenario_batchsizes=1|g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_replicas=.*|docking_scenario_replicas=1|g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do sed -i "s|docking_scenario_programs=.*|docking_scenario_programs=qvina02|g" ../../atg-primaryscreen_${size}_${ds}/tools/templates/all.ctrl ; done; done
+for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do cp -v ../output-files/${ds}.all.todo.${size} ../../atg-primaryscreen_${size}_${ds}/tools/templates/todo.all ; done; done
 
 
 
-#for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do ( cd ../../stage1-atg-${size}-${ds}/tools; ./vfvs_prepare_folders.py ) ;  done; done
-#for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do echo "( cd ../../stage1-atg-${size}-${ds}/tools; ./vfvs_prepare_workunits.py )" ; done; done | parallel -j 10 --ungroup
-#for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do ( cd ../../stage1-atg-${size}-${ds}/tools; ./vfvs_build_docker.sh ) ; done; done
-#for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do ( cd ../../stage1-atg-${size}-${ds}/tools; ./vfvs_submit_jobs.py 1 500 ) ; done; done
+#for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do ( cd ../../atg-primaryscreen_${size}_${ds}/tools; ./vfvs_prepare_folders.py ) ;  done; done
+#for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do echo "( cd ../../atg-primaryscreen_${size}_${ds}/tools; ./vfvs_prepare_workunits.py )" ; done; done | parallel -j 10 --ungroup
+#for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do ( cd ../../atg-primaryscreen_${size}_${ds}/tools; ./vfvs_build_docker.sh ) ; done; done
+#for ds in $(cat ../workflow/config.json  | jq -r ".docking_scenario_names" | tr "," " " | tr -d '"\n[]' | tr -s " "); do for size in ${@:2}; do ( cd ../../atg-primaryscreen_${size}_${ds}/tools; ./vfvs_submit_jobs.py 1 500 ) ; done; done
 ~
 

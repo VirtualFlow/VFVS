@@ -43,4 +43,4 @@ for size in $@; do for file in *sparse-metrics; do echo python ~/scripts/vfvs_at
 
 wait
 
-
+cd ../tools
