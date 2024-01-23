@@ -121,6 +121,7 @@ def submit_slurm(config, client, current_workunit, jobline):
         "array_start": "0",
         "array_end": (subjobs_count - 1),
         "slurm_cpus": config['slurm_cpus'],
+        "slurm_account": config['slurm_account'],
         "slurm_partition": config['slurm_partition'],
         "workunit_id": jobline_str,
         "job_storage_mode": config['job_storage_mode'],
@@ -148,7 +149,7 @@ def submit_slurm(config, client, current_workunit, jobline):
 
     try:
         ret = subprocess.run(cmd, capture_output=True,
-                         text=True, timeout=5)
+                         text=True, timeout=int(config['slurm_job_submission_timeout']))
     except subprocess.TimeoutExpired as err:
         raise Exception("timeout on submission to sbatch")
 
