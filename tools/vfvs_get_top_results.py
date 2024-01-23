@@ -118,11 +118,12 @@ def main():
 
   table_name = f"{ctx['config']['job_name']}__{scenario}".replace("-","_")
 
-  athena_location = ctx['config']['athena_s3_location']
   database_name = f"{ctx['config']['aws_batch_prefix']}_vfvs"
   job_location = f"{ctx['config']['object_store_job_prefix_full']}/{scenario}/parquet"
   object_store_job_bucket = ctx['config']['object_store_job_bucket']
   scenario_info = ctx['config']['docking_scenarios_internal'][scenario]
+  athena_location = 's3://{object_store_job_bucket}/{job_location}/athena'
+
 
 
   client = boto3.client('athena', config=botoconfig)

@@ -55,9 +55,6 @@ def parse_config(filename):
         ":")
     config['docking_scenario_replicas'] = config['docking_scenario_replicas'].split(
         ":")
-    config['docking_scenario_inputfolders'] = config['docking_scenario_inputfolders'].split(
-        ":")
-
     config['docking_scenario_batchsizes'] = config['docking_scenario_batchsizes'].split(
         ":")
 
@@ -243,9 +240,9 @@ def check_parameters(config):
             print("* 'docking_scenario_basefolder' does not appear to be a directory")
             error = 1
         else:
-            for scenario_dir in config['docking_scenario_inputfolders']:
+            for scenario_dir in config['docking_scenario_names']:
                 if(not os.path.isdir(os.path.join(config['docking_scenario_basefolder'],scenario_dir))):
-                    print(f"* docking_scenario_inputfolders '{scenario_dir}' does not appear to be a directory in 'docking_scenario_basefolder'")
+                    print(f"* docking_scenario_names '{scenario_dir}' does not appear to be a directory in 'docking_scenario_basefolder'")
                     error = 1
 
 

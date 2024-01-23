@@ -974,7 +974,7 @@ def process_config(ctx):
         ctx['main_config']['docking_scenarios'][scenario] = {
             'key': scenario,
             'config': os.path.join(ctx['temp_dir'], "vf_input", "input-files",
-                                   ctx['main_config']['docking_scenario_inputfolders'][index],
+                                   ctx['main_config']['docking_scenario_names'][index],
                                    "config.txt"
                                    ),
             'program': program,

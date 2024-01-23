@@ -1,6 +1,6 @@
 ****** Job Resource Configuration 
 
-job_name=fsp1-vs1-stage0-atg
+job_name=test
 # alphabetic characters (i.e. letters from a-z or A-Z)
 # Used to describe distinct runs (using the same name will
 # overwrite data if using S3!)
@@ -141,7 +141,7 @@ job_addressing_mode=metatranche
 
 ****** Object Store Settings (S3)
 
-object_store_job_bucket=sj-bskldt-useast2
+object_store_job_bucket=
 # Bucket name for the job data (output and job files)
 
 object_store_job_prefix=VF2/VFVS/jobs
@@ -252,15 +252,18 @@ tempdir_default=/dev/shm
 
 ****** Virtual Screening Options
 
-docking_scenario_names=fsp1_s1_ds1:fsp1_s1_ds2:fsp1_s1_ds3
+docking_scenario_names=
 # Names for the docking scenarios, separated by colons
 # Each docking scenario has one value. Multiple docking scenarios/names have
 #    to be separated by colons ":" and without spaces
 #
-# Example: docking_scenario_names=receptor1_vina_rigid:receptor1_smina_flexible
-# The docking scenario names are used for the folder names in which the output files are stored
+# Example: docking_scenario_names=
+# The docking scenario names are used for the folder names in which the output files are stored.
+# For each docking scenario name there has to be a folder inside the 'docking_scenario_basefolder'.
+# In each of these folders must be the file config.txt which is used by the docking program to specify its options
+# If other input files are required by the docking type, usually specified in the config.txt file, they have to be in the same folder.
 
-docking_scenario_programs=qvina02:qvina02:qvina02
+docking_scenario_programs=
 # For each docking scenario name, a docking program has to be specified
 # Possible values: qvina02, qvina_w, vina, smina_rigid, smina_flexible, gwovina, adfr, AutodockVina_1.2, AutodockZN
 #                  gnina, rDock, M-Dock, MCDock, LigandFit, ledock, gold, iGemDock, idock, GalaxyDock3, autodock_gpu
@@ -273,7 +276,7 @@ docking_scenario_programs=qvina02:qvina02:qvina02
 # smina_rigid has to be used for rigid docking with smina, while smine_flexible for flexible receptor docking
 # scoring function can also be combined using the same strategy e.g. docking_scenario_programs=vina:nnscore2.0
 
-docking_scenario_replicas=1:1:1
+docking_scenario_replicas=1
 # Series of integers separated by colons ":"
 # The number of values has to equal the number of docking programs
 #     specified in the variable "docking_programs"
@@ -283,7 +286,7 @@ docking_scenario_replicas=1:1:1
 # possible range: 1-99999 per field/docking program
 # The docking scenario is comprised of all the docking types and their replicas
 
-docking_scenario_batchsizes=1:1:1
+docking_scenario_batchsizes=
 # Purpose: How many ligands should be processed in a single invocation
 #     of the docking program (most programs do not allow more than 1)
 # Series of integers separated by colons ":"
@@ -300,13 +303,6 @@ docking_scenario_basefolder=../input-files
 # Relative path to tools directory
 # Base directory for where the docking scenarios are held. Nothing other 
 # than the required files for the docking scenario should be placed here
-
-docking_scenario_inputfolders=fsp1_s1_ds1:fsp1_s1_ds2:fsp1_s1_ds3
-# folder names inside 'docking_scenario_basefolder' 
-# In each input folder must be the file config.txt which is used by the
-#     docking program to specify its options
-# If other input files are required by the docking type, usually
-#     specified in the config.txt file, they have to be in the same folder
 
 sensor_screen_mode=1
 # Run a subset of the ligands included in the library. Only functional
@@ -328,19 +324,4 @@ sensor_screen_count=1
 
 run_atom_check=1
 # Remove ligands when certain atoms B, Si, Sn are found
-
-************************************************
-** Query configuration
-************************************************
-
-****** AWS Athena information
-# AWS Athena will allow ranking of ligand output
-# using the vfvs_get_top_results.py script
-
-athena_s3_location=s3://sj-bskldt-useast2/VF2/VFVS/jobs/fsp1-vs1-stage0-atg/athena
-# Location of S3 data for where AWS Athena queries should
-# be output
-#
-# Must be in format of s3://bucket_name/prefix
-# e.g. s3://sample-bucket/athena/
 
