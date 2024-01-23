@@ -156,7 +156,7 @@ object_store_job_prefix=VF2/VFVS/jobs
 # else
 # 	in object_store_job_prefix/<job_letter>
 
-object_store_data_bucket=vf-library-access-99-ojjcy4cbe5wnw3ecttbng75ma6aeause2b-s3alias
+object_store_data_bucket=
 # Bucket name for the input collection data (often the same as the job one)
 
 object_store_data_collection_prefix=Enamine_REAL_Space_2022q12
