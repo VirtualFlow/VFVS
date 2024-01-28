@@ -1,0 +1,10 @@
+source leaprc.protein.ff14SB
+source leaprc.gaff2
+set default PBradii mbondi2
+PROT=loadpdb receptor.pdb
+LIG=loadmol2 ligand_bcc.mol2
+loadamberparams ligand.frcmod
+complex = combine {PROT LIG}
+saveamberparm complex complex.prmtop complex.inpcrd
+saveamberparm LIG ligand.prmtop ligand.inpcrd
+quit

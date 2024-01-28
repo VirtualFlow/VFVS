@@ -141,6 +141,13 @@ The config.txt file should contain:
     center_z=10
 ```
 
+### Scoring with GOLD
+A gold executable (of name 'gold_auto') should be placed in directory: /tools/bin <br>
+The config.txt file should contain: 
+```
+    receptor=receptor.mol2
+```
+
 ### Running with CovDock
 A valid Schrödinger license is required to run CovDock.The config.txt file should contain: 
 ```
@@ -422,6 +429,24 @@ The config.txt file should contain:
     receptor_site_file=./selected_spheres.sph
 ```
 
+
+### Running with FRED
+Please install OpenEye: [https://docs.eyesopen.com/toolkits/python/quickstart-python/install.html](https://docs.eyesopen.com/toolkits/python/quickstart-python/install.html).
+Additionally, a valid OpenEye licence is required. Namely, a file named oe_license.txt needs to be placed in `/tools/bin`.
+The config.txt file should contain: 
+```
+    receptor=./receptor.pdb # Location of receptor file
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+    exhaustiveness=10
+```
+
+The docking result will be scored using Vina.
+
 ### Scoring with NNscore2.0
 The config.txt file should contain: 
 ```
@@ -482,7 +507,7 @@ A config.txt file is required for running vina. An example of the config file fo
 ```
 
 ### Scoring with DOCK6-Contact Score: 
-A config.txt file is required for running vina. An example of the config file format is: 
+A config.txt file is required for running DOCK6. An example of the config file format is: 
 ```
     chimera_path=/home/chimera
     dock6_path=/home/dock6
@@ -494,3 +519,33 @@ A config.txt file is required for running vina. An example of the config file fo
     size_y=10
     size_z=10
 ```
+
+### Scoring with DOCK6 Continuous Score: 
+A config.txt file is required for running DOCK6. An example of the config file format is: 
+```
+    chimera_path=/home/chimera
+    dock6_path=/home/dock6
+    receptor=receptor.pdbq
+```
+
+### Scoring with MM-GBSA
+Please install AmberTools: [https://ambermd.org/GetAmber.php#ambertools](https://ambermd.org/GetAmber.php#ambertools). Additionally, please note: the variable `chimera_path` should be updated to the location of the Chimera on your system. Chimera can be downloaded: [https://www.cgl.ucsf.edu/chimera/download.html](https://www.cgl.ucsf.edu/chimera/download.html).
+A config.txt file is required for running MM-GBSA. An example of the config file format is: 
+```
+    chimera_path=/home/chimera
+```
+
+### Scoring with Hawkins GBSA
+A config.txt file is required for running Hawkins GBSA. An example of the config file format is: 
+```
+    chimera_path=/home/chimera
+    dock6_path=/home/dock6
+    receptor=receptor.pdb
+    center_x=10
+    center_y=10
+    center_z=10
+    size_x=10
+    size_y=10
+    size_z=10
+```
+The variable `chimera_path` should be updated to the location of the Chimera on your system. Chimera can be downloaded: [https://www.cgl.ucsf.edu/chimera/download.html](https://www.cgl.ucsf.edu/chimera/download.html).

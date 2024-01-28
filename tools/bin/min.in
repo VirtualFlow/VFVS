@@ -1,0 +1,13 @@
+Initial minimisation of rec-lig complex
+&cntrl
+imin=1, 
+maxcyc=2500, ncyc=100,
+cut=16, ntb=0, igb=0,
+ntpr=500,
+ntwx=500,
+ntwr=500
+drms=0.01
+ibelly=1,
+bellymask=':LIG <@10'
+&end
+/
