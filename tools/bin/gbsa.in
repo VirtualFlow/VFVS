@@ -1,0 +1,7 @@
+mmgbsa  analysis
+&general
+verbose=2, keep_files=0, netcdf=1,
+/
+&gb
+/
+

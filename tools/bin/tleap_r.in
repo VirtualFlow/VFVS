@@ -1,0 +1,6 @@
+source leaprc.protein.ff14SB
+set default PBradii  mbondi2
+PROT=loadpdb receptor.pdb
+saveamberparm PROT receptor.prmtop receptor.inpcrd
+quit
+/

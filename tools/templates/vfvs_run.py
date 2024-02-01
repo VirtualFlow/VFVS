@@ -55,6 +55,9 @@ import math
 import sys
 import uuid
 
+from .utils import load_config, format_ligand
+
+logger = logging.getLogger(__name__)
 
 # Download
 # -
@@ -1079,9 +1082,9 @@ def process_docking_completion_batch(batch_item, ret):
     batch_item['status'] = "failed"
 
     if batch_item['program'] not in DOCKING_PROGRAMS:
-        raise RuntimeError(f"No completion function for {item['program']}")
+        raise RuntimeError(f"No completion function for {batch_item['program']}")
     elif 'end' not in DOCKING_PROGRAMS[batch_item['program']]:
-        raise RuntimeError(f"No completion function for {item['program']}")
+        raise RuntimeError(f"No completion function for {batch_item['program']}")
     else:
         DOCKING_PROGRAMS[batch_item['program']]['end'](batch_item, ret)
 
@@ -1106,9 +1109,9 @@ def program_runstring_array_batch(batch_item):
     cmd = []
 
     if batch_item['program'] not in DOCKING_PROGRAMS:
-        raise RuntimeError(f"No start function for {task['program']}")
+        raise RuntimeError(f"No start function for {batch_item['program']}")
     elif 'start' not in DOCKING_PROGRAMS[batch_item['program']]:
-        raise RuntimeError(f"No start function for {task['program']}")
+        raise RuntimeError(f"No start function for {batch_item['program']}")
     else:
         cmd = DOCKING_PROGRAMS[batch_item['program']]['start'](batch_item)
 
@@ -2718,10 +2721,10 @@ def docking_finish_galaxydock3(item, ret):
 
 ## Autodock
 
-def docking_start_autodock_gpu(item):
+def docking_start_autodock_gpu(task):
     return docking_start_autodock(task, "gpu")
 
-def docking_start_autodock_cpu(item):
+def docking_start_autodock_cpu(task):
     return docking_start_autodock(task, "cpu")
 
 def docking_start_autodock(item, arch_type):
@@ -2746,6 +2749,41 @@ def docking_finish_autodock(item, ret):
         item['status'] = "success"
     except:
         logging.error("failed parsing")
+
+## FRED
+
+def docking_start_fred(task):
+    if not os.path.exists('./oe_license.txt'): 
+        raise Exception('OpenEye license file (oe_license.txt) not found in tools path')
+
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+
+    cmd = ['python {}/dock_fred.py'.format(task['tools_path']),
+           '--receptor-fn', config_['receptor'],
+           '--ligand-fn', task['ligand_path'],
+           '--center_x', config_['center_x'],
+           '--center_y', config_['center_y'],
+           '--center_z', config_['center_z'],
+           '--radius', max([config_['size_x'], config_['size_y'], config_['size_z']]),
+           '--num-poses', config_['exhaustiveness'],
+           '--out', '{}'.format(task['output_path'])]
+        
+    return cmd
+
+def docking_finish_fred(task, ret):
+    cmd_scoring = scoring_start_vina(task)
+    try: 
+        subprocess.run(cmd_scoring, capture_output=True,check=True)
+        scoring_finish_vina(item=task, ret=ret)
+    except:
+        logging.error("failed scoring")
+
+    return
 
 
 # Scoring functions: 
@@ -2787,10 +2825,10 @@ def scoring_start_nnscore2(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    vina_loc = '{}/vina'.format(item['tools_path'])
+    vina_loc = '{}/vina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('export VINA_EXEC={}; python {}/NNScore2.py -receptor {} -ligand {} -vina_executable $VINA_EXEC > output.txt'.format(vina_loc, item['tools_path'], config_['receptor'], task['output_path']))
+        f.writelines('export VINA_EXEC={}; python {}/NNScore2.py -receptor {} -ligand {} -vina_executable $VINA_EXEC > output.txt'.format(vina_loc, task['tools_path'], config_['receptor'], task['output_path']))
     
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2809,6 +2847,80 @@ def scoring_finish_nnscore2(item, ret):
     except: 
         logging.error("failed parsing")
         
+## GOLD scoring
+def _scoring_start_gold(task, scoring_function: str):
+    # Load in config file: 
+    with open(task['config_path']) as fd:
+        config_ = dict(read_config_line(line) for line in fd)
+    for item in config_:
+        if '#' in config_[item]:
+            config_[item] = config_[item].split('#')[0]
+            
+    # Convert ligand format if needed:
+    lig_format =  task['output_path'].split('.')[-1]
+    if lig_format not in ['mol2', 'mol', 'mdl', 'sdf']: 
+        convert_ligand_format(task['output_path'], 'mol2')
+        task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2') 
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    input_conf = os.path.join(task['tmp_run_dir'], 'input.conf')
+    gold_loc = '{}/gold_auto'.format(task['tools_path'])
+
+    output_dir = 'gold_output'
+    os.mkdir(os.path.join(task['tmp_run_dir'], output_dir))
+    with open(input_conf, mode='w') as f:
+        f.writelines([
+            'protein_datafile = {}\n'.format(config_['receptor']),
+            'ligand_data_file = {} 10\n'.format(task['output_path']),
+            'param_file = DEFAULT\n',
+            f'directory = {output_dir}\n',
+            f'gold_fitfunc_path {scoring_function}\n',
+            'run_flag = RESCORE\n',
+        ])
+    
+    with open(run_sh_script, 'w') as f:
+        f.writelines(f'{gold_loc} {input_conf}')
+
+    os.system('chmod 0700 {}'.format(run_sh_script))
+    cmd = ['./{}'.format(run_sh_script)] 
+
+    return cmd 
+
+def _scoring_finish_gold(item, ret):
+    try:
+        with open(f"{item['tmp_run_dir']}/gold_output/rescore.log") as rescore_log:
+            for line in rescore_log:
+                pass
+        last_line = [i for i in line.split(sep=' ') if i]
+        item['score'] = last_line[4]
+        item['status'] = "success"
+    except:
+        logging.error("failed parsing")
+
+def scoring_start_gold_asp(task):
+    return _scoring_start_gold(task=task, scoring_function='asp')
+
+def scoring_finish_gold_asp(item, ret):
+    return _scoring_finish_gold(item=item, ret=ret)
+
+def scoring_start_gold_chemscore(task):
+    return _scoring_start_gold(task=task, scoring_function='chemscore')
+
+def scoring_finish_gold_chemscore(item, ret):
+    return _scoring_finish_gold(item=item, ret=ret)
+
+def scoring_start_gold_goldscore(task):
+    return _scoring_start_gold(task=task, scoring_function='goldscore')
+
+def scoring_finish_gold_goldscore(item, ret):
+    return _scoring_finish_gold(item=item, ret=ret)
+
+def scoring_start_gold_plp(task):
+    return _scoring_start_gold(task=task, scoring_function='plp')
+
+def scoring_finish_gold_plp(item, ret):
+    return _scoring_finish_gold(item=item, ret=ret)
+
 ## rf-score-vs
 
 def scoring_start_rf(task):
@@ -2828,11 +2940,11 @@ def scoring_start_rf(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    rf_score_vs_loc = '{}/rf-score-vs'.format(item['tools_path'])
+    rf_score_vs_loc = '{}/rf-score-vs'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} {} -O {}/ligands_rescored.pdbqt'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
-        f.writelines('{} --receptor {} {} -ocsv > {}/temp.csv'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} {} -O {}/ligands_rescored.pdbqt'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
+        f.writelines('{} --receptor {} {} -ocsv > {}/temp.csv'.format(rf_score_vs_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2870,10 +2982,10 @@ def scoring_start_smina(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/smina'.format(item['tools_path'])
+    smina_loc = '{}/smina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2909,10 +3021,10 @@ def scoring_start_gnina(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/gnina'.format(item['tools_path'])
+    smina_loc = '{}/gnina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2947,10 +3059,10 @@ def scoring_start_ad4(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/smina'.format(item['tools_path'])
+    smina_loc = '{}/smina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only --scoring ad4_scoring > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only --scoring ad4_scoring > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -2969,7 +3081,7 @@ def scoring_finish_ad4(item, ret):
         logging.error("failed parsing")
 
 
-# vinandro scoring
+# vinardo scoring
 def scoring_start_vinardo(task):
 
     # Load in config file: 
@@ -2986,10 +3098,10 @@ def scoring_start_vinardo(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/smina'.format(item['tools_path'])
+    smina_loc = '{}/smina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only --scoring vinardo > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only --scoring vinardo > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -3024,10 +3136,10 @@ def scoring_start_vina(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'pdbqt')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    smina_loc = '{}/smina'.format(item['tools_path'])
+    smina_loc = '{}/smina'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --receptor {} -l {} --score_only --scoring vina > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], item['tmp_run_dir']))
+        f.writelines('{} --receptor {} -l {} --score_only --scoring vina > {}/output.txt'.format(smina_loc, config_['receptor'], task['output_path'], task['tmp_run_dir']))
 
     os.system('chmod 0700 {}'.format(run_sh_script))
     cmd = ['./{}'.format(run_sh_script)] 
@@ -3061,10 +3173,10 @@ def scoring_start_PLANTS_chemplp(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+    plants_loc = '{}/PLANTS'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, task['tmp_run_dir'], task['tmp_run_dir']))
         
     with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
         f.writelines('scoring_function         chemplp\n')
@@ -3103,10 +3215,10 @@ def scoring_start_PLANTS_plp(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+    plants_loc = '{}/PLANTS'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, task['tmp_run_dir'], task['tmp_run_dir']))
         
     with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
         f.writelines('scoring_function         plp\n')
@@ -3145,10 +3257,10 @@ def scoring_start_PLANTS_plp95(task):
         task['output_path'] = task['output_path'].replace(task['output_path'], 'mol2')
 
     run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
-    plants_loc = '{}/PLANTS'.format(item['tools_path'])
+    plants_loc = '{}/PLANTS'.format(task['tools_path'])
 
     with open(run_sh_script, 'w') as f:        
-        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, item['tmp_run_dir'], item['tmp_run_dir']))
+        f.writelines('{} --mode rescore --config_file {}/plants_config > {}/output.txt'.format(plants_loc, task['tmp_run_dir'], task['tmp_run_dir']))
         
     with open(os.path.join(task['tmp_run_dir'], "plants_config"), 'w') as f:
         f.writelines('scoring_function         plp95\n')
@@ -3303,8 +3415,304 @@ def scoring_finish_dock6_contact_score(item, ret):
     except: 
         logging.error("failed parsing")
 
+def scoring_start_dock6_continuous_score(task):
+    config = load_config(config_path=task['config_path'])
+    task['output_path'] = format_ligand(ligand_path=task['output_path'], file_format='mol2')
+    
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    with open(run_sh_script, 'w') as f: 
+        f.writelines(['export Chimera={}\n'.format(config['chimera_path'])])
+        f.writelines(['export DOCK6={}\n'.format(config['dock6_path'])])
+        f.writelines(['$Chimera/bin/chimera --nogui {} {}/dockprep.py\n'.format(config['receptor'], task['tools_path'])])
+        f.writelines(['$DOCK6/bin/dock6 -i Continuous_Score.in\n'])
+
+    continuous_score_path = os.path.join(task['tmp_run_dir'], 'Continuous_Score.in')    
+    with open(continuous_score_path, 'w') as f: 
+        f.writelines(['conformer_search_type                                        rigid\n'])
+        f.writelines(['use_internal_energy                                          yes\n'])
+        f.writelines(['internal_energy_rep_exp                                      12\n'])
+        f.writelines(['internal_energy_cutoff                                       100.0\n'])
+        f.writelines(['ligand_atom_file                                             {}\n'.format(task['output_path'])])
+        f.writelines(['limit_max_ligands                                            no\n'])
+        f.writelines(['skip_molecule                                                no\n'])
+        f.writelines(['read_mol_solvation                                           no\n'])
+        f.writelines(['calculate_rmsd                                               no\n'])
+        f.writelines(['use_database_filter                                          no\n'])
+        f.writelines(['orient_ligand                                                no\n'])
+        f.writelines(['bump_filter                                                  no\n'])
+        f.writelines(['score_molecules                                              yes\n'])
+        f.writelines(['contact_score_primary                                        no\n'])
+        f.writelines(['contact_score_secondary                                      no\n'])
+        f.writelines(['grid_score_primary                                           no\n'])
+        f.writelines(['grid_score_secondary                                         no\n'])
+        f.writelines(['multigrid_score_primary                                      no\n'])
+        f.writelines(['multigrid_score_secondary                                    no\n'])
+        f.writelines(['dock3.5_score_primary                                        no\n'])
+        f.writelines(['dock3.5_score_secondary                                      no\n'])
+        f.writelines(['continuous_score_primary                                     yes\n'])
+        f.writelines(['continuous_score_secondary                                   no\n'])
+        f.writelines(['cont_score_rec_filename                                      rec_charged.mol2\n'])
+        f.writelines(['cont_score_att_exp                                           6\n'])
+        f.writelines(['cont_score_rep_exp                                           12\n'])
+        f.writelines(['cont_score_rep_rad_scale                                     1.0\n'])
+        f.writelines(['cont_score_use_dist_dep_dielectric                           yes\n'])
+        f.writelines(['cont_score_dielectric                                        4.0\n'])
+        f.writelines(['cont_score_vdw_scale                                         yes\n'])
+        f.writelines(['cont_score_turn_off_vdw                                      yes\n'])
+        f.writelines(['cont_score_es_scale                                          1.0\n'])
+        f.writelines(['footprint_similarity_score_secondary                         no\n'])
+        f.writelines(['pharmacophore_score_secondary                                no\n'])
+        f.writelines(['descriptor_score_secondary                                   no\n'])
+        f.writelines(['gbsa_zou_score_secondary                                     no\n'])
+        f.writelines(['gbsa_hawkins_score_secondary                                 no\n'])
+        f.writelines(['SASA_score_secondary                                         no\n'])
+        f.writelines(['amber_score_secondary                                        no\n'])
+        f.writelines(['minimize_ligand                                              yes\n'])
+        f.writelines(['simplex_max_iterations                                       1000\n'])
+        f.writelines(['simplex_tors_premin_iterations                               0\n'])
+        f.writelines(['simplex_max_cycles                                           1\n'])
+        f.writelines(['simplex_score_converge                                       0.1\n'])
+        f.writelines(['simplex_cycle_converge                                       1.0\n'])
+        f.writelines(['simplex_trans_step                                           1.0\n'])
+        f.writelines(['simplex_rot_step                                             0.1\n'])
+        f.writelines(['simplex_tors_step                                            10.0\n'])
+        f.writelines(['simplex_random_seed                                          0\n'])
+        f.writelines(['simplex_restraint_min                                        no\n'])
+        f.writelines(['atom_model                                                   all\n'])
+        f.writelines(['vdw_defn_file                                                {}/parameters/vdw_AMBER_parm99.defn\n'.format(config['dock6_path'])])
+        f.writelines(['flex_defn_file                                               {}/parameters/flex.defn\n'.format(config['dock6_path'])])
+        f.writelines(['flex_drive_file                                              {}/parameters/flex_drive.tbl\n'.format(config['dock6_path'])])
+        f.writelines(['ligand_outfile_prefix                                        ligand_out\n'])
+        f.writelines(['write_orientations                                           no\n'])
+        f.writelines(['num_scored_conformers                                        1\n'])
+        f.writelines(['rank_ligands                                                 no\n'])
+    
+    os.system('chmod 0700 {}'.format(run_sh_script))
+
+    cmd = ['./{}'.format(run_sh_script)]
+            
+    return cmd
+
+def scoring_finish_dock6_continuous_score(task, ret):
+    try:
+        with open('{}/ligand_out_scored.mol2'.format(task['tmp_run_dir']), 'r') as f:
+            lines = f.readlines()
+        
+        task['score'] = float([x for x in lines[2].split(' ') if x][-1])
+        task['status'] = "success"
+    except:
+        logger.error("failed parsing")    
+
+    return
+
+def scoring_start_mm_gbsa(task):
+    config = load_config(config_path=task['config_path'])
+    task['output_path'] = format_ligand(ligand_path=task['output_path'], file_format='mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    with open(run_sh_script, 'w') as f:
+        # Getting Ligand Parameters: 
+        f.writelines('export Chimera={}\n'.format(config['chimera_path']))
+        f.writelines('charge=`$Chimera/bin/chimera --nogui --silent {} {}/charges.py`\n'.format(task['output_path'], task['tools_path']))
+        f.writelines('antechamber -i {} -fi mol2 -o ligand_bcc.mol2 -fo mol2 -at gaff2 -c gas -rn LIG -nc $charge -pf y\n'.format(task['output_path']))
+        f.writelines('parmchk2 -i ligand_bcc.mol2 -f mol2 -o ligand.frcmod\n')
+
+        # Building Topology Files:
+        f.writelines('tleap -f {}/tleap_r.in\n'.format(task['tools_path']))
+        f.writelines('tleap -f {}/tleap_c.in\n'.format(task['tools_path']))
+        
+        # Run MD: 
+        f.writelines('sander -O -i {}/min.in -p complex.prmtop -c complex.inpcrd -r min.rst -ref complex.inpcrd -o minim.out\n'.format(task['tools_path']))
+        
+        # Running MMPBSA.py
+        f.writelines('MMPBSA.py -O -i {}/gbsa.in -cp complex.prmtop -rp receptor.prmtop -lp ligand.prmtop -y  min.rst\n'.format(task['tools_path']))
+
+    os.system(f'chmod 0700 {run_sh_script}')
+
+    cmd = [f'./{run_sh_script}']
+
+    return cmd
+
+def scoring_finish_mm_gbsa(task, ret):
+    try: 
+        with open('{}/FINAL_RESULTS_MMPBSA.dat'.format(task['tmp_run_dir']), 'r') as f: 
+            lines = f.readlines()
+
+        lines = [x for x in lines if 'DELTA TOTAL' in x][0]
+        
+        task['score'] = float([x for x in lines.split(' ') if x][2])
+        task['status'] = "success"
+    except: 
+        logger.error("failed parsing")
+    
+    return
+
+def scoring_start_hawkins_gbsa(task):
+    config = load_config(config_path=task['config_path'])
+    task['output_path'] = format_ligand(ligand_path=task['output_path'], file_format='mol2')
+
+    run_sh_script = os.path.join(task['tmp_run_dir'], "run.sh")
+    with open(run_sh_script, 'w') as f: 
+        f.writelines(['export Chimera={}\n'.format(config['chimera_path'])])
+        f.writelines(['export DOCK6={}\n'.format(config['dock6_path'])])
+        f.writelines(['$Chimera/bin/chimera --nogui {} dockprep.py\n'.format(config['receptor'])])
+        f.writelines(['$DOCK6/bin/sphgen INSPH\n']) 
+        f.writelines(['$DOCK6/bin/sphere_selector rec.sph {} 12.0 \n'.format(task['output_path'])])
+        f.writelines(['$DOCK6/bin/showbox < box.in\n'])
+        f.writelines(['$DOCK6/bin/grid -i grid.in\n'])
+        f.writelines(['cd nchemgrid_GB\n'])
+        f.writelines(['$DOCK6/bin/nchemgrid_GB\n'])
+        f.writelines(['cd ../nchemgrid_SA\n'])
+        f.writelines(['$DOCK6/bin/nchemgrid_SA\n'])
+        f.writelines(['$DOCK6/bin/dock6 -i Hawkins_GBSA_Score.in\n'])
+
+    os.system(f'chmod 0700 {run_sh_script}')  
+
+    # Create INSPH File: 
+    insph_path = os.path.join(task['tmp_run_dir'], "INSPH")
+    with open(insph_path, 'w') as f: 
+        f.writelines('rec.ms\n')
+        f.writelines('R\n')
+        f.writelines('X\n')
+        f.writelines('0.0\n')
+        f.writelines('4.0\n')
+        f.writelines('1.4\n')
+        f.writelines('rec.sph\n')
+
+    # Create box.in File: 
+    box_path = os.path.join(task['tmp_run_dir'], "box.in")
+    with open(box_path, 'w') as f: 
+        f.writelines('N\n')
+        f.writelines('U\n')
+        f.writelines('{}   {}    {}\n'.format(config['center_x'], config['center_y'], config['center_z']))
+        f.writelines('{} {} {}\n'.format(config['size_x'], config['size_y'], config['size_z']))
+        f.writelines('rec_box.pdb\n')
+
+    grid_path = os.path.join(task['tmp_run_dir'], "grid.in")
+    with open(grid_path, 'w') as f: 
+        f.writelines('compute_grids                  yes\n')
+        f.writelines('grid_spacing                   0.3\n')
+        f.writelines('output_molecule                no\n')
+        f.writelines('contact_score                  no\n')
+        f.writelines('energy_score                   yes\n')
+        f.writelines('energy_cutoff_distance         9999\n')
+        f.writelines('atom_model                     a\n')
+        f.writelines('attractive_exponent            6\n')
+        f.writelines('repulsive_exponent             12\n')
+        f.writelines('distance_dielectric            no\n')
+        f.writelines('dielectric_factor              1\n')
+        f.writelines('bump_filter                    yes\n')
+        f.writelines('bump_overlap                   0.75\n')
+        f.writelines('receptor_file                  {}\n'.format(config['receptor']))
+        f.writelines('box_file                       rec_box.pdb\n')
+        f.writelines('vdw_definition_file            {}/parameters/vdw_AMBER_parm99.defn\n'.format(config['dock6_path']))
+        f.writelines('score_grid_prefix              solvent_grid\n')
+
+    hawkins_gbsa_score_path = os.path.join(task['tmp_run_dir'], "Hawkins_GBSA_Score.in")
+    with open(hawkins_gbsa_score_path, 'w') as f: 
+        f.writelines('conformer_search_type                                        rigid\n')
+        f.writelines('use_internal_energy                                          no\n')
+        f.writelines('ligand_atom_file                                             {}\n'.format(task['output_path']))
+        f.writelines('limit_max_ligands                                            no\n')
+        f.writelines('skip_molecule                                                no\n')
+        f.writelines('read_mol_solvation                                           no\n')
+        f.writelines('calculate_rmsd                                               no\n')
+        f.writelines('use_database_filter                                          no\n')
+        f.writelines('orient_ligand                                                no\n')
+        f.writelines('bump_filter                                                  no\n')
+        f.writelines('score_molecules                                              yes\n')
+        f.writelines('contact_score_primary                                        no\n')
+        f.writelines('contact_score_secondary                                      no\n')
+        f.writelines('grid_score_primary                                           no\n')
+        f.writelines('grid_score_secondary                                         no\n')
+        f.writelines('multigrid_score_primary                                      no\n')
+        f.writelines('multigrid_score_secondary                                    no\n')
+        f.writelines('dock3.5_score_primary                                        no\n')
+        f.writelines('dock3.5_score_secondary                                      no\n')
+        f.writelines('continuous_score_primary                                     no\n')
+        f.writelines('continuous_score_secondary                                   no\n')
+        f.writelines('footprint_similarity_score_primary                           no\n')
+        f.writelines('footprint_similarity_score_secondary                         no\n')
+        f.writelines('pharmacophore_score_primary                                  no\n')
+        f.writelines('pharmacophore_score_secondary                                no\n')
+        f.writelines('descriptor_score_primary                                     no\n')
+        f.writelines('descriptor_score_secondary                                   no\n')
+        f.writelines('gbsa_zou_score_primary                                       no\n')
+        f.writelines('gbsa_zou_score_secondary                                     no\n')
+        f.writelines('gbsa_hawkins_score_primary                                   yes\n')
+        f.writelines('gbsa_hawkins_score_secondary                                 no\n')
+        f.writelines('gbsa_hawkins_score_rec_filename                              rec_charged.mol2')
+        f.writelines('gbsa_hawkins_score_solvent_dielectric                        78.5\n')
+        f.writelines('gbsa_hawkins_use_salt_screen                                 no\n')
+        f.writelines('gbsa_hawkins_score_gb_offset                                 0.09\n')
+        f.writelines('gbsa_hawkins_score_cont_vdw_and_es                           no\n')
+        f.writelines('gbsa_hawkins_score_grid_prefix                               solvent_grid\n')
+        f.writelines('SASA_score_secondary                                         no\n')
+        f.writelines('amber_score_secondary                                        no\n')
+        f.writelines('minimize_ligand                                              no\n')
+        f.writelines('atom_model                                                   all\n')
+        f.writelines('vdw_defn_file                                                {}/parameters/vdw_AMBER_parm99.defn\n'.format(config['dock6_path']))
+        f.writelines('flex_defn_file                                               {}/parameters/flex.defn'.format(config['dock6_path']))
+        f.writelines('flex_drive_file                                              {}/parameters/flex_drive.tbl'.format(config['dock6_path']))
+        f.writelines('ligand_outfile_prefix                                        gbsa_hawkins\n')
+        f.writelines('write_orientations                                           no\n')
+        f.writelines('num_scored_conformers                                        1\n')
+        f.writelines('rank_ligands                                                 no\n')
+
+    cmd = [f'./{run_sh_script}']
+
+    return cmd
+
+def scoring_finish_hawkins_gbsa(task, ret):
+    with open(f"{task['tmp_run_dir']}/gbsa_hawkins_scored.mol2", 'r') as f: 
+        lines = f.readlines()
+
+    task['score'] = float([x for x in lines[2].split(' ') if x][-1])
+    task['status'] = "success"
+    
+    return
 
 DOCKING_PROGRAMS = {
+    'MpSDockZN': {
+        'start': docking_start_MpSDockZN,
+        'end': docking_finish_MpSDockZN,
+        'ligands': 'single',
+    },
+    'HDock': {
+        'start': docking_start_HDock,
+        'end': docking_finish_HDock,
+        'ligands': 'single',
+    },
+    'dock6': {
+        'start': docking_start_dock6,
+        'end': docking_finish_dock6,
+        'ligands': 'single',
+    },
+    'Flexx': {
+        'start': docking_start_flexx,
+        'end': docking_finish_flexx,
+        'ligands': 'single',
+    },
+    'CovDock': {
+        'start': docking_start_covdock,
+        'end': docking_finish_covdock,
+        'ligands': 'single',
+    },
+    'Glide_SP': {
+        'start': docking_start_glide_sp,
+        'end': docking_finish_glide_sp,
+        'ligands': 'single',
+    },
+    'Glide_XP': {
+        'start': docking_start_glide_xp,
+        'end': docking_finish_glide_xp,
+        'ligands': 'single',
+    },
+    'Glide_HTVS': {
+        'start': docking_start_glide_htvs,
+        'end': docking_finish_glide_htvs,
+        'ligands': 'single',
+    },
     'qvina02': {
         'start': docking_start_vina,
         'end': docking_finish_vina,
@@ -3459,6 +3867,101 @@ DOCKING_PROGRAMS = {
         'start': docking_start_SEED,
         'end': docking_finish_SEED,
         'ligands': "single"
+    },
+    'FRED': {
+        'start': docking_start_fred,
+        'end': docking_finish_fred,
+        'ligands': "single",
+    },
+    'scoring_nnscore2.0': {
+        'start': scoring_start_nnscore2,
+        'end': scoring_finish_nnscore2,
+        'ligands': 'single',
+    },
+    'scoring_asp': {
+        'start': scoring_start_gold_asp,
+        'end': scoring_finish_gold_asp,
+        'ligands': 'single',
+    },
+    'scoring_chemscore': {
+        'start': scoring_start_gold_chemscore,
+        'end': scoring_finish_gold_chemscore,
+        'ligands': 'single',
+    },
+    'scoring_goldscore': {
+        'start': scoring_start_gold_goldscore,
+        'end': scoring_finish_gold_goldscore,
+        'ligands': 'single',
+    },
+    'scoring_plp': {
+        'start': scoring_start_gold_plp,
+        'end': scoring_finish_gold_plp,
+        'ligands': 'single',
+    },
+    'scoring_rf-score-vs': {
+        'start': scoring_start_rf,
+        'end': scoring_finish_rf,
+        'ligands': 'single',
+    },
+    'scoring_smina': {
+        'start': scoring_start_smina,
+        'end': scoring_finish_smina,
+        'ligands': 'single',
+    },
+    'scoring_start_gnina': {
+        'start': scoring_start_gnina,
+        'end': scoring_finish_gnina,
+        'ligands': 'single',
+    },
+    'scoring_ad4': {
+        'start': scoring_start_ad4,
+        'end': scoring_finish_ad4,
+        'ligands': 'single',
+    },
+    'scoring_vinardo': {
+        'start': scoring_start_vinardo,
+        'end': scoring_finish_vinardo,
+        'ligands': 'single',
+    },
+    'scoring_vina': {
+        'start': scoring_start_vina,
+        'end': scoring_finish_vina,
+        'ligands': 'single',
+    },
+    'scoring_PLANTS_chemplp': {
+        'start': scoring_start_PLANTS_chemplp,
+        'end': scoring_finish_PLANTS_chemplp,
+        'ligands': 'single',
+    },
+    'scoring_PLANTS_plp': {
+        'start': scoring_start_PLANTS_plp,
+        'end': scoring_finish_PLANTS_plp,
+        'ligands': 'single',
+    },
+    'scoring_PLANTS_plp95': {
+        'start': scoring_start_PLANTS_plp95,
+        'end': scoring_finish_PLANTS_plp95,
+        'ligands': 'single',
+    },
+    'scoring_dock6': {
+        'start': scoring_start_dock6_contact_score,
+        'end': scoring_finish_dock6_contact_score,
+        'ligands': 'single',
+    },
+    'scoring_dock6_continuous': {
+        'start': scoring_start_dock6_continuous_score,
+        'end': scoring_finish_dock6_continuous_score,
+        'ligands': 'single',
+    },
+    'scoring_MM_GBSA': {
+        'start': scoring_start_mm_gbsa,
+        'end': scoring_finish_mm_gbsa,
+        'ligands': 'single',
+    },
+    'scoring_Hawkins_GBSA': {
+        'start': scoring_start_hawkins_gbsa,
+        'end': scoring_finish_hawkins_gbsa,
+        'ligands': 'single',
     },
 }
 
