@@ -122,7 +122,7 @@ def main():
   job_location = f"{ctx['config']['object_store_job_prefix_full']}/{scenario}/parquet"
   object_store_job_bucket = ctx['config']['object_store_job_bucket']
   scenario_info = ctx['config']['docking_scenarios_internal'][scenario]
-  athena_location = f"s3://{object_store_job_bucket}/{job_location}/athena"
+  athena_location = f"s3://{object_store_job_bucket}/{ctx['config']['object_store_job_prefix_full']}/athena"
 
 
 
