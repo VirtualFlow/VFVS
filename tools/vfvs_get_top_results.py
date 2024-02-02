@@ -183,12 +183,12 @@ def main():
   }
 
   fields = [ 'ligand', 'collection_key', 'scenario' ]
+  fields.append("score_min")
+  fields.append("score_average")
+
   for replica_index in range(int(scenario_info['replicas'])):
     fields.append(f"score_{replica_index}")
     field_type[f"score_{replica_index}"] = "DOUBLE"
-
-  fields.append("score_average")
-  fields.append("score_min")
 
   for attr in ctx['config']['print_attrs_in_summary']:
     fields.append(f"attr_{attr}")
