@@ -387,6 +387,37 @@ def get_attrs(ligand_format, ligand_path, attrs = ['smi']):
     return attributes
 
 
+def posebusters_check(item, input_file, receptor_file, timeout):
+    step_timer_start = time.perf_counter()
+
+    try:
+        ret = subprocess.run(['bust', input_file, '-p', receptor_file, '--top-n', '1', '--outfmt', 'csv'], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as err:
+        item['log']['reason'] = 'bust timed out'
+        logging.error(item['log']['reason'])
+        return 0
+
+    output_lines = ret.stdout.splitlines()
+
+    if(len(output_lines) > 0):
+        match = output_lines[-1]
+        posebusters_values = match.split(',')[2:]
+
+        check = True
+        for idx, posebusters_value in enumerate(posebusters_values):
+            if posebusters_value == "False":
+                check = False
+                break
+
+        if(check):
+            return 1
+        else:
+            return 0
+
+    print("Pose check with posebusters failed.")
+    return 0
+
+
 def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, collection_key, base_collection_key, ligand_attrs, temp_dir):
 
     for scenario_key in ctx['main_config']['docking_scenarios']:
@@ -412,7 +443,9 @@ def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, coll
                 'threads_per_docking': int(ctx['main_config']['threads_per_docking']),
                 'temp_dir': temp_dir,
                 'attrs': ligand_attrs,
-                'output_dir': str(ligand_directory_directory)
+                'output_dir': str(ligand_directory_directory),
+                'run_pose_check': int(ctx['main_config']['run_pose_check']),
+                'pose_check_timeout': int(ctx['main_config']['pose_check_timeout'])
             }
 
             docking_queue.put(docking_item)
@@ -2152,6 +2185,26 @@ def docking_finish_vina(item, ret):
         matches = match.groupdict()
         item['score'] = float(matches['value'])
         item['status'] = "success"
+
+        if(item['run_pose_check'] == 1):
+
+            # Load in config file:
+            with open(item['config_path']) as fd:
+                config_ = dict(read_config_line(line) for line in fd)
+            for element in config_:
+                if '#' in config_[element]:
+                    config_[element] = config_[element].split('#')[0]
+
+            # Convert docking output to sdf (first model only)
+            sdf_file = item['output_path'] + '.sdf'
+            subprocess.run(['obabel', '-ipdbqt', item['output_path'], '-f', '1', '-l', '1', '-osdf', '-O', sdf_file])
+            pdb_file = os.path.join(item['input_files_dir'], config_['receptor'].replace('pdbqt', 'pdb'))
+
+            # Run pose check
+            if(posebusters_check(item, sdf_file, pdb_file, item['pose_check_timeout']) != 1):
+                item['score'] = None
+                item['status'] = "failed"
+
     else:
         item['log']['reason'] = f"Could not find score"
         logging.error(item['log']['reason'])
