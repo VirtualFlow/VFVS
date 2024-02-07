@@ -153,6 +153,9 @@ def submit_slurm(config, client, current_workunit, jobline):
     except subprocess.TimeoutExpired as err:
         raise Exception("timeout on submission to sbatch")
 
+    while ret.returncode is None:
+        time.sleep(0.1)
+
     if ret.returncode == 0:
         match = re.search(
                 r'^Submitted batch job (?P<value>[-0-9]+)', ret.stdout, flags=re.MULTILINE)
