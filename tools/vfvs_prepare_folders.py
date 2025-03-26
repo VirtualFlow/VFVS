@@ -57,7 +57,8 @@ def parse_config(filename):
         ":")
     config['docking_scenario_batchsizes'] = config['docking_scenario_batchsizes'].split(
         ":")
-
+    config['proximity_check_residues'] = config['proximity_check_residues'].split(
+        ':')
 
 
     config['docking_scenarios_internal'] = {}

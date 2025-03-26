@@ -112,7 +112,7 @@ def main():
       print("In order to use the query on Slurm runs, `csv` must be a summary_format")
       exit(1)
 
-  if ctx['config']['batchsystem'] != 'awsbatch' and ctx['config']['batchsystem'] != 'Slurm':
+  if ctx['config']['batchsystem'] != 'awsbatch' and ctx['config']['batchsystem'] != 'slurm':
     print("In order to use this query script, AWS or Slurm must be configured")
     exit(1)
 
@@ -319,10 +319,10 @@ def main():
 
     if args_dict['download'] == True:
       if 'top' in args_dict and args_dict['top'] != None:
-        output_file = docking_scenario_output_folder + "." + "top-" + str(args.top) + ".csv"
+        output_file = docking_scenario_output_folder + "." + ".ranking.top-" + str(args.top) + ".csv"
         results = results.head(args.top)
       else:
-        output_file = docking_scenario_output_folder + ".csv"
+        output_file = docking_scenario_output_folder + ".ranking.complete.csv"
 
       results.to_csv(output_file, header=True, index=None)
       print(f"Output saved to {output_file}")

@@ -54,6 +54,9 @@ from queue import Empty
 import math
 import sys
 import uuid
+from Bio.PDB import PDBParser, NeighborSearch
+from rdkit import Chem
+import numpy as np
 
 from typing import Dict, Tuple
 
@@ -111,7 +114,7 @@ def downloader(download_queue, unpack_queue, summary_queue, tmp_dir):
        }
     )
 
-    s3 = boto3.client('s3', config=botoconfig)
+    s3 = boto3.client('s3', config=botoconfig, region_name='us-east-2')
 
 
     while True:
@@ -505,6 +508,119 @@ def posebusters_check(item, input_file, receptor_file, timeout):
     return 0
 
 
+def load_pdb(pdb_file):
+    """Load a PDB file and return its structure."""
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("PDB_structure", pdb_file)
+    return structure
+
+
+def get_pdb_atoms(structure, chain_residue_list):
+    """
+    Extract atoms from multiple specified chain-residue pairs in a PDB structure.
+
+    :param structure: PDB structure object.
+    :param chain_residue_list: List of (chain_id, residue_id) tuples.
+    :return: List of selected atoms.
+    """
+    atoms = {}
+    for model in structure:
+        for chain in model:
+            atoms[chain.id] = []
+            for chain_id, residue_id in chain_residue_list:
+                if chain.id == chain_id:  # Match chain
+                    for residue in chain:
+                        if residue.id[1] == int(residue_id):  # Match residue ID
+                            atoms[chain_id].extend(residue.get_atoms())
+
+    if not atoms:
+        raise ValueError(f"No matching residues found for {chain_residue_list} in PDB structure.")
+
+    return atoms
+
+
+def load_sdf(sdf_file):
+    """Load an SDF file and extract atom coordinates."""
+    suppl = Chem.SDMolSupplier(sdf_file, removeHs=False, sanitize=False)
+    mol = suppl[0]
+    if mol is None:
+       raise ValueError(f"Failed to load molecule from {sdf_file}")
+    else:
+        return mol
+
+def load_mol2(mol2_file):
+    mol = Chem.MolFromMol2File(mol2_file, removeHs=False)
+    if mol is None:
+        raise ValueError(f"Failed to load molecule from {mol2_file}")
+    return mol
+
+
+def get_sdf_atoms(mol):
+    """Extract atom coordinates from an RDKit molecule."""
+    conformer = mol.GetConformer()
+    atoms = []
+    for atom in mol.GetAtoms():
+        pos = conformer.GetAtomPosition(atom.GetIdx())
+        atoms.append((atom.GetSymbol(), np.array([pos.x, pos.y, pos.z])))  # Store as (element, coords)
+    return atoms
+
+
+def proximity_check(pdb_file, sdf_file, chain_residue_list, proximity_check_mode, distance_threshold):
+    """
+    Check if any atom in specified residues (PDB) is within a certain distance to any atom in an SDF molecule.
+
+    :param proximity_check_mode:
+    :param pdb_file: PDB file path.
+    :param sdf_file: SDF file path.
+    :param chain_residue_list: List of (chain_id, residue_id) tuples.
+    :param distance_threshold: Distance cutoff in Ångströms.
+    """
+    # Load structures
+    pdb_structure = load_pdb(pdb_file)
+    try:
+        sdf_mol = load_sdf(sdf_file)
+    except (OSError, ValueError) as err:
+        logging.error(f"Failed to load SDF file: {err}")
+        return 0, []
+
+    # Extract PDB atoms for all specified chain-residue pairs
+    pdb_atoms = get_pdb_atoms(pdb_structure, chain_residue_list)
+
+    # Extract SDF atoms
+    sdf_atoms = get_sdf_atoms(sdf_mol)
+
+    # Create a Bio.PDB NeighborSearch object for efficient proximity search
+    ns = {}
+    close_residues = {}
+    for chain_id, atoms in pdb_atoms.items():
+        ns[chain_id] = NeighborSearch(pdb_atoms[chain_id])
+        close_residues[chain_id] = []
+
+        # Check proximity using NeighborSearch
+        for sdf_atom, sdf_coord in sdf_atoms:
+            neighbors = ns[chain_id].search(sdf_coord, distance_threshold, level='R')
+            close_residues[chain_id].extend(neighbors)
+
+    close_residues_list = []
+    for chain_id, res_list in close_residues.items():
+        close_residues_list.extend([(chain_id, str(res.get_id()[1])) for res in res_list])
+
+    # Remove duplicates in list of close residues
+    close_residues_list = list(set(close_residues_list))
+    close_residues_list_formatted = [f"{chain_id}_{res_id}" for chain_id, res_id in close_residues_list]
+
+    if proximity_check_mode == "none":
+        return 1, close_residues_list_formatted
+    elif len(close_residues_list) == 0:
+        return 0, close_residues_list_formatted
+    elif proximity_check_mode == "any" and any(elem in close_residues_list for elem in chain_residue_list):
+        return 1, close_residues_list_formatted
+    elif proximity_check_mode == "all" and all(elem in close_residues_list for elem in chain_residue_list):
+        return 1, close_residues_list_formatted
+    else:
+        return 0, close_residues_list_formatted
+
+
 def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, collection_key, base_collection_key, ligand_attrs, temp_dir):
 
     for scenario_key in ctx['main_config']['docking_scenarios']:
@@ -535,7 +651,12 @@ def submit_ligand_for_docking(ctx, docking_queue, ligand_name, ligand_path, coll
                 'energy_max': int(ctx['main_config']['energy_max']),
                 'obenergy_timeout': int(ctx['main_config']['obenergy_timeout']),
                 'run_pose_check': int(ctx['main_config']['run_pose_check']),
-                'pose_check_timeout': int(ctx['main_config']['pose_check_timeout'])
+                'pose_check_timeout': int(ctx['main_config']['pose_check_timeout']),
+                'run_proximity_check': int(ctx['main_config']['run_proximity_check']),
+                'proximity_check_residues': ctx['main_config']['proximity_check_residues'],
+                'proximity_check_cutoff': float(ctx['main_config']['proximity_check_cutoff']),
+                'proximity_check_mode': ctx['main_config']['proximity_check_mode'],
+                'obabel_timeout': int(ctx['main_config']['obabel_timeout'])
             }
 
             docking_queue.put(docking_item)
@@ -848,7 +969,7 @@ def summary_process(ctx, summary_queue, upload_queue, metadata):
 
             overview_data['skipped_ligands'] += 1
             overview_data['skipped_ligand_list'].append(item['log'])
-
+        # Todo: Check why sometimes the score_<idx> in summary does not correspond to the folder log structure
         elif(item['type'] == "docking_complete"):
             dockings_processed += 1
 
@@ -2280,7 +2401,7 @@ def docking_finish_vina(item, ret):
         item['score'] = float(matches['value'])
         item['status'] = "success"
 
-        if(item['run_pose_check'] == 1 or item['run_energy_check'] == 1):
+        if(item['run_pose_check'] == 1 or item['run_energy_check'] == 1 or item['run_proximity_check'] == 1):
 
             # Load in config file:
             with open(item['config_path']) as fd:
@@ -2289,23 +2410,39 @@ def docking_finish_vina(item, ret):
                 if '#' in config_[element]:
                     config_[element] = config_[element].split('#')[0]
 
-            # Convert docking output to sdf (first model only)
             sdf_file = item['output_path'] + '.sdf'
+
+            # Convert docking output to sdf (first model only)
             try:
                 ret = subprocess.run(['obabel', '-ipdbqt', item['output_path'], '-f', '1', '-l', '1', '-osdf', '-O', sdf_file],
-                                     capture_output=True, text=True, timeout=item['obenergy_timeout'])
-            except subprocess.TimeoutExpired as err:
+                                     capture_output=True, text=True, timeout=item['obabel_timeout'])
+            except Exception as err:
                 item['log']['reason'] = 'obabel timed out'
+                item['score'] = None
+                item['status'] = "failed"
                 logging.error(item['log']['reason'])
                 logging.error(f"stdout:\n{ret.stdout}\nstderr:{ret.stderr}\n")
+                logging.error(f"pose, energy or proximity check needed, but could not generate {sdf_file}, exiting...")
+                return
 
-            if (item['run_pose_check'] == 1):
+            if(item['run_pose_check'] == 1 or item['run_proximity_check'] == 1):
 
                 # Prepare receptor file if needed
                 pdb_file = os.path.join(item['input_files_dir'], config_['receptor'].replace('pdbqt', 'pdb'))
-                if not os.path.exists(pdb_file):
-                    logging.error(f"run_pose_check is set to 1, but no {pdb_file} found, exiting...")
-                    sys.exit(1)
+                if not os.path.isfile(pdb_file):
+                    try:
+                        ret = subprocess.run(['obabel', '-ipdbqt', config_['receptor'], '-opdb', '-O', pdb_file],
+                                         capture_output=True, text=True, timeout=item['obabel_timeout'])
+                    except subprocess.TimeoutExpired as err:
+                        item['log']['reason'] = 'obabel timed out'
+                        item['score'] = None
+                        item['status'] = "failed"
+                        logging.error(item['log']['reason'])
+                        logging.error(f"stdout:\n{ret.stdout}\nstderr:{ret.stderr}\n")
+                        logging.error(f"run_pose_check is set to 1, but could not generate {pdb_file}, exiting...")
+                        return
+
+            if(item['run_pose_check'] == 1):
 
                 # Run pose check
                 if(posebusters_check(item, sdf_file, pdb_file, item['pose_check_timeout']) != 1):
@@ -2318,6 +2455,27 @@ def docking_finish_vina(item, ret):
                 if(obabel_check_energy(item, sdf_file, item['energy_max']) != 1):
                     item['score'] = None
                     item['status'] = "failed"
+
+            if(item['run_proximity_check']):
+
+                # Run proximity check
+                chain_residue_list = [tuple(x.split('_')) for x in item['proximity_check_residues']]
+                ret = proximity_check(pdb_file, sdf_file, chain_residue_list,
+                                    item['proximity_check_mode'], item['proximity_check_cutoff'])
+
+                if ret[0] != 1:
+                    item['score'] = None
+                    item['status'] = "failed"
+                    item['log']['reason'] = f"Proximity check failed"
+                    logging.error(item['log']['reason'])
+
+                else:
+                    close_residue_list = ret[1]
+                    for res in item['proximity_check_residues']:
+                        if res in close_residue_list:
+                            item['attrs'][res] = 1
+                        else:
+                            item['attrs'][res] = 0
 
     else:
         item['log']['reason'] = f"Could not find score"

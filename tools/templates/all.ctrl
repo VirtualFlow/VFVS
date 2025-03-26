@@ -358,3 +358,24 @@ run_pose_check=1
 
 pose_check_timeout=10
 # Timeout for checking the docking pose
+
+run_proximity_check=0
+# Apply proximity constraint. Only ligands that are in close proximity to the selected residue(s) pass.
+# Currently only supported for vina-based docking programs.
+
+proximity_check_residues=A_50:B_100
+# Only used if run proximity check is set to 1.
+# Series of chain and residue pairs separated by colons ":"
+# Specify chain and residue number(s) in the format: A_1:B_2
+
+proximity_check_cutoff=3.6
+# Only used if run proximity check is set to 1.
+# Float corresponding to distance cutoff in Angstroms
+
+proximity_check_mode=none
+# Only used if run proximity check is set to 1.
+# Set if all, any or none of the proximity constraints need to be fulfilled.
+# Supported values: all, any, none
+
+obabel_timeout=30
+# Time in seconds to wait for obabel to complete

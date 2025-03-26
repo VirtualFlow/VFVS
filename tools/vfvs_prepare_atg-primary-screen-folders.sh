@@ -6,8 +6,8 @@ usage="Usage: vfvs_prepare_atg-primary-screen-folders.sh screening_sizes:<size 1
 Description: Preparing the folders for the ATG Primary Screens folders. For each docking scenario, and each specified screening size and replica count, one ATG Primary Screen folder will be created. Before running this script, the todo files have to be prepared for each screening size.
 
 Arguments:
-    screening_sizes:<size 1>:<size 2>:...: Number of ligands that should be screened in the ATG Primary Screen. Multiple sizes can be spcified if multiple ATG Primary Screens are planned to be run with different screening sizes.
-    replica_counts:<replica count 1>,<replica count 2>,... Replica counts that should be used in the ATG Primary Screen. Multiple counts can be spcified if multiple ATG Primary Screens are planned to be run with different replica counts.
+    screening_sizes:<size 1>:<size 2>:...: Number of ligands that should be screened in the ATG Primary Screen. Multiple sizes can be specified if multiple ATG Primary Screens are planned to be run with different screening sizes.
+    replica_counts:<replica count 1>,<replica count 2>,... Replica counts that should be used in the ATG Primary Screen. Multiple counts can be specified if multiple ATG Primary Screens are planned to be run with different replica counts.
     <docking method>: The docking program to be used.
 "
 

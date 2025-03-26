@@ -20,7 +20,7 @@ python3 -m virtualenv $HOME/vfvs_env
 Enter the virtualenv and install needed packages
 ```bash
 source $HOME/vfvs_env/bin/activate
-python3 -m pip install boto3 pandas pyarrow jinja2
+python3 -m pip install boto3 pandas pyarrow jinja2 rdkit biopython numpy
 ```
 
 If the `vfvs_get_top_results.py` script shall be used to extract the top results after screening, additional python packages are needed. To install these:

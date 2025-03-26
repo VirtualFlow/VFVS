@@ -8,7 +8,7 @@ Description: Preparing the folders for the ATG Primary Screens. For each docking
 Arguments:
     -m <tranche_scoring_mode>: dimension_averaging, tranche_min_score or tranche_ave_score
     -r <tranche_filter_regex>: Regex to allow filtering of tranches. Only tranches that match the regex will pass. Use ''.*'' if no filters should be applied.
-    -s <size1>[:<size2>:...]: Number of ligands that should be screened in the ATG Primary Screen. Multiple sizes can be spcified if multiple ATG Primary Screens are planned to be run with different screening sizes. N is typically set to 10000000 (10M) or 100000000 (100M). Multiple sizes are specified with a colon.
+    -s <size1>[:<size2>:...]: Number of ligands that should be screened in the ATG Primary Screen. Multiple sizes can be specified if multiple ATG Primary Screens are planned to be run with different screening sizes. N is typically set to 10000000 (10M) or 100000000 (100M). Multiple sizes are specified with a colon.
 "
 # Parse options
 while getopts "m:r:s:h" opt; do
