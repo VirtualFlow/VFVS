@@ -30,13 +30,13 @@ ADD ./templates/*.sh /opt/vf/tools/templates/
 # Set library path
 ENV LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
 
-# Install Boost (1.59 or above)
+# Install Boost (1.70.0) with specific libraries needed for gwovina
 WORKDIR /tmp
-RUN wget -O boost_1_70_0.tar.gz https://boostorg.jfrog.io/artifactory/main/release/1.70.0/source/boost_1_70_0.tar.gz && \
-    tar -xvzf boost_1_70_0.tar.gz && \
+RUN wget -O boost_1_70_0.tar.gz https://sourceforge.net/projects/boost/files/boost/1.70.0/boost_1_70_0.tar.gz/download && \
+    tar -xzf boost_1_70_0.tar.gz && \
     cd boost_1_70_0 && \
-    ./bootstrap.sh && \
-    ./b2 install  --with-system --with-filesystem --with-thread --with-program_options || true && \
+    ./bootstrap.sh --with-libraries=system,filesystem,thread,program_options && \
+    ./b2 install && \
     ldconfig
 
 # Add VirtualFlow tools and templates
