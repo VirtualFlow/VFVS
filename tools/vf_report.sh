@@ -471,7 +471,9 @@ if [[ "${category}" = "vs" ]]; then
                         folder=$(basename ${folder})
                         for file in $(ls ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder} 2>/dev/null || true); do
                             file=$(basename ${file} || true)
-                            zcat ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} 2>/dev/null | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all || true
+                            # Summary columns: Tranch Compound SMILES average-score maximum-score number-of-dockings ...
+                            # Field 5 (maximum-score) is the best/most-negative docking score; field 4 is the average.
+                            zcat ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}/${file} 2>/dev/null | awk '{print $1, $2, $5}' >> ${tempdir}/summaries.all || true
                         done
                         rm -r ${tempdir}/output-files/${docking_scenario_name}/summaries/${metatranch}/${folder}
                     done
@@ -482,7 +484,7 @@ if [[ "${category}" = "vs" ]]; then
         for metatranch in $(ls -A ${folder}/summaries/); do
             for tranch in $(ls -A ${folder}/summaries/${metatranch}); do
                 for file in $(ls -A ${folder}/summaries/${metatranch}/${tranch}); do
-                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file} 2>/dev/null | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all 2>/dev/null || true
+                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file} 2>/dev/null | awk '{print $1, $2, $5}' >> ${tempdir}/summaries.all 2>/dev/null || true
                     summary_flag="true"
                 done
             done
@@ -498,7 +500,7 @@ if [[ "${category}" = "vs" ]]; then
         for metatranch in $(ls -A ${folder}/summaries/); do
             for tranch in $(ls -A ${folder}/summaries/${metatranch}); do
                 for file in $(ls -A ${folder}/summaries/${metatranch}/${tranch}); do
-                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file}  2>/dev/null | awk '{print $1, $2, $4}' >> ${tempdir}/summaries.all 2>/dev/null || true
+                    zcat ${folder}/summaries/${metatranch}/${tranch}/${file}  2>/dev/null | awk '{print $1, $2, $5}' >> ${tempdir}/summaries.all 2>/dev/null || true
                     summary_flag="true"
                 done
             done

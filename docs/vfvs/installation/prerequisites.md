@@ -34,3 +34,7 @@ SPORES can be obtained here:&#x20;
 
 The SPORES binary has to be placed in the folder tools/bin/ and has to be named `spores`.
 
+## Machine Learning Classifier (Optional)
+
+If the optional machine learning classifier for molecule prioritization is enabled (`use_ml_classifier=true` in `all.ctrl`, see [Preparing the Workflow](../using-vfvs/preparing-the-workflow.md#machine-learning-classifier-for-molecule-prioritization)), PyTorch and RDKit need to be installed and importable by the `python3` used to run `tools/train_ml_classifier.py` and, on the Slurm/HPC path, `tools/templates/ml_classifier_predict.py`. A CPU-only build of PyTorch is sufficient. This is not required when `use_ml_classifier` is left at its default of `false`. For AWS Batch runs, both packages are already installed in the provided Docker image.
+
