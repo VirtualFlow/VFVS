@@ -44,6 +44,8 @@ import logging
 import time
 from pathlib import Path
 
+from ml_classifier import load_classifier, filter_smiles_mask
+
 
 # Given a config file, parse out all of the configuration options
 
@@ -97,6 +99,17 @@ def process_config(ctx):
             'program': new_config['docking_scenario_programs'][index],
             'replicas': int(new_config['docking_scenario_replicas'][index])
         }
+
+    # Optional ML tranche-prioritization classifier (disabled by default). Resolved to an
+    # absolute path the same way docking_scenarios[...]['config'] is above, since
+    # ml_classifier_model_path (like docking_scenario_inputfolders) is relative to input-files/.
+    new_config['use_ml_classifier'] = ctx['config.temp'].get('use_ml_classifier', 'false')
+    new_config['ml_classifier_model_path'] = os.path.join(
+        ctx['temp_dir'], "vf_input", "input-files",
+        ctx['config.temp'].get('ml_classifier_model_path', 'ml_classifier/model.pt')
+    )
+    new_config['ml_classifier_probability_cutoff'] = float(
+        ctx['config.temp'].get('ml_classifier_probability_cutoff', 0.5))
 
     return new_config
 
@@ -383,7 +396,7 @@ def create_summary_file(ctx, scenario, collection, scenario_result):
 
     with gzip.open(f"{collection['number']}.txt.gz", "wt") as summmary_fp:
         summmary_fp.write(
-            "Tranch    Compound   average-score maximum-score  number-of-dockings ")
+            "Tranch    Compound   SMILES   average-score maximum-score  number-of-dockings ")
 
         for replica_index in range(scenario['replicas']):
             replica_str = f"score-replica-{replica_index}"
@@ -396,11 +409,16 @@ def create_summary_file(ctx, scenario, collection, scenario_result):
 
             if(len(ligand['scores']) > 0):
 
-                max_score = max(ligand['scores'])
+                # Despite the column being named "maximum-score" (kept for schema parity with the
+                # Slurm/HPC summary format), this is the BEST (most negative) docking score across
+                # replicas, matching one-queue.sh's update_summary() -- NOT the literal maximum
+                # (worst score), which this used to compute prior to the ML classifier work.
+                min_score = min(ligand['scores'])
                 avg_score = sum(ligand['scores']) / len(ligand['scores'])
+                smiles = collection['ligands'].get(ligand_key, {}).get('smiles') or "NA"
 
                 summmary_fp.write(
-                    f"{collection['key']} {ligand_key}     {avg_score:3.1f}    {max_score:3.1f}     {len(ligand['scores']):5d}   ")
+                    f"{collection['key']} {ligand_key} {smiles}     {avg_score:3.1f}    {min_score:3.1f}     {len(ligand['scores']):5d}   ")
                 for replica_index in range(scenario['replicas']):
                     summmary_fp.write(
                         f"{ligand['scores'][replica_index]:3.1f}   ")
@@ -473,6 +491,70 @@ def scenario_collection_output_directory_txt_gz(ctx, scenario, collection, resul
     return os.path.join(*scenario_collection_output(ctx, scenario, collection, result_type, skip_num=skip_num, tmp_prefix=tmp_prefix, append=".txt.gz"))
 
 
+def apply_ml_classifier_filter(collections, model_path, probability_cutoff):
+    """
+    Filters ligands across all given collections using a pretrained ML tranche-prioritization
+    classifier, mutating `collections` in place.
+
+    Ligands not predicted worth docking (probability <= probability_cutoff), or whose SMILES
+    could not be extracted (ligand['smiles'] is None -- fail-closed), are popped from
+    collection['ligands'] and logged to collection['log']/['log_json'], exactly like the existing
+    B/Si/Sn/duplicate-coordinate skip checks in process().
+
+    Deliberately takes only plain data (no ctx/boto3), so it can be unit-tested in isolation with
+    a fabricated `collections` dict, without mocking any AWS/S3 state.
+
+    Args:
+        collections (dict): collection_key -> collection dict, each with a 'ligands' dict of
+            ligand_key -> {'path': ..., 'smiles': ...}, plus 'log'/'log_json' lists.
+        model_path (str): absolute path to the trained classifier (.pt file).
+        probability_cutoff (float): minimum predicted probability (exclusive) to keep a ligand.
+
+    Returns:
+        None (collections is mutated in place).
+
+    Raises:
+        Exception: if the model cannot be loaded. This is a whole-subjob configuration problem
+            (missing/corrupt model file), not a per-ligand transient failure, so it is
+            deliberately allowed to propagate and fail the whole container task -- unlike this
+            file's per-ligand docking-exception handling elsewhere in process_ligand().
+    """
+    model, metadata = load_classifier(model_path)
+    fp_radius = metadata.get('fp_radius', 2)
+    fp_nbits = metadata.get('fp_nbits', 1024)
+
+    ligand_refs = []
+    smiles_list = []
+    for collection_key in collections:
+        collection = collections[collection_key]
+        for ligand_key in collection['ligands']:
+            ligand = collection['ligands'][ligand_key]
+            ligand_refs.append((collection_key, ligand_key))
+            smiles_list.append(ligand.get('smiles') or '')
+
+    if len(ligand_refs) == 0:
+        return
+
+    keep_mask, probabilities = filter_smiles_mask(
+        model, smiles_list, probability_cutoff=probability_cutoff,
+        fp_radius=fp_radius, fp_nbits=fp_nbits)
+
+    ligands_to_skip = {}
+    for (collection_key, ligand_key), keep, probability in zip(ligand_refs, keep_mask, probabilities):
+        if not keep:
+            probability_str = f"{probability:.4f}" if probability is not None else "invalid_smiles"
+            skip_reason = f"filtered(ml_classifier:{probability_str})"
+            skip_reason_json = f"ml classifier probability: {probability_str}"
+            collections[collection_key]['log'].append(f"{ligand_key} {skip_reason}")
+            collections[collection_key]['log_json'].append(
+                {'ligand': ligand_key, 'status': 'filtered', 'info': skip_reason_json})
+            ligands_to_skip.setdefault(collection_key, []).append(ligand_key)
+
+    for collection_key, ligand_keys in ligands_to_skip.items():
+        for ligand_key in ligand_keys:
+            collections[collection_key]['ligands'].pop(ligand_key, None)
+
+
 def process(ctx):
 
     # Figure out who I am...
@@ -541,6 +623,7 @@ def process(ctx):
             skip_ligand = 0
             skip_reason = ""
             skip_reason_json = ""
+            ligand['smiles'] = None
 
             # Check to see if ligand contains B, Si, Sn or has duplicate coordinates
             with open(ligand['path'], "r") as read_file:
@@ -570,6 +653,15 @@ def process(ctx):
                             break
                         coords[coord_str] = 1
 
+                    # Getting the ligand SMILES (same "line containing SMILES, take the last
+                    # whitespace token" rule used on the Slurm/HPC side, for consistency and so
+                    # summary files carry the same schema regardless of execution path). Does not
+                    # break the loop -- unlike the checks above, finding this doesn't disqualify
+                    # the ligand, and the B/Si/Sn/coordinate scan should continue regardless.
+                    match = re.search(r'SMILES', line)
+                    if(match):
+                        ligand['smiles'] = line.split()[-1]
+
             if skip_ligand:
                 collection['log'].append(f"{ligand_key} {skip_reason}")
                 collection['log_json'].append(
@@ -578,6 +670,16 @@ def process(ctx):
 
         for ligand_key in ligands_to_skip:
             collection['ligands'].pop(ligand_key, None)
+
+    # Optional ML tranche-prioritization classifier: filter every remaining ligand across every
+    # collection in this subjob, once (a single batched inference call), before task-list
+    # construction below.
+    if(ctx['config'].get('use_ml_classifier', 'false') == 'true'):
+        apply_ml_classifier_filter(
+            collections,
+            ctx['config']['ml_classifier_model_path'],
+            ctx['config']['ml_classifier_probability_cutoff']
+        )
 
     # Create the task list based on the scenarios and replicas required
     tasklist = []

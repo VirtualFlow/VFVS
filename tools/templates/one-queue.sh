@@ -151,6 +151,24 @@ error_response_ligand_coordinates() {
     echo "Ligand ${next_ligand} ${ligand_list_entry} on $(date)."
 }
 
+error_response_ml_classifier_filtered() {
+
+    # Variables
+    probability=$1
+    ligand_list_entry="filtered(ml_classifier:${probability})"
+
+    # Printing some information
+    echo | tee -a /dev/stderr
+    echo "The ligand was filtered out by the ML tranche-prioritization classifier (probability=${probability})." | tee -a /dev/stderr
+    echo "Skipping this ligand and continuing with next one." | tee -a /dev/stderr
+
+    # Updating the ligand list file
+    echo "${next_ligand} ${ligand_list_entry}" >> ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/workflow/ligand-collections/ligand-lists/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.status
+
+    # Printing some information
+    echo "Ligand ${next_ligand} ${ligand_list_entry} on $(date)."
+}
+
 obabel_check_energy() {
 
     # Checking format
@@ -427,6 +445,50 @@ prepare_collection_files_tmp() {
 
     # Extracting all the ligands at the same time (faster than individual for each ligand separately)
     tar -xf ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}.tar -C ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}
+
+    # Optional ML tranche-prioritization classifier: score every ligand of this collection once
+    # (not per ligand later, which would mean re-loading a PyTorch model per ligand -- a severe
+    # antipattern over a collection's many ligands), and record a keep/discard decision for each.
+    # Disabled by default; behavior above/below is unchanged unless use_ml_classifier=true.
+    use_ml_classifier="$(grep -m 1 "^use_ml_classifier=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+    if [[ "${use_ml_classifier}" == "true" ]]; then
+
+        ml_classifier_model_path="$(grep -m 1 "^ml_classifier_model_path=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+        ml_classifier_probability_cutoff="$(grep -m 1 "^ml_classifier_probability_cutoff=" ${VF_CONTROLFILE_TEMP} | tr -d '[[:space:]]' | awk -F '[=#]' '{print $2}')"
+        # Falling back to the same defaults vf_aws_run.py's process_config() uses, in case a
+        # range/override controlfile omits these keys -- keeps the two execution paths consistent
+        # instead of the Slurm path hard-failing on a key the AWS path would silently default.
+        if [[ -z "${ml_classifier_model_path}" ]]; then
+            ml_classifier_model_path="ml_classifier/model.pt"
+        fi
+        if [[ -z "${ml_classifier_probability_cutoff}" ]]; then
+            ml_classifier_probability_cutoff="0.5"
+        fi
+        ml_classifier_ligand_dir="${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}"
+
+        # Building the ligand-name/SMILES input file for the whole collection. Reuses the exact
+        # same "grep SMILES <file> | last field" extraction rule already used later for the
+        # summary file (see the "Getting the ligand SMILES" step below), just applied once per
+        # ligand in this collection rather than inline in the main per-ligand loop.
+        > ${ml_classifier_ligand_dir}/_ml_classifier_input.tsv
+        for ml_classifier_ligand_file in $(ls ${ml_classifier_ligand_dir}/*.${ligand_library_format} 2>/dev/null); do
+            ml_classifier_ligand_name="$(basename "${ml_classifier_ligand_file}" .${ligand_library_format})"
+            ml_classifier_ligand_smiles="$(grep SMILES "${ml_classifier_ligand_file}" | awk '{print $NF}')"
+            printf "%s\t%s\n" "${ml_classifier_ligand_name}" "${ml_classifier_ligand_smiles}" >> ${ml_classifier_ligand_dir}/_ml_classifier_input.tsv
+        done
+
+        # Running the ML classifier once for the whole collection
+        python3 templates/ml_classifier_predict.py --model-path ../input-files/${ml_classifier_model_path} --probability-cutoff ${ml_classifier_probability_cutoff} --input-tsv ${ml_classifier_ligand_dir}/_ml_classifier_input.tsv --output-tsv ${ml_classifier_ligand_dir}/_ml_classifier_decisions.tsv
+        ml_classifier_exit_code=$?
+
+        ml_classifier_input_line_count=$(wc -l < ${ml_classifier_ligand_dir}/_ml_classifier_input.tsv)
+        ml_classifier_output_line_count=$(wc -l < ${ml_classifier_ligand_dir}/_ml_classifier_decisions.tsv 2>/dev/null || echo 0)
+
+        if [ "${ml_classifier_exit_code}" -ne "0" ] || [ ! -f ${ml_classifier_ligand_dir}/_ml_classifier_decisions.tsv ] || [ "${ml_classifier_input_line_count}" -ne "${ml_classifier_output_line_count}" ]; then
+            echo " * Error: The ML tranche-prioritization classifier could not be applied to collection ${next_ligand_collection_tranch}_${next_ligand_collection_ID}." | tee -a /dev/stderr
+            error_response_std $LINENO
+        fi
+    fi
 
     # Copying the required old output files if continuing old collection
     for docking_scenario_name in "${docking_scenario_names[@]}"; do
@@ -997,9 +1059,41 @@ while true; do
     # Getting the ligand SMILES
     if [[ ${ligand_library_format} == "pdb" || ${ligand_library_format} == "pdbqt" || ${ligand_library_format} == "mol2" ]]; then
         next_ligand_smiles="$(grep SMILES ${VF_TMPDIR}/${USER}/VFVS/${VF_JOBLETTER}/${VF_QUEUE_NO_12}/${VF_QUEUE_NO}/input-files/ligands/${next_ligand_collection_metatranch}/${next_ligand_collection_tranch}/${next_ligand_collection_ID}/${next_ligand}.${ligand_library_format} | awk '{print $NF}')"
+        # If no SMILES remark line was found, fall back to "NA" rather than an empty string, so
+        # the summary file always has the same number of whitespace-separated fields per row
+        # (an empty field here would silently shift every later column by one for that row,
+        # corrupting train_ml_classifier.py's whitespace-based parsing).
+        if [[ -z "${next_ligand_smiles}" ]]; then
+            next_ligand_smiles="NA"
+        fi
     else
         next_ligand_smiles="NA"
     fi
+
+    # Checking the ML tranche-prioritization classifier's decision for this ligand, if enabled.
+    # This is a lookup against the per-collection decisions file computed once in
+    # prepare_collection_files_tmp() (not a fresh Python/model invocation per ligand).
+    if [[ "${use_ml_classifier}" == "true" ]]; then
+        # Note: the tab is passed as a real ANSI-C-quoted tab character ($'\t'), not the two-char
+        # sequence "\t" -- GNU grep's BRE does not reliably expand "\t" to a tab across all
+        # locales/versions, and -P (which would) is unavailable in some locales ("-P supports
+        # only unibyte and UTF-8 locales"). Concatenating a double-quoted string with an
+        # ANSI-C-quoted one is standard bash and produces a single argument to grep.
+        ml_classifier_decision_line=$(grep "^${next_ligand}"$'\t' ${ml_classifier_ligand_dir}/_ml_classifier_decisions.tsv 2>/dev/null | head -n 1 || true)
+        if [[ -z "${ml_classifier_decision_line}" ]]; then
+            # No decision found for this ligand (unexpected state) -- fail closed, same as an
+            # unscoreable SMILES.
+            error_response_ml_classifier_filtered "missing_decision"
+            continue
+        fi
+        ml_classifier_decision=$(awk -F'\t' '{print $2}' <<< "${ml_classifier_decision_line}")
+        if [[ "${ml_classifier_decision}" == "DISCARD" ]]; then
+            ml_classifier_probability=$(awk -F'\t' '{print $3}' <<< "${ml_classifier_decision_line}")
+            error_response_ml_classifier_filtered "${ml_classifier_probability}"
+            continue
+        fi
+    fi
+
     # Loop for each docking type
     for docking_scenario_index in $(seq ${docking_scenario_index_start} ${docking_scenario_index_end}); do
 

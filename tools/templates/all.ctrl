@@ -269,6 +269,25 @@ energy_max=10000
 # Possible values: Positive integer
 
 *****************************************************************************************************************************************************************
+*************************************************************    Machine Learning Classifier    *****************************************************************
+*****************************************************************************************************************************************************************
+
+use_ml_classifier=false
+# Optional per-collection molecule-prioritization filter, applied once per collection before docking (not per docking scenario). When enabled, every ligand in a collection is scored by a pretrained FNN classifier (Morgan fingerprints -> binding-probability) and ligands scoring at or below ml_classifier_probability_cutoff are skipped, exactly like the existing ligand_elements/ligand_coordinates pre-docking checks. Train a model first with tools/train_ml_classifier.py.
+# Possible values:
+#   * true
+#   * false
+# Settable via range control files: Yes
+
+ml_classifier_model_path=ml_classifier/model.pt
+# Path to the trained classifier (.pt file), relative to the input-files/ folder (NOT to tools/, unlike collection_folder). Only used if use_ml_classifier=true.
+# Settable via range control files: Yes
+
+ml_classifier_probability_cutoff=0.5
+# Minimum predicted binding probability (exclusive) required to keep a ligand for docking. Per the manuscript's ML classifier spec, 0.5 is the recommended default. Only used if use_ml_classifier=true.
+# Settable via range control files: Yes
+
+*****************************************************************************************************************************************************************
 *******************************************************************    Terminating Variables    *****************************************************************
 *****************************************************************************************************************************************************************
 

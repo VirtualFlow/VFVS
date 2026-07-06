@@ -20,6 +20,12 @@ FROM amazonlinux:2
 RUN yum update -y && yum -y install python3
 RUN pip3 install boto3
 
+# Dependencies for the optional ML tranche-prioritization classifier (tools/templates/ml_classifier.py).
+# CPU-only torch wheel: this Dockerfile provisions no GPU AWS Batch compute environments, and the
+# default PyPI torch wheel would pull in unneeded CUDA runtime bloat.
+RUN pip3 install torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip3 install rdkit
+
 ADD . /opt/vf/tools
 
 ENV USER ec2-user

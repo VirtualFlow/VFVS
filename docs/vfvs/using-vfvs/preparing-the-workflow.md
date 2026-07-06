@@ -65,6 +65,26 @@ The required ligand input database can be prepared either from scratch with VFLP
 
 There, specific subsets of the database can be downloaded, as well as the required collection lengths file which is needed to set up the `tools` folder as described earlier [here](../../using-virtualflow/preparing-the-workflow.md#central-task-list) (i.e. this file can be used for the central task `todo.all` list which is used by VirtualFlow).
 
+## Machine Learning Classifier for Molecule Prioritization
+
+For ultra-large screens, VFVS supports an optional machine learning classifier that predicts which molecules within a collection are likely to be high-affinity binders, so that only those molecules are docked. It is a fully-connected feedforward neural network trained on Morgan fingerprints and the docking scores from a small representative prescreen run. It is disabled by default; enabling it does not change how collections/tranches are selected for screening, only which molecules within an already-selected collection get docked.
+
+The workflow has three steps:
+
+1. **Prescreen.** Run the existing, unmodified VFVS workflow (`all.ctrl` + `vf_prepare_folders.sh` + `vf_start_jobline.sh`, or the AWS Batch equivalents) on a small representative set of collections, to produce real docking scores in the usual per-collection summary files under `output-files/{complete,incomplete}/<scenario>/summaries/`. No configuration changes are needed for this step.
+2. **Train.** From the `tools` directory, run the training script once (a single interactive invocation, not a batch job):
+
+   ```
+   python3 train_ml_classifier.py --scenario <docking_scenario_name>
+   ```
+
+   This collects every summary file for the given docking scenario, extracts (SMILES, docking score) pairs, and trains+saves the classifier to the path given by `ml_classifier_model_path` in `workflow/control/all.ctrl` (default `ml_classifier/model.pt`, relative to `input-files/`).
+3. **Primary screen.** Set `use_ml_classifier=true` in `all.ctrl` (see the "Machine Learning Classifier" section of the control file for all available options), then submit the primary screen as usual. Each queue (Slurm) or AWS Batch array child loads the trained classifier once per collection/subjob and filters out molecules scoring at or below `ml_classifier_probability_cutoff`, before they reach the docking programs.
+
+A classifier trained once for a given docking scenario can be reused across later primary screens without retraining, as long as `ml_classifier_model_path` still points at the saved file. Filtered-out molecules are recorded in the same per-collection ligand-list status files used for other pre-docking checks (such as the element and duplicate-coordinate checks), so every input molecule remains accounted for.
+
+Requires PyTorch and RDKit to be installed (see [Prerequisites](../installation/prerequisites.md)); these are only needed if `use_ml_classifier=true`.
+
 
 
 

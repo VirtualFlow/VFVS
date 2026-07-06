@@ -23,3 +23,7 @@ Due to the many options regarding the dockings scenarios, VFVS is suitable for c
 ## Multiple Docking Scenarios
 
 VFVS allows to carry out multiple docking scenarios per ligand. A docking scenario in VFVS is defined by the receptor structure, by the docking parameters (such as exhaustiveness), rigid or flexible receptor docking, the choice of flexible receptor side chains or the docking program. This allows also for ensemble dockings.
+
+## Machine Learning Classifier for Molecule Prioritization
+
+VFVS supports an optional machine learning classifier that prioritizes which molecules within a collection are worth docking, based on a small representative prescreen run. Molecules predicted unlikely to be high-affinity binders are skipped before docking, reducing computational cost for large screens while maintaining hit enrichment. This is disabled by default and available on both the Slurm/HPC and AWS Batch execution paths; see [Preparing the Workflow](using-vfvs/preparing-the-workflow.md#machine-learning-classifier-for-molecule-prioritization).
